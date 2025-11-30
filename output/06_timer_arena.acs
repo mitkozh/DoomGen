@@ -1,0 +1,26 @@
+#include "zcommon.acs"
+
+int currentWave = 0;
+
+script 1 OPEN
+{
+    Delay(35);
+    Print(s:"SURVIVAL CHALLENGE");
+    Delay(70);
+    Print(s:"Survive the waves!");
+    Delay(105);
+    
+    currentWave = 1;
+    Print(s:"Wave 1 - Zombies!");
+    Delay(350);
+    
+    currentWave = 2;
+    Print(s:"Wave 2 - Imps!");
+    Delay(350);
+    
+    currentWave = 3;
+    Print(s:"Wave 3 - Demons!");
+    Delay(350);
+    
+    Print(s:"CHALLENGE COMPLETE!");
+}
