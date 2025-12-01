@@ -21,27 +21,36 @@ doom/wad.py (WADWriter, DoomMapData)     <- Binary WAD I/O via omgifol
 - **High-level**: `DoomMapBuilder` for declarative map building (see `examples/high_level/`)
 - **Low-level**: `WADWriter` + `MapEditor` for direct sector/linedef control (see `examples/low_level/`)
 
-### Edge-Sharing (Abutting) Corridor Model
+### The "Cookie Cutter" Corridor Model (Penetration and Subtraction)
 
-Doom sectors share linedefs at their edges - they don't overlap. The `add_corridor()` method now uses 
-**abutting mode by default**, which matches how Doom geometry actually works:
+Corridors use the **Cookie Cutter** approach for reliable connections:
+
+1. **Penetrate**: Corridors are generated to extend INTO the rooms significantly
+2. **Subtract**: CSG Difference operation: `Room = Room - Corridor`
+
+This guarantees that room boundaries exactly match corridor shapes, creating
+proper shared vertices for Doom's edge-sharing model. Works reliably with:
+- Irregular polygons (U-shaped, L-shaped rooms)
+- L-system procedural corridors
+- Any room shape
 
 ```python
-# Abutting mode (default) - sectors share edges, no overlapping geometry
-builder.add_corridor("hub", "arena", width=64)  # connection_style="abutting"
+# All corridors use cookie cutter approach automatically
+builder.add_corridor("hub", "arena", width=64)
 
-# Legacy overlap mode - for CSG operations (corridors cut into rooms)
-builder.add_corridor("hub", "arena", width=64, connection_style="overlap", overlap=16)
+# L-system corridors work the same way
+builder.add_corridor("hub", "arena", width=64, style="lsystem:serpentine", name="main")
+
+# Custom polygon corridors
+builder.add_corridor("hub", "arena", style="custom", polygon=my_polygon, name="secret")
+
+# Add doors at corridor entrances (works for ALL corridor types)
+builder.add_corridor_door("main", end="a")  # Door at hub side
+builder.add_corridor_door("main", end="b")  # Door at arena side
 ```
 
-Connection styles:
-- **abutting** (default): Corridor edges align exactly with room boundaries. 
-  "Portal cuts" are automatically created at connection points to add the necessary
-  vertices for edge-sharing. This matches Doom's sector model where adjacent sectors
-  share linedefs. The cuts are minimal (1 unit deep) and snap away, so rooms keep
-  their original area while gaining the vertices needed for proper two-sided linedefs.
-- **overlap** (legacy): Corridor extends INTO rooms by `overlap` amount. Rooms are carved with CSG.
-  Use when you need complex geometry operations.
+Entry points are calculated using `shapely.ops.nearest_points` for robust
+handling of irregular shapes (not centroid-based raycasting).
 
 ### The "Local Merge, Global Difference" Pattern (CSG)
 
@@ -63,7 +72,7 @@ builder = MapBuilder(grid_size=8)
 builder.add_room("hub", create_rectangle(512, 512))
 builder.add_room("arena", create_rectangle(256, 256, center=(600, 0)))
 
-# Add corridor - abutting mode by default (sectors share edges)
+# Add corridor - uses cookie cutter approach (corridors cut into rooms)
 builder.add_corridor("hub", "arena", width=64, name="main")
 
 # Add door at corridor entrance (works for any corridor type)
@@ -101,7 +110,7 @@ editor.add_sector_from_polygon(door, door_config)
 All corridor types use the same `add_corridor()` method with a `style` parameter:
 
 ```python
-# Straight corridor (default) - abutting by default
+# Straight corridor (default)
 builder.add_corridor("hub", "arena", width=64)
 
 # L-system procedural corridor
@@ -148,7 +157,7 @@ SlotType enum values: DOOR, LIFT, CRUSHER, TELEPORTER, STAIRS, DAMAGE_FLOOR, LIG
 ### Cookie-Cutter Prefab Pattern
 Doors, lifts, teleporters use geometry subtraction to create interactive elements:
 1. Create element polygon at position
-2. Cut from static geometry with `cut_polygon(room, element)` (or use slots in abutting mode)
+2. Cut from static geometry with `cut_polygon(room, element)`
 3. Add both as sectors -> shared edges become two-sided linedefs
 4. Apply linedef specials via `apply_door_to_sector()` / `apply_lift_to_sector()`
 
@@ -210,5 +219,4 @@ gzdoom -iwad doom2.wad -file output/01_simple_room.wad
 - For connected rooms with SEPARATE sectors, use MapBuilder with `add_corridor()`
 - For connected rooms as ONE sector, use `unary_union()` or `merge_polygons()`
 - Use `add_corridor_door()` for placing doors at corridor entrances (works for all corridor types)
-- Default corridor mode is "abutting" - rooms share edges with corridors, no CSG cutting
-- Use `connection_style="overlap"` for legacy CSG-based corridor connections
+- Corridors always use cookie cutter approach - they penetrate into rooms and are subtracted via CSG

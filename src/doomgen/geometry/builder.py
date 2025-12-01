@@ -15,7 +15,7 @@ from typing import Optional, Union
 import numpy as np
 from numpy.random import Generator
 from shapely.geometry import Polygon, LineString, Point, box
-from shapely.ops import unary_union
+from shapely.ops import unary_union, nearest_points
 
 from doomgen.geometry.operations import (
     ensure_polygon,
@@ -40,7 +40,10 @@ def _calculate_entry_points(
     room_b: Polygon,
 ) -> tuple[tuple[float, float], tuple[float, float], tuple[float, float]]:
     """
-    Calculate entry points where a corridor would connect two rooms.
+    Calculate closest connection points between two polygons.
+    
+    Uses shapely.ops.nearest_points for robust handling of irregular shapes
+    (U-shaped rooms, L-shaped rooms, etc.) where centroid-based raycasting fails.
     
     Returns:
         Tuple of (entry_a, entry_b, direction_vector) where:
@@ -48,33 +51,31 @@ def _calculate_entry_points(
         - entry_b: Point on room_b's boundary closest to room_a  
         - direction_vector: Normalized (nx, ny) from entry_a to entry_b
     """
-    ca, cb = room_a.centroid, room_b.centroid
-    dx, dy = cb.x - ca.x, cb.y - ca.y
+    # Find the absolute closest points between the two geometries
+    # This handles irregular shapes much better than centroid-based raycasting
+    pt_a, pt_b = nearest_points(room_a, room_b)
+    
+    entry_a = (pt_a.x, pt_a.y)
+    entry_b = (pt_b.x, pt_b.y)
+    
+    # Calculate direction vector
+    dx = entry_b[0] - entry_a[0]
+    dy = entry_b[1] - entry_a[1]
     length = np.sqrt(dx * dx + dy * dy)
     
+    # Handle case where rooms are touching or overlapping
     if length < 1e-6:
-        nx, ny = 1.0, 0.0
+        # Fallback to centroid logic if they are touching
+        ca, cb = room_a.centroid, room_b.centroid
+        dx, dy = cb.x - ca.x, cb.y - ca.y
+        length = np.sqrt(dx * dx + dy * dy)
+        if length < 1e-6:
+            nx, ny = 1.0, 0.0
+        else:
+            nx, ny = dx / length, dy / length
     else:
         nx, ny = dx / length, dy / length
-    
-    line_ab = LineString([(ca.x, ca.y), (cb.x, cb.y)])
-    
-    def get_exit_point(room: Polygon, line: LineString, target: Point) -> tuple[float, float]:
-        intersection = line.intersection(room.exterior)
-        if intersection.is_empty:
-            return room.centroid.x, room.centroid.y
-        elif intersection.geom_type == 'MultiPoint':
-            closest = min(intersection.geoms, key=lambda p: p.distance(target))
-            return closest.x, closest.y
-        elif intersection.geom_type == 'Point':
-            return intersection.x, intersection.y
-        else:
-            c = intersection.centroid
-            return c.x, c.y
-    
-    entry_a = get_exit_point(room_a, line_ab, cb)
-    entry_b = get_exit_point(room_b, line_ab, ca)
-    
+        
     return entry_a, entry_b, (nx, ny)
 
 
@@ -82,7 +83,7 @@ def create_corridor_between(
     room_a: Polygon,
     room_b: Polygon,
     width: float,
-    overlap: float = 16
+    overlap: Optional[float] = None
 ) -> Polygon:
     """
     Create a corridor polygon that connects two rooms.
@@ -90,15 +91,23 @@ def create_corridor_between(
     The corridor extends from room_a's boundary to room_b's boundary,
     with overlap into each room to ensure proper CSG cutting.
     
+    Uses the "Cookie Cutter" approach: corridors penetrate into rooms
+    and are then subtracted, guaranteeing clean shared edges.
+    
     Args:
         room_a: First room polygon.
         room_b: Second room polygon.
         width: Width of the corridor.
-        overlap: How far to extend into each room.
+        overlap: How far to extend into each room. If None, uses width
+                 as the default for reliable CSG operations.
     
     Returns:
         A corridor polygon suitable for cutting from both rooms.
     """
+    # Default overlap to corridor width for reliable CSG operations
+    if overlap is None:
+        overlap = width
+    
     entry_a, entry_b, (nx, ny) = _calculate_entry_points(room_a, room_b)
     
     start = (entry_a[0] - nx * overlap, entry_a[1] - ny * overlap)
@@ -187,6 +196,9 @@ class CorridorData:
     
     This unified structure replaces the mixed 3-tuple and 7-tuple formats.
     All corridor types (straight, L-system, custom) use this same structure.
+    
+    The "Cookie Cutter" approach is used: corridors always penetrate into
+    rooms and are subtracted via CSG, guaranteeing clean shared edges.
     """
     name: str
     room_a: str
@@ -198,7 +210,6 @@ class CorridorData:
     direction_b: float  # Door angle at entry_b (radians, perpendicular to corridor)
     style: CorridorStyle = CorridorStyle.STRAIGHT
     width: float = 64.0
-    overlap: float = 16.0  # How far corridor extends into rooms
     metadata: dict = field(default_factory=dict)
 
 
@@ -425,10 +436,8 @@ class MapBuilder:
         room_a: str,
         room_b: str,
         width: float = 64,
-        overlap: float = 16,
         name: Optional[str] = None,
         style: str = "straight",
-        connection_style: str = "abutting",
         # L-system specific options
         grammar_name: str = "organic",
         iterations: int = 2,
@@ -446,12 +455,10 @@ class MapBuilder:
         - "lsystem" or "lsystem:<grammar>": L-System procedural corridor
         - "custom": User-provided polygon (requires polygon parameter)
         
-        Connection Styles (how corridors connect to rooms):
-        - "abutting" (default): Corridor edges align exactly with room boundaries.
-          This matches Doom's sector model where adjacent sectors share linedefs.
-          Rooms and corridors touch at their edges without overlapping.
-        - "overlap": Corridor extends INTO rooms by 'overlap' amount (legacy).
-          Use when you need CSG cutting behavior for complex geometry.
+        Uses the "Cookie Cutter" approach: corridors penetrate into rooms
+        and are subtracted via CSG difference. This guarantees clean shared
+        edges regardless of room shape (handles irregular polygons, U-shapes,
+        L-system curves, etc.).
         
         All corridor types calculate and store entry points, enabling
         door placement with add_corridor_door().
@@ -460,10 +467,8 @@ class MapBuilder:
             room_a: Name of first room.
             room_b: Name of second room.
             width: Width of the corridor.
-            overlap: How far corridor extends into rooms (only used with connection_style="overlap").
             name: Optional name for the corridor (auto-generated if None).
             style: Corridor style - "straight", "lsystem", "lsystem:<grammar>", or "custom".
-            connection_style: How corridor connects to rooms - "abutting" (default) or "overlap".
             grammar_name: L-System grammar (used when style starts with "lsystem").
             iterations: L-System iterations (used when style starts with "lsystem").
             max_deviation: Max deviation for L-System (fraction of distance, 0.0-1.0).
@@ -475,14 +480,11 @@ class MapBuilder:
             Self for chaining.
         
         Example:
-            # Straight corridor with abutting edges (default, Doom-accurate)
+            # Straight corridor
             builder.add_corridor("hub", "arena", width=64)
             
             # L-System corridor with specific grammar
             builder.add_corridor("hub", "arena", style="lsystem:serpentine", width=64)
-            
-            # Legacy overlap mode for complex CSG operations
-            builder.add_corridor("hub", "arena", width=64, connection_style="overlap", overlap=16)
             
             # Named corridor for door placement
             builder.add_corridor("hub", "arena", name="main", width=64)
@@ -503,27 +505,23 @@ class MapBuilder:
         if corridor_name in self._corridors:
             raise ValueError(f"Corridor '{corridor_name}' already exists")
         
-        # Validate connection_style
-        connection_style_lower = connection_style.lower()
-        if connection_style_lower not in ("abutting", "overlap"):
-            raise ValueError(f"Unknown connection_style: {connection_style}. Use 'abutting' or 'overlap'.")
-        
-        # For abutting mode, effective overlap is 0
-        effective_overlap = overlap if connection_style_lower == "overlap" else 0.0
-        
-        # Calculate entry points (used by ALL corridor types)
+        # Calculate entry points using robust nearest_points algorithm
         entry_a, entry_b, (nx, ny) = _calculate_entry_points(poly_a, poly_b)
         
         # Calculate door angles (perpendicular to corridor direction)
         corridor_angle = np.arctan2(ny, nx)
         door_angle = corridor_angle + np.pi / 2
         
-        # Parse style
+        # Calculate extension depth for cookie cutter approach
+        # Extend by at least corridor width to ensure clean CSG cuts
+        extension_depth = max(width, 32.0)
+        
+        # Parse style and create corridor polygon
         style_lower = style.lower()
         if style_lower == "straight":
             corridor_style = CorridorStyle.STRAIGHT
             corridor_poly = self._create_straight_corridor(
-                entry_a, entry_b, (nx, ny), width, effective_overlap
+                entry_a, entry_b, (nx, ny), width, extension_depth
             )
         elif style_lower.startswith("lsystem"):
             corridor_style = CorridorStyle.LSYSTEM
@@ -531,7 +529,7 @@ class MapBuilder:
             if ":" in style_lower:
                 grammar_name = style_lower.split(":", 1)[1]
             corridor_poly = self._create_lsystem_corridor(
-                entry_a, entry_b, (nx, ny), width, effective_overlap,
+                entry_a, entry_b, (nx, ny), width, extension_depth,
                 grammar_name, iterations, max_deviation, seed
             )
         elif style_lower == "custom":
@@ -542,7 +540,7 @@ class MapBuilder:
         else:
             raise ValueError(f"Unknown corridor style: {style}. Use 'straight', 'lsystem', or 'custom'.")
         
-        # Store corridor data (store original overlap for reference, but effective_overlap was used)
+        # Store corridor data
         corridor_data = CorridorData(
             name=corridor_name,
             room_a=room_a,
@@ -554,8 +552,7 @@ class MapBuilder:
             direction_b=door_angle,
             style=corridor_style,
             width=width,
-            overlap=effective_overlap,  # Store the actual overlap used
-            metadata={**metadata, "connection_style": connection_style_lower}
+            metadata=metadata
         )
         
         self._corridors[corridor_name] = corridor_data
@@ -569,12 +566,13 @@ class MapBuilder:
         entry_b: tuple[float, float],
         direction: tuple[float, float],
         width: float,
-        overlap: float
+        extension_depth: float
     ) -> Polygon:
-        """Create a straight corridor polygon."""
+        """Create a straight corridor polygon with cookie cutter extensions."""
         nx, ny = direction
-        start = (entry_a[0] - nx * overlap, entry_a[1] - ny * overlap)
-        end = (entry_b[0] + nx * overlap, entry_b[1] + ny * overlap)
+        # Extend into both rooms by extension_depth
+        start = (entry_a[0] - nx * extension_depth, entry_a[1] - ny * extension_depth)
+        end = (entry_b[0] + nx * extension_depth, entry_b[1] + ny * extension_depth)
         corridor = LineString([start, end]).buffer(width / 2, cap_style='flat')
         return ensure_polygon(corridor)
     
@@ -584,16 +582,17 @@ class MapBuilder:
         entry_b: tuple[float, float],
         direction: tuple[float, float],
         width: float,
-        overlap: float,
+        extension_depth: float,
         grammar_name: str,
         iterations: int,
         max_deviation: Optional[float],
         seed: Optional[int]
     ) -> Polygon:
-        """Create an L-System corridor polygon."""
+        """Create an L-System corridor polygon with cookie cutter extensions."""
         nx, ny = direction
-        start = (entry_a[0] - nx * overlap, entry_a[1] - ny * overlap)
-        end = (entry_b[0] + nx * overlap, entry_b[1] + ny * overlap)
+        # Extend into both rooms by extension_depth for reliable CSG cuts
+        start = (entry_a[0] - nx * extension_depth, entry_a[1] - ny * extension_depth)
+        end = (entry_b[0] + nx * extension_depth, entry_b[1] + ny * extension_depth)
         
         rng = self._rng if seed is None else np.random.default_rng(seed)
         generator = LSystemGenerator(grammar_name=grammar_name, rng=rng)
@@ -602,54 +601,6 @@ class MapBuilder:
         )
         return ensure_polygon(corridor)
     
-    def _create_portal_cut(
-        self,
-        entry_point: tuple[float, float],
-        width: float,
-        depth: float,
-        direction: tuple[float, float]
-    ) -> Polygon:
-        """
-        Create a portal cut polygon for abutting corridors.
-        
-        Portal cuts are thin rectangles that extend slightly into a room
-        at the corridor entry point. When subtracted from the room, they
-        add vertices to the room's boundary that exactly match the
-        corridor's edge vertices.
-        
-        This is essential for Doom's edge-sharing: the MapEditor detects
-        shared edges by exact vertex matching. Without portal cuts, room
-        edges are long continuous lines that don't match the shorter
-        corridor edges.
-        
-        Args:
-            entry_point: Center of the portal on the room boundary.
-            width: Width of the corridor (perpendicular to direction).
-            depth: How far into the room to cut (typically 1 unit).
-            direction: Unit vector pointing INTO the room.
-        
-        Returns:
-            A small rectangular polygon for cutting.
-        """
-        nx, ny = direction
-        # Perpendicular direction for width
-        px, py = -ny, nx
-        
-        # Create rectangle: starts at entry point, extends into room by depth
-        # Width spans perpendicular to corridor direction
-        half_width = width / 2
-        
-        # Four corners of the portal cut
-        # p1, p2 at entry point (on room boundary)
-        # p3, p4 inside room
-        p1 = (entry_point[0] + px * half_width, entry_point[1] + py * half_width)
-        p2 = (entry_point[0] - px * half_width, entry_point[1] - py * half_width)
-        p3 = (entry_point[0] - px * half_width + nx * depth,
-              entry_point[1] - py * half_width + ny * depth)
-        p4 = (entry_point[0] + px * half_width + nx * depth,
-              entry_point[1] + py * half_width + ny * depth)
-        
-        return Polygon([p1, p2, p3, p4])
     
 
     
@@ -1113,20 +1064,24 @@ class MapBuilder:
     
     def build(self) -> BuildResult:
         """
-        Build the final geometry.
+        Build the final geometry using the Cookie Cutter approach.
         
-        Performs all CSG operations:
-        1. Process corridor slot requests (shorten corridors, create slot polygons)
-        2. Cut corridors from rooms
-        3. Cut prefab slot areas from rooms and corridors
-        4. Snap everything to grid
+        Performs CSG operations using "Penetration and Subtraction":
+        1. Corridors are generated to penetrate into rooms
+        2. Corridors are subtracted from rooms via CSG difference
+        3. This guarantees clean shared edges regardless of room shape
+        4. Slots (doors, lifts) are cut from rooms and/or corridors
+        5. Everything is snapped to grid
+        
+        This approach handles irregular polygons, U-shaped rooms, and
+        L-system corridors reliably without fragile edge-alignment logic.
         
         Returns:
             BuildResult with carved rooms, corridors (with entry points), and slots.
         """
         result = BuildResult()
         carved = {name: poly for name, poly in self._rooms.items()}
-        corridors = []
+        final_corridors: list[CorridorInfo] = []
         generated_slots: list[SlotInfo] = []
         
         # Group corridor slot requests by corridor
@@ -1136,114 +1091,68 @@ class MapBuilder:
                 slots_by_corridor[slot_req.corridor_name] = {}
             slots_by_corridor[slot_req.corridor_name][slot_req.end] = slot_req
         
-        # Process all corridors (using unified CorridorData)
+        # Process all corridors using Cookie Cutter approach
         for corridor_name in self._corridor_order:
-            corridor = self._corridors[corridor_name]
+            data = self._corridors[corridor_name]
             slot_requests = slots_by_corridor.get(corridor_name, {})
             
             try:
-                # Calculate corridor direction
-                dx = corridor.entry_b[0] - corridor.entry_a[0]
-                dy = corridor.entry_b[1] - corridor.entry_a[1]
-                length = np.sqrt(dx * dx + dy * dy)
-                if length > 0:
-                    nx, ny = dx / length, dy / length
+                # Calculate corridor direction vector
+                dx = data.entry_b[0] - data.entry_a[0]
+                dy = data.entry_b[1] - data.entry_a[1]
+                dist = np.sqrt(dx * dx + dy * dy)
+                
+                if dist > 0:
+                    nx, ny = dx / dist, dy / dist
                 else:
                     nx, ny = 1.0, 0.0
                 
-                # Get connection style for this corridor
-                connection_style = corridor.metadata.get("connection_style", "abutting")
+                # Use the pre-generated corridor polygon (already has extension)
+                corridor_poly = data.polygon
                 
-                # Determine how much to shorten each end
+                # Handle doors/slots at corridor entrances
                 shorten_a = slot_requests["a"].depth if "a" in slot_requests else 0
                 shorten_b = slot_requests["b"].depth if "b" in slot_requests else 0
                 
-                # Create the (possibly shortened) corridor polygon
-                if shorten_a > 0 or shorten_b > 0:
-                    if corridor.style == CorridorStyle.STRAIGHT:
-                        # For straight corridors: recreate with adjusted endpoints
-                        # For abutting mode, corridor starts at entry points (not overlapped)
-                        # For overlap mode, corridor starts at entry - overlap (overlapped)
-                        base_start = (
-                            corridor.entry_a[0] - nx * corridor.overlap,
-                            corridor.entry_a[1] - ny * corridor.overlap
-                        )
-                        base_end = (
-                            corridor.entry_b[0] + nx * corridor.overlap,
-                            corridor.entry_b[1] + ny * corridor.overlap
-                        )
-                        
-                        # Adjust for slot shortening (shorten pulls back from room)
-                        new_start = (
-                            base_start[0] + nx * shorten_a,
-                            base_start[1] + ny * shorten_a
-                        )
-                        new_end = (
-                            base_end[0] - nx * shorten_b,
-                            base_end[1] - ny * shorten_b
-                        )
-                        
-                        corridor_poly = LineString([new_start, new_end]).buffer(
-                            corridor.width / 2, cap_style='flat'
-                        )
-                        corridor_poly = ensure_polygon(corridor_poly)
-                    else:
-                        # For L-system/custom: we can't easily shorten complex paths
-                        # Instead, keep the full corridor and place slot inside the overlap region
-                        # The slot will be cut from both room AND corridor
-                        corridor_poly = corridor.polygon
-                else:
-                    corridor_poly = corridor.polygon
+                # For straight corridors with slots, recreate shortened corridor
+                if (shorten_a > 0 or shorten_b > 0) and data.style == CorridorStyle.STRAIGHT:
+                    extension_depth = max(data.width, 32.0)
+                    new_start = (
+                        data.entry_a[0] - nx * extension_depth + nx * shorten_a,
+                        data.entry_a[1] - ny * extension_depth + ny * shorten_a
+                    )
+                    new_end = (
+                        data.entry_b[0] + nx * extension_depth - nx * shorten_b,
+                        data.entry_b[1] + ny * extension_depth - ny * shorten_b
+                    )
+                    corridor_poly = LineString([new_start, new_end]).buffer(
+                        data.width / 2, cap_style='flat'
+                    )
+                    corridor_poly = ensure_polygon(corridor_poly)
                 
                 # Create slot polygons at each end where requested
-                # For L-system corridors, slots are cut from corridor too
-                cut_slots_from_corridor = corridor.style != CorridorStyle.STRAIGHT
-                
+                # NOTE: Slots are NOT cut from the corridor - only from rooms.
+                # The door fills the gap between corridor and room.
                 for end, slot_req in slot_requests.items():
                     if end == "a":
-                        entry_point = corridor.entry_a
-                        target_room = corridor.room_a
-                    else:
-                        entry_point = corridor.entry_b
-                        target_room = corridor.room_b
-                    
-                    # Calculate slot center position based on corridor style and connection style
-                    if corridor.style == CorridorStyle.STRAIGHT:
-                        # For abutting mode: slot is between room boundary and shortened corridor
-                        # Slot center is half slot depth from entry point toward the corridor
-                        if connection_style == "abutting":
-                            # Slot is at the entry point, spanning into the gap
-                            slot_center = (
-                                entry_point[0] + nx * (slot_req.depth / 2) if end == "a" else
-                                entry_point[0] - nx * (slot_req.depth / 2),
-                                entry_point[1] + ny * (slot_req.depth / 2) if end == "a" else
-                                entry_point[1] - ny * (slot_req.depth / 2)
-                            )
-                        else:
-                            # For overlap mode: slot fills gap in overlap region
-                            slot_center = (
-                                entry_point[0] - nx * (corridor.overlap - slot_req.depth / 2) if end == "a" else
-                                entry_point[0] + nx * (corridor.overlap - slot_req.depth / 2),
-                                entry_point[1] - ny * (corridor.overlap - slot_req.depth / 2) if end == "a" else
-                                entry_point[1] + ny * (corridor.overlap - slot_req.depth / 2)
-                            )
-                    else:
-                        # For L-system: place slot at entry point, slightly inside room
-                        inward_offset = slot_req.depth / 2 + 4
+                        entry_point = data.entry_a
+                        target_room = data.room_a
+                        # Slot is placed at entry point, extending into the corridor direction
                         slot_center = (
-                            entry_point[0] - nx * inward_offset if end == "a" else
-                            entry_point[0] + nx * inward_offset,
-                            entry_point[1] - ny * inward_offset if end == "a" else
-                            entry_point[1] + ny * inward_offset
+                            entry_point[0] + nx * (slot_req.depth / 2),
+                            entry_point[1] + ny * (slot_req.depth / 2)
+                        )
+                    else:
+                        entry_point = data.entry_b
+                        target_room = data.room_b
+                        slot_center = (
+                            entry_point[0] - nx * (slot_req.depth / 2),
+                            entry_point[1] - ny * (slot_req.depth / 2)
                         )
                     
                     slot_poly = create_cutout_polygon(
                         slot_center, slot_req.width, slot_req.depth, slot_req.direction
                     )
-                    
-                    # For L-system corridors, also cut slot from the corridor itself
-                    if cut_slots_from_corridor:
-                        corridor_poly = cut_polygon(corridor_poly, slot_poly, grid_size=0)
                     
                     generated_slots.append(SlotInfo(
                         polygon=slot_poly,
@@ -1254,69 +1163,96 @@ class MapBuilder:
                         direction=slot_req.direction,
                         slot_type=slot_req.slot_type,
                         key_type=slot_req.key_type,
-                        metadata={
-                            **slot_req.metadata,
-                            "connection_style": connection_style,
-                            "corridor_slot": True
-                        }
+                        metadata={**slot_req.metadata, "corridor_slot": True}
                     ))
                 
-                # Determine if we need to cut corridor from rooms
-                connection_style = corridor.metadata.get("connection_style", "abutting")
+                # CRITICAL STEP: The Cookie Cut
+                # 1. Trim the corridor by subtracting ORIGINAL room polygons.
+                #    The corridor should only occupy the "void" between rooms.
+                # 2. Use convex hull to fill concave boundaries (V-shapes).
+                # 3. Carve the rooms by subtracting the TRIMMED corridor.
+                #    This ensures room boundaries exactly match corridor edges.
                 
-                if connection_style == "overlap" and corridor.overlap > 0:
-                    # Overlap mode: Cut full corridor from both rooms
-                    carved[corridor.room_a] = cut_polygon(carved[corridor.room_a], corridor_poly, grid_size=0)
-                    carved[corridor.room_b] = cut_polygon(carved[corridor.room_b], corridor_poly, grid_size=0)
-                elif connection_style == "abutting":
-                    # Abutting mode: Create "portal cuts" at room boundaries
-                    # This adds vertices to room edges so they exactly match corridor edges
-                    # Without these cuts, room edges are continuous lines that don't match
-                    # the shorter corridor edges, preventing proper linedef sharing.
-                    #
-                    # Portal cuts are thin slivers (1 unit deep) centered at entry points,
-                    # spanning the corridor width. They split room edges into segments.
-                    portal_depth = 1  # Minimal depth to split the edge
-                    
-                    # Portal at room_a (entry_a is on room_a's boundary)
-                    portal_a = self._create_portal_cut(
-                        corridor.entry_a, corridor.width, portal_depth, (nx, ny)
-                    )
-                    carved[corridor.room_a] = cut_polygon(carved[corridor.room_a], portal_a, grid_size=0)
-                    
-                    # Portal at room_b (entry_b is on room_b's boundary)
-                    portal_b = self._create_portal_cut(
-                        corridor.entry_b, corridor.width, portal_depth, (-nx, -ny)
-                    )
-                    carved[corridor.room_b] = cut_polygon(carved[corridor.room_b], portal_b, grid_size=0)
+                # Get original room polygons for trimming
+                original_room_a = self._rooms[data.room_a]
+                original_room_b = self._rooms[data.room_b]
                 
-                corridors.append(CorridorInfo(
+                try:
+                    # Step 1: Trim the corridor to remove overlap with rooms
+                    trimmed_corridor = corridor_poly
+                    if trimmed_corridor.intersects(original_room_a):
+                        trimmed_corridor = trimmed_corridor.difference(original_room_a)
+                    if trimmed_corridor.intersects(original_room_b):
+                        trimmed_corridor = trimmed_corridor.difference(original_room_b)
+                    
+                    # Handle MultiPolygon result (take largest piece)
+                    trimmed_corridor = ensure_polygon(trimmed_corridor)
+                    
+                    # Step 2: Use convex hull to properly fill V-shaped connections
+                    # When a room has a concave boundary (V-shape) at the corridor
+                    # junction, the trimmed corridor may have a weird shape. The
+                    # convex hull ensures we fill the entire connection area.
+                    trimmed_corridor = trimmed_corridor.convex_hull
+                    trimmed_corridor = ensure_polygon(trimmed_corridor)
+                    
+                    corridor_poly = trimmed_corridor
+                    
+                    # Step 3: Carve rooms by subtracting the TRIMMED corridor
+                    # This creates clean shared edges at the corridor boundaries
+                    if carved[data.room_a].intersects(corridor_poly):
+                        carved[data.room_a] = cut_polygon(
+                            carved[data.room_a], corridor_poly, grid_size=0
+                        )
+                    
+                    if carved[data.room_b].intersects(corridor_poly):
+                        carved[data.room_b] = cut_polygon(
+                            carved[data.room_b], corridor_poly, grid_size=0
+                        )
+                    
+                except Exception as cut_error:
+                    # Fallback: buffer corridor slightly to fix vertex precision issues
+                    try:
+                        safe_cutter = corridor_poly.buffer(-0.01)
+                        if not safe_cutter.is_empty:
+                            carved[data.room_a] = cut_polygon(
+                                carved[data.room_a], safe_cutter, grid_size=0
+                            )
+                            carved[data.room_b] = cut_polygon(
+                                carved[data.room_b], safe_cutter, grid_size=0
+                            )
+                    except Exception:
+                        result.errors.append(
+                            f"Corridor {corridor_name}: CSG cut failed: {cut_error}"
+                        )
+                
+                # Store corridor result (now trimmed)
+                final_corridors.append(CorridorInfo(
                     polygon=corridor_poly,
-                    room_a=corridor.room_a,
-                    room_b=corridor.room_b,
-                    name=corridor.name,
-                    entry_a=corridor.entry_a,
-                    entry_b=corridor.entry_b,
-                    direction_a=corridor.direction_a,
-                    direction_b=corridor.direction_b,
-                    style=corridor.style,
-                    width=corridor.width
+                    room_a=data.room_a,
+                    room_b=data.room_b,
+                    name=data.name,
+                    entry_a=data.entry_a,
+                    entry_b=data.entry_b,
+                    direction_a=data.direction_a,
+                    direction_b=data.direction_b,
+                    style=data.style,
+                    width=data.width
                 ))
+                
             except Exception as e:
-                result.errors.append(f"Corridor {corridor_name} ({corridor.room_a}-{corridor.room_b}): {e}")
-        
-        # Cut generated slots from rooms (only for overlap mode)
-        # In abutting mode, corridor slots sit between room and corridor, not overlapping either
-        for slot in generated_slots:
-            # Skip cutting for abutting corridor slots - they don't overlap rooms
-            if slot.metadata.get("corridor_slot") and slot.metadata.get("connection_style") == "abutting":
-                continue
-            try:
-                carved[slot.room_name] = cut_polygon(
-                    carved[slot.room_name], slot.polygon, grid_size=0
+                result.errors.append(
+                    f"Corridor {corridor_name} ({data.room_a}-{data.room_b}): {e}"
                 )
+        
+        # Cut generated corridor slots from rooms
+        for slot in generated_slots:
+            try:
+                if carved[slot.room_name].intersects(slot.polygon):
+                    carved[slot.room_name] = cut_polygon(
+                        carved[slot.room_name], slot.polygon, grid_size=0
+                    )
             except Exception as e:
-                result.errors.append(f"Slot in {slot.room_name}: {e}")
+                result.errors.append(f"Corridor slot in {slot.room_name}: {e}")
         
         # Process regular slots (not corridor slots)
         for slot in self._slots:
@@ -1328,33 +1264,24 @@ class MapBuilder:
                 result.errors.append(f"Slot in {slot.room_name}: {e}")
         
         # Process raw slots (from add_slot_between's second room)
-        for room_name, slot in self._raw_slots:
+        for room_name, slot_poly in self._raw_slots:
             try:
-                carved[room_name] = cut_polygon(carved[room_name], slot, grid_size=0)
+                carved[room_name] = cut_polygon(carved[room_name], slot_poly, grid_size=0)
             except Exception as e:
                 result.errors.append(f"Slot in {room_name}: {e}")
         
-        # Snap everything to grid
+        # Final validity check and snap to grid
         for name, poly in carved.items():
+            if not poly.is_valid:
+                poly = poly.buffer(0)  # Fix validity issues
             result.rooms[name] = snap_polygon_to_grid(poly, self.grid_size)
         
-        result.corridors = [
-            CorridorInfo(
-                polygon=snap_polygon_to_grid(c.polygon, self.grid_size),
-                room_a=c.room_a,
-                room_b=c.room_b,
-                name=c.name,
-                entry_a=c.entry_a,
-                entry_b=c.entry_b,
-                direction_a=c.direction_a,
-                direction_b=c.direction_b,
-                style=c.style,
-                width=c.width
-            )
-            for c in corridors
-        ]
+        # Snap corridors to grid
+        for c in final_corridors:
+            c.polygon = snap_polygon_to_grid(c.polygon, self.grid_size)
+        result.corridors = final_corridors
         
-        # Combine generated slots with regular slots
+        # Combine and snap all slots
         all_slots = generated_slots + list(self._slots)
         result.slots = [
             SlotInfo(

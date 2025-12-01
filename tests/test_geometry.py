@@ -380,7 +380,7 @@ class TestMapBuilder:
         assert result.rooms["room2"].area < room2.area
     
     def test_map_builder_abutting(self):
-        """Test MapBuilder with abutting corridors (new default)."""
+        """Test MapBuilder with corridors (cookie cutter approach)."""
         builder = ShapeBuilder(seed=42)
         room1 = builder.create_rectangle(256, 256, center=(0, 0))
         room2 = builder.create_rectangle(256, 256, center=(500, 0))
@@ -388,7 +388,7 @@ class TestMapBuilder:
         mb = MapBuilder(grid_size=8)
         mb.add_room("room1", room1)
         mb.add_room("room2", room2)
-        # Default abutting mode - rooms are not carved
+        # Corridors use cookie cutter approach - rooms are carved
         mb.add_corridor("room1", "room2", width=64)
         
         result = mb.build()
@@ -398,9 +398,10 @@ class TestMapBuilder:
         assert "room2" in result.rooms
         assert len(result.corridors) == 1
         
-        # In abutting mode, rooms are NOT carved - they share edges with corridor
-        assert result.rooms["room1"].area == room1.area
-        assert result.rooms["room2"].area == room2.area
+        # Cookie cutter approach: rooms ARE carved where corridor connects
+        # The corridor is subtracted from rooms, so room area decreases
+        assert result.rooms["room1"].area < room1.area
+        assert result.rooms["room2"].area < room2.area
     
     def test_map_builder_hub(self):
         """Test MapBuilder with hub layout."""

@@ -1,0 +1,142 @@
+#include "zcommon.acs"
+
+#define DOOR_OPEN_DURATION 200
+#define CYCLE_LENGTH 500
+#define DOOR_A_TAG 1
+#define DOOR_B_TAG 2
+#define DOOR_C_TAG 3
+#define SPAWN_TAG_1 10
+#define SPAWN_TAG_2 11
+#define SPAWN_TAG_3 12
+#define SPAWN_TAG_4 13
+
+int gameTime = 0;
+int doorAOpen = 0;
+int doorBOpen = 0;
+int doorCOpen = 0;
+int waveNumber = 0;
+
+script 1 OPEN
+{
+    // Welcome message
+    Delay(35);
+    Print(s:"ARMORY SIEGE DEFENSE");
+    Delay(70);
+    Print(s:"Defend the Core! Collect supplies from rooms A, B, C.");
+    Delay(70);
+    Print(s:"Doors open on rotation: A, B, C, repeat...");
+    Delay(105);
+    
+    // Start door controller and spawner
+    ACS_Execute(2, 0);  // Door controller
+    ACS_Execute(3, 0);  // Enemy spawner
+    
+    // Main game loop - track time
+    while(true) {
+        Delay(1);
+        gameTime = gameTime + 1;
+    }
+}
+
+script 2 OPEN
+{
+    // Time-gated door controller
+    // Room A: 0-200, 500-700, 1000-1200, ...
+    // Room B: 200-400, 700-900, 1200-1400, ...
+    // Room C: 400-600 (within first cycle), 900-1100, 1400-1600, ...
+    
+    while(true) {
+        int cyclePos = gameTime % CYCLE_LENGTH;
+        
+        // Door A: Open at cycle positions 0-200
+        if (cyclePos >= 0 && cyclePos < DOOR_OPEN_DURATION && doorAOpen == 0) {
+            Door_Open(DOOR_A_TAG, 64);
+            doorAOpen = 1;
+            Print(s:"Room A OPEN - Heavy Weapons!");
+        }
+        if (cyclePos >= DOOR_OPEN_DURATION && doorAOpen == 1) {
+            Door_Close(DOOR_A_TAG, 64);
+            doorAOpen = 0;
+            Print(s:"Room A LOCKED");
+        }
+        
+        // Door B: Open at cycle positions 200-400
+        if (cyclePos >= 200 && cyclePos < 400 && doorBOpen == 0) {
+            Door_Open(DOOR_B_TAG, 64);
+            doorBOpen = 1;
+            Print(s:"Room B OPEN - Ammunition!");
+        }
+        if (cyclePos >= 400 && cyclePos < 500 && doorBOpen == 1) {
+            Door_Close(DOOR_B_TAG, 64);
+            doorBOpen = 0;
+            Print(s:"Room B LOCKED");
+        }
+        
+        // Door C: Open at cycle positions 400-600 (wraps around)
+        // For simplicity in first 500 ticks: 400-500 open
+        if (cyclePos >= 400 && doorCOpen == 0) {
+            Door_Open(DOOR_C_TAG, 64);
+            doorCOpen = 1;
+            Print(s:"Room C OPEN - Health/Armor!");
+        }
+        if (cyclePos < 100 && cyclePos > 0 && doorCOpen == 1) {
+            Door_Close(DOOR_C_TAG, 64);
+            doorCOpen = 0;
+            Print(s:"Room C LOCKED");
+        }
+        
+        Delay(1);
+    }
+}
+
+script 3 OPEN
+{
+    // Enemy spawner - waves of increasing difficulty
+    Delay(175);  // 5 seconds before first wave
+    
+    while(true) {
+        waveNumber = waveNumber + 1;
+        
+        // Announce wave
+        if (waveNumber == 1) {
+            Print(s:"WAVE 1 - Zombies incoming!");
+        }
+        else if (waveNumber == 2) {
+            Print(s:"WAVE 2 - Imps joining the fight!");
+        }
+        else if (waveNumber == 3) {
+            Print(s:"WAVE 3 - Demons attack!");
+        }
+        else if (waveNumber == 4) {
+            Print(s:"WAVE 4 - Heavy resistance!");
+        }
+        else {
+            Print(s:"WAVE ", d:waveNumber, s:" - Endless assault!");
+        }
+        
+        // Spawn enemies at MapSpots (spawn points around the map)
+        // SpawnSpot takes class name and spot TID
+        SpawnSpot("Zombieman", SPAWN_TAG_1, 0, 0);
+        SpawnSpot("Zombieman", SPAWN_TAG_2, 0, 0);
+        
+        if (waveNumber >= 2) {
+            SpawnSpot("DoomImp", SPAWN_TAG_3, 0, 0);
+            SpawnSpot("DoomImp", SPAWN_TAG_4, 0, 0);
+        }
+        
+        if (waveNumber >= 3) {
+            SpawnSpot("Demon", SPAWN_TAG_1, 0, 0);
+            SpawnSpot("Demon", SPAWN_TAG_2, 0, 0);
+        }
+        
+        if (waveNumber >= 4) {
+            SpawnSpot("ChaingunGuy", SPAWN_TAG_3, 0, 0);
+            SpawnSpot("ChaingunGuy", SPAWN_TAG_4, 0, 0);
+        }
+        
+        // Wait between waves (scales with wave number, minimum 8 seconds)
+        int waveDelay = 420 - (waveNumber * 35);
+        if (waveDelay < 280) { waveDelay = 280; }
+        Delay(waveDelay);
+    }
+}

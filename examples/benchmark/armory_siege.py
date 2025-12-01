@@ -1,751 +1,766 @@
-#not working; very rought; if you have time you can try to fix it later
-# """
-# Armory Siege Defense
-# ================================
+#work in progress; doors are still not placed correctly with a corridor; connection needs some refinemenet
+"""
+Armory Siege Defense - MARL Benchmark Scenario
 
-# MARL benchmark: Agents spawn in central armory with limited resources,
-# defend while making supply runs to three time-gated rooms.
+Scenario Description:
+All agents spawn together in a central armory containing limited starting weapons
+(2 Shotguns, 1 Chaingun, 50 shells, 30 bullets total). The armory has a vulnerable
+Core object (represented by a MapSpot for ACS scripting) that enemies attack.
 
-# Features:
-# - Irregular polygon shapes for all rooms
-# - L-system corridors for organic winding paths
-# - Time-gated doors controlled by ACS scripts
-# - Room A/B/C open at different intervals (cycling)
+Three separate supply rooms (A/B/C) are connected to the armory via corridors.
+Each room contains different resources that respawn every 300 ticks:
+- Room A: Heavy weapons (Rocket Launcher, Plasma Rifle)
+- Room B: Ammo (shells, bullets, cells)
+- Room C: Health/Armor (Medikits, Armor)
 
-# Scenario Description:
-# - All agents spawn together in a central armory containing limited starting 
-#   weapons (2 Shotguns, 1 Chaingun, 50 shells, 30 bullets total)
-# - Three separate supply rooms (A/B/C) are connected to the armory via L-system corridors
-# - Each room contains different resources:
-#   - Room A: Heavy weapons (Rocket Launcher, Plasma Rifle, ammo)
-#   - Room B: Ammo (Shells, Bullets, Rockets, Cells)
-#   - Room C: Health/Armor (Medikits, Green/Blue Armor, Soulsphere)
-# - Supply rooms are time-gated:
-#   - Room A: ticks 0-200, 500-700, 1000-1200
-#   - Room B: ticks 200-400, 700-900
-#   - Room C: ticks 400-600, 900-1100
-# - Enemies spawn and attack the core position
-# """
+Supply rooms are time-gated - each room's door opens for only 200 ticks (~6 seconds)
+at staggered intervals:
+- Room A: ticks 0-200, 500-700, 1000-1200, ...
+- Room B: ticks 200-400, 700-900, 1200-1400, ...
+- Room C: ticks 400-600, 900-1100, 1400-1600, ...
 
-# from pathlib import Path
-# import math
-# from typing import Optional
+Enemies continuously spawn and attack the Core. Agents must coordinate who goes
+to which room and when.
 
-# import numpy as np
-# from numpy.random import Generator
+Features demonstrated:
+- Structurally random layouts (irregular polygons, varied shapes)
+- Mixed corridor styles (straight and L-system)
+- ACS scripting for time-gated doors and enemy spawning
+- Multiple player starts for MARL
+- Enemy spawn points with MapSpots
+- Full use of the DoomGen library API
+- Safe thing placement inside polygon boundaries
+"""
 
-# from doomgen import (
-#     WADWriter, MapEditor, SectorConfig, WallConfig, ThingType, ShapeBuilder, 
-#     MapBuilder, SlotType, DoorAction
-# )
-# from doomgen.prefabs import DoorConfig, DoorType, apply_door_to_sector
-# from doomgen.logic.acs_builder import ACSBuilder, ScriptType
+from pathlib import Path
+from typing import Optional, List, Tuple
+import numpy as np
+from shapely.geometry import Polygon, Point
 
-
-# # =============================================================================
-# # Configuration
-# # =============================================================================
-
-# ARMORY_CONFIG = {
-#     "min_radius": 500,
-#     "max_radius": 650,
-#     "floor_texture": "FLAT5_4",
-#     "ceiling_texture": "CEIL3_5",
-#     "wall_texture": "STARGR1",
-#     "ceiling_height": 144,
-#     "light_level": 200,
-# }
-
-# SUPPLY_ROOM_CONFIG = {
-#     "min_radius": 200,
-#     "max_radius": 300,
-#     "min_distance": 1000,
-#     "max_distance": 1300,
-#     "corridor_width": 96,
-# }
-
-# CORRIDOR_CONFIG = {
-#     "floor_texture": "FLAT5_4",  # Use simpler flat texture to avoid tiling issues
-#     "ceiling_texture": "CEIL3_5",
-#     "wall_texture": "STONE2",  # Use stone texture that tiles better on irregular walls
-#     "ceiling_height": 112,
-#     "light_level": 128,
-# }
-
-# ROOM_THEMES = {
-#     "A": {
-#         "floor_texture": "CEIL5_2",
-#         "ceiling_texture": "CEIL3_5",
-#         "wall_texture": "STARTAN2",
-#         "light_level": 160,
-#         "description": "Heavy Weapons",
-#     },
-#     "B": {
-#         "floor_texture": "FLAT5_1",
-#         "ceiling_texture": "CEIL3_5",
-#         "wall_texture": "STARTAN2",
-#         "light_level": 176,
-#         "description": "Ammunition",
-#     },
-#     "C": {
-#         "floor_texture": "FLAT14",
-#         "ceiling_texture": "CEIL3_5",
-#         "wall_texture": "STARTAN2",
-#         "light_level": 192,
-#         "description": "Health/Armor",
-#     },
-# }
+from doomgen import (
+    DoomMapBuilder,
+    RoomConfig,
+    ThingType,
+    ScriptType,
+    ShapeBuilder,
+    create_rectangle,
+    create_irregular_polygon,
+)
 
 
-# # =============================================================================
-# # Item/Enemy Configuration
-# # =============================================================================
+# =============================================================================
+# Helper Functions for Safe Thing Placement
+# =============================================================================
 
-# def get_supply_room_items(room_type: str) -> list[ThingType]:
-#     """Get the items to place in each supply room."""
-#     items = {
-#         "A": [
-#             ThingType.ROCKET_LAUNCHER,
-#             ThingType.PLASMA_RIFLE,
-#             ThingType.ENERGY_CELL_PACK,
-#             ThingType.BOX_OF_ROCKETS,
-#         ],
-#         "B": [
-#             ThingType.BOX_OF_SHELLS,
-#             ThingType.BOX_OF_SHELLS,
-#             ThingType.BOX_OF_BULLETS,
-#             ThingType.BOX_OF_BULLETS,
-#             ThingType.BOX_OF_ROCKETS,
-#             ThingType.ENERGY_CELL_PACK,
-#         ],
-#         "C": [
-#             ThingType.MEDIKIT,
-#             ThingType.MEDIKIT,
-#             ThingType.MEDIKIT,
-#             ThingType.GREEN_ARMOR,
-#             ThingType.BLUE_ARMOR,
-#             ThingType.SOULSPHERE,
-#         ],
-#     }
-#     return items.get(room_type, [])
-
-
-# def get_armory_starter_items() -> list[tuple[ThingType, tuple[float, float]]]:
-#     """Get starter items for the armory: 2 shotguns, 1 chaingun, shells, bullets."""
-#     return [
-#         (ThingType.SHOTGUN, (-80, 80)),
-#         (ThingType.SHOTGUN, (80, 80)),
-#         (ThingType.CHAINGUN, (0, -100)),
-#         (ThingType.BOX_OF_SHELLS, (-100, -80)),
-#         (ThingType.BOX_OF_SHELLS, (100, -80)),
-#         (ThingType.BOX_OF_BULLETS, (-60, -120)),
-#         (ThingType.BOX_OF_BULLETS, (60, -120)),
-#         (ThingType.MEDIKIT, (-120, 0)),
-#         (ThingType.MEDIKIT, (120, 0)),
-#     ]
-
-
-# def get_enemy_wave(rng: Generator, difficulty: str = "medium") -> list[tuple[ThingType, int]]:
-#     """Get enemy wave configuration based on difficulty."""
-#     waves = {
-#         "easy": [
-#             (ThingType.ZOMBIEMAN, 4),
-#             (ThingType.SHOTGUN_GUY, 2),
-#             (ThingType.IMP, 3),
-#         ],
-#         "medium": [
-#             (ThingType.ZOMBIEMAN, 6),
-#             (ThingType.SHOTGUN_GUY, 4),
-#             (ThingType.IMP, 5),
-#             (ThingType.DEMON, 2),
-#         ],
-#         "hard": [
-#             (ThingType.SHOTGUN_GUY, 6),
-#             (ThingType.CHAINGUNNER, 3),
-#             (ThingType.IMP, 6),
-#             (ThingType.DEMON, 4),
-#             (ThingType.HELL_KNIGHT, 2),
-#         ],
-#     }
-#     return waves.get(difficulty, waves["medium"])
-
-
-# # =============================================================================
-# # ACS Script for Time-Gated Doors
-# # =============================================================================
-
-# def create_timed_door_acs(door_tags: dict[str, int], difficulty: str = "medium") -> ACSBuilder:
-#     """
-#     Create ACS scripts for time-gated doors and enemy spawning.
+def get_safe_positions_in_polygon(
+    polygon: Polygon,
+    count: int,
+    min_spacing: float = 32.0,
+    margin: float = 24.0,
+    rng: np.random.Generator = None
+) -> List[Tuple[float, float]]:
+    """
+    Generate safe positions inside a polygon for thing placement.
     
-#     Door timing (tics, 35 tics = 1 second):
-#     - Room A: 0-200, 500-700, 1000-1200 (heavy weapons)
-#     - Room B: 200-400, 700-900 (ammo)
-#     - Room C: 400-600, 900-1100 (health/armor)
+    Uses polygon erosion (buffer inward) to ensure things are placed
+    away from walls, then samples random points inside.
     
-#     Enemy spawning:
-#     - Waves spawn periodically from spawn spots (TID 100+)
+    Args:
+        polygon: The room polygon to place things in.
+        count: Number of positions to generate.
+        min_spacing: Minimum distance between things.
+        margin: Distance from walls (polygon is eroded by this amount).
+        rng: Random number generator for reproducibility.
     
-#     The cycle repeats every 1200 tics (~34 seconds).
-#     """
-#     acs = ACSBuilder()
-#     acs.add_include("zcommon.acs")
+    Returns:
+        List of (x, y) positions guaranteed to be inside the polygon.
+    """
+    if rng is None:
+        rng = np.random.default_rng()
     
-#     # Define door tags
-#     acs.add_define("DOOR_A_TAG", door_tags["A"])
-#     acs.add_define("DOOR_B_TAG", door_tags["B"])
-#     acs.add_define("DOOR_C_TAG", door_tags["C"])
-#     acs.add_define("CYCLE_LENGTH", 1200)
+    # Erode polygon to create safe placement area
+    safe_area = polygon.buffer(-margin)
     
-#     # Enemy type IDs (Doom thing types)
-#     acs.add_define("T_ZOMBIEMAN", 3004)
-#     acs.add_define("T_SHOTGUNGUY", 9)
-#     acs.add_define("T_IMP", 3001)
-#     acs.add_define("T_DEMON", 3002)
-#     acs.add_define("T_HELLKNIGHT", 69)
-#     acs.add_define("T_CHAINGUNNER", 65)
+    # If erosion makes polygon too small, use centroid area
+    if safe_area.is_empty or safe_area.area < 100:
+        centroid = polygon.centroid
+        return [(centroid.x, centroid.y)] * count
     
-#     # Spawn spot TID
-#     acs.add_define("SPAWN_SPOT_TID", 100)
+    # Get bounding box for sampling
+    minx, miny, maxx, maxy = safe_area.bounds
     
-#     # Enemy counts based on difficulty
-#     if difficulty == "easy":
-#         acs.add_define("WAVE_ZOMBIES", 2)
-#         acs.add_define("WAVE_SHOTGUNNERS", 1)
-#         acs.add_define("WAVE_IMPS", 2)
-#         acs.add_define("WAVE_DEMONS", 0)
-#         acs.add_define("WAVE_HEAVY", 0)
-#     elif difficulty == "hard":
-#         acs.add_define("WAVE_ZOMBIES", 3)
-#         acs.add_define("WAVE_SHOTGUNNERS", 2)
-#         acs.add_define("WAVE_IMPS", 3)
-#         acs.add_define("WAVE_DEMONS", 2)
-#         acs.add_define("WAVE_HEAVY", 1)
-#     else:  # medium
-#         acs.add_define("WAVE_ZOMBIES", 2)
-#         acs.add_define("WAVE_SHOTGUNNERS", 2)
-#         acs.add_define("WAVE_IMPS", 2)
-#         acs.add_define("WAVE_DEMONS", 1)
-#         acs.add_define("WAVE_HEAVY", 0)
+    positions = []
+    max_attempts = count * 50  # Prevent infinite loops
+    attempts = 0
     
-#     # Door timing script - runs continuously
-#     door_script = """
-# int tick;
-# int cycle_tick;
-
-# // Initial delay and announcement
-# Delay(35);
-# Print(s:"ARMORY SIEGE DEFENSE");
-# Delay(70);
-# Print(s:"Defend the core! Supply rooms open on rotation.");
-# Delay(105);
-# Print(s:"Room A: Heavy Weapons | Room B: Ammo | Room C: Health");
-# Delay(70);
-
-# while (true)
-# {
-#     tick = Timer();
-#     cycle_tick = tick % CYCLE_LENGTH;
-    
-#     // Room A: 0-200, 500-700, 1000-1200 (Heavy Weapons)
-#     if ((cycle_tick >= 0 && cycle_tick < 200) ||
-#         (cycle_tick >= 500 && cycle_tick < 700) ||
-#         (cycle_tick >= 1000 && cycle_tick < 1200))
-#     {
-#         Door_Open(DOOR_A_TAG, 32);
-#     }
-#     else
-#     {
-#         Door_Close(DOOR_A_TAG, 32);
-#     }
-    
-#     // Room B: 200-400, 700-900 (Ammo)
-#     if ((cycle_tick >= 200 && cycle_tick < 400) ||
-#         (cycle_tick >= 700 && cycle_tick < 900))
-#     {
-#         Door_Open(DOOR_B_TAG, 32);
-#     }
-#     else
-#     {
-#         Door_Close(DOOR_B_TAG, 32);
-#     }
-    
-#     // Room C: 400-600, 900-1100 (Health/Armor)
-#     if ((cycle_tick >= 400 && cycle_tick < 600) ||
-#         (cycle_tick >= 900 && cycle_tick < 1100))
-#     {
-#         Door_Open(DOOR_C_TAG, 32);
-#     }
-#     else
-#     {
-#         Door_Close(DOOR_C_TAG, 32);
-#     }
-    
-#     Delay(1);
-# }
-# """
-#     acs.add_script(ScriptType.OPEN, door_script, number=1)
-    
-#     # Enemy spawning script
-#     spawn_script = """
-# int i;
-# int wave;
-
-# // Wait for game to start
-# Delay(35 * 5);  // 5 second delay before first wave
-
-# wave = 0;
-# while (true)
-# {
-#     wave = wave + 1;
-#     Print(s:"Wave ", d:wave, s:" incoming!");
-#     Delay(35);  // Brief pause after announcement
-    
-#     // Spawn zombies
-#     for (i = 0; i < WAVE_ZOMBIES; i++)
-#     {
-#         SpawnSpot("ZombieMan", SPAWN_SPOT_TID, 0, 0);
-#         Delay(5);
-#     }
-    
-#     // Spawn shotgun guys
-#     for (i = 0; i < WAVE_SHOTGUNNERS; i++)
-#     {
-#         SpawnSpot("ShotgunGuy", SPAWN_SPOT_TID, 0, 0);
-#         Delay(5);
-#     }
-    
-#     // Spawn imps
-#     for (i = 0; i < WAVE_IMPS; i++)
-#     {
-#         SpawnSpot("DoomImp", SPAWN_SPOT_TID, 0, 0);
-#         Delay(5);
-#     }
-    
-#     // Spawn demons
-#     for (i = 0; i < WAVE_DEMONS; i++)
-#     {
-#         SpawnSpot("Demon", SPAWN_SPOT_TID, 0, 0);
-#         Delay(5);
-#     }
-    
-#     // Spawn heavy enemies (hell knights on hard)
-#     for (i = 0; i < WAVE_HEAVY; i++)
-#     {
-#         SpawnSpot("HellKnight", SPAWN_SPOT_TID, 0, 0);
-#         Delay(5);
-#     }
-    
-#     // Wait before next wave (about 20 seconds)
-#     Delay(35 * 20);
-# }
-# """
-#     acs.add_script(ScriptType.OPEN, spawn_script, number=2)
-    
-#     return acs
-
-
-# # =============================================================================
-# # Helper Functions
-# # =============================================================================
-
-# # =============================================================================
-# # Main Map Creation
-# # =============================================================================
-
-# def create_armory_siege(
-#     seed: Optional[int] = None,
-#     output_path: Optional[str] = None,
-#     difficulty: str = "medium",
-#     num_players: int = 4,
-# ) -> tuple:
-#     """
-#     Create the Armory Siege Defense scenario.
-    
-#     Args:
-#         seed: Random seed for reproducibility.
-#         output_path: Path to save the WAD file.
-#         difficulty: Enemy difficulty ("easy", "medium", "hard").
-#         num_players: Number of player starts (1-4).
-    
-#     Returns:
-#         Tuple of (WADWriter, MapData, stats dict).
-#     """
-#     rng = np.random.default_rng(seed)
-#     shape_builder = ShapeBuilder(rng=rng)
-    
-#     # =========================================================================
-#     # Use MapBuilder for all geometry (simplified API)
-#     # =========================================================================
-    
-#     map_builder = MapBuilder(grid_size=8, rng=rng)
-    
-#     # Central armory (irregular octagon/hexagon)
-#     armory_radius = rng.uniform(ARMORY_CONFIG["min_radius"], ARMORY_CONFIG["max_radius"])
-#     armory_sides = rng.choice([6, 7, 8])
-#     armory_irregularity = rng.uniform(0.15, 0.3)
-    
-#     armory_poly = shape_builder.create_irregular_polygon(
-#         center=(0, 0),
-#         radius=armory_radius,
-#         sides=armory_sides,
-#         irregularity=armory_irregularity,
-#         grid_size=8
-#     )
-#     map_builder.add_room("armory", armory_poly)
-    
-#     # Supply rooms with irregular shapes
-#     base_angles = [0, 2 * math.pi / 3, 4 * math.pi / 3]  # 120 degrees apart
-#     angle_jitter = math.pi / 8  # ±22.5 degrees
-    
-#     # Pick a random grammar for corridor variety
-#     lsystem_grammars = ["gentle", "wobble", "kinked", "direct", "wavy", "koch", "serpentine"]
-#     #testing
-    
-#     supply_rooms: dict[str, dict] = {}
-    
-#     for i, label in enumerate(["A", "B", "C"]):
-#         # Position with some randomness
-#         angle = base_angles[i] + rng.uniform(-angle_jitter, angle_jitter)
-#         distance = rng.uniform(
-#             SUPPLY_ROOM_CONFIG["min_distance"],
-#             SUPPLY_ROOM_CONFIG["max_distance"]
-#         )
-#         x = distance * math.cos(angle)
-#         y = distance * math.sin(angle)
+    while len(positions) < count and attempts < max_attempts:
+        attempts += 1
         
-#         # Create irregular polygon for supply room
-#         radius = rng.uniform(
-#             SUPPLY_ROOM_CONFIG["min_radius"],
-#             SUPPLY_ROOM_CONFIG["max_radius"]
-#         )
-#         sides = rng.choice([5, 6, 7, 8])
-#         irregularity = rng.uniform(0.15, 0.35)
+        # Random point in bounding box
+        x = rng.uniform(minx, maxx)
+        y = rng.uniform(miny, maxy)
+        point = Point(x, y)
         
-#         supply_poly = shape_builder.create_irregular_polygon(
-#             center=(x, y),
-#             radius=radius,
-#             sides=sides,
-#             irregularity=irregularity,
-#             grid_size=8
-#         )
+        # Check if inside safe area
+        if not safe_area.contains(point):
+            continue
         
-#         room_name = f"supply_{label}"
-#         map_builder.add_room(room_name, supply_poly)
+        # Check minimum spacing from existing positions
+        too_close = False
+        for px, py in positions:
+            if np.sqrt((x - px)**2 + (y - py)**2) < min_spacing:
+                too_close = True
+                break
         
-#         # Store room info
-#         supply_rooms[label] = {
-#             "name": room_name,
-#             "center": (x, y),
-#             "angle": angle,
-#             "radius": radius,
-#         }
-        
-#         # Pick a different grammar for each corridor for variety
-#         grammar = rng.choice(lsystem_grammars)
-        
-#         # Add L-system corridor with automatic boundary detection
-#         corridor_name = f"corridor_{label}"
-#         map_builder.add_corridor(
-#             room_a="armory",
-#             room_b=room_name,
-#             name=corridor_name,
-#             width=SUPPLY_ROOM_CONFIG["corridor_width"],
-#             style=f"lsystem:{grammar}",
-#             iterations=2,
-#             seed=seed + i if seed else None
-#         )
-        
-#         # Add door at armory entrance (end="a" is the first room = armory)
-#         # The API automatically calculates position and direction
-#         map_builder.add_corridor_door(
-#             corridor_name,
-#             end="a",
-#             width=SUPPLY_ROOM_CONFIG["corridor_width"],
-#             depth=16,
-#             tag=i + 1  # Door tags: A=1, B=2, C=3
-#         )
+        if not too_close:
+            positions.append((x, y))
     
-#     # Build the geometry (CSG operations)
-#     result = map_builder.build()
+    # If we couldn't generate enough positions, fill with centroid-based positions
+    while len(positions) < count:
+        centroid = safe_area.centroid
+        offset = len(positions) * 16  # Slight offset for each
+        angle = len(positions) * (2 * np.pi / count)
+        x = centroid.x + offset * np.cos(angle) * 0.3
+        y = centroid.y + offset * np.sin(angle) * 0.3
+        positions.append((x, y))
     
-#     if not result.is_valid:
-#         print(f"Warning: MapBuilder had errors: {result.errors}")
-    
-#     # =========================================================================
-#     # Create WAD and Sectors
-#     # =========================================================================
-    
-#     wad = WADWriter()
-#     map_data = wad.create_map("MAP01")
-#     editor = MapEditor(map_data)
-    
-#     # Armory sector
-#     armory_sector_cfg = SectorConfig(
-#         floor_height=0,
-#         ceiling_height=ARMORY_CONFIG["ceiling_height"],
-#         floor_texture=ARMORY_CONFIG["floor_texture"],
-#         ceiling_texture=ARMORY_CONFIG["ceiling_texture"],
-#         light_level=ARMORY_CONFIG["light_level"]
-#     )
-#     armory_wall_cfg = WallConfig(
-#         middle_texture=ARMORY_CONFIG["wall_texture"],
-#         upper_texture=ARMORY_CONFIG["wall_texture"],
-#         lower_texture=ARMORY_CONFIG["wall_texture"],
-#     )
-#     editor.add_sector_from_polygon(result.rooms["armory"], armory_sector_cfg, armory_wall_cfg)
-    
-#     # Corridor sectors
-#     corridor_sector_cfg = SectorConfig(
-#         floor_height=0,
-#         ceiling_height=CORRIDOR_CONFIG["ceiling_height"],
-#         floor_texture=CORRIDOR_CONFIG["floor_texture"],
-#         ceiling_texture=CORRIDOR_CONFIG["ceiling_texture"],
-#         light_level=CORRIDOR_CONFIG["light_level"]
-#     )
-#     corridor_wall_cfg = WallConfig(
-#         middle_texture=CORRIDOR_CONFIG["wall_texture"],
-#         upper_texture=CORRIDOR_CONFIG["wall_texture"],
-#         lower_texture=CORRIDOR_CONFIG["wall_texture"],
-#     )
-    
-#     for corridor in result.corridors:
-#         editor.add_sector_from_polygon(corridor.polygon, corridor_sector_cfg, corridor_wall_cfg)
-    
-#     # Supply room sectors
-#     for label, room_info in supply_rooms.items():
-#         theme = ROOM_THEMES[label]
-#         room_sector_cfg = SectorConfig(
-#             floor_height=0,
-#             ceiling_height=128,
-#             floor_texture=theme["floor_texture"],
-#             ceiling_texture=theme["ceiling_texture"],
-#             light_level=theme["light_level"]
-#         )
-#         room_wall_cfg = WallConfig(
-#             middle_texture=theme["wall_texture"],
-#             upper_texture=theme["wall_texture"],
-#             lower_texture=theme["wall_texture"],
-#         )
-#         editor.add_sector_from_polygon(
-#             result.rooms[room_info["name"]], room_sector_cfg, room_wall_cfg
-#         )
-    
-#     # =========================================================================
-#     # Add Doors (with sector tags for ACS control)
-#     # =========================================================================
-    
-#     # Door ceiling starts at floor level (closed), ACS will open it
-#     # The door texture needs to show when closed
-#     door_sector_cfg = SectorConfig(
-#         floor_height=0,
-#         ceiling_height=0,  # Starts closed (ceiling at floor level)
-#         floor_texture="FLAT5_4",
-#         ceiling_texture="FLAT5_4",
-#         light_level=160
-#     )
-#     # Upper texture shows when door is closed (between door ceiling and adjacent ceiling)
-#     door_wall_cfg = WallConfig(
-#         middle_texture="-",  # No middle texture needed
-#         upper_texture="BIGDOOR2",  # This is the visible door texture
-#         lower_texture="-"
-#     )
-    
-#     # Use doors from MapBuilder result (automatically positioned via add_corridor_door)
-#     for slot in result.slots:
-#         if slot.slot_type == SlotType.DOOR:
-#             door_idx = editor.add_sector_from_polygon(
-#                 slot.polygon, door_sector_cfg, door_wall_cfg
-#             )
-            
-#             # Set sector tag for ACS control (from metadata)
-#             if slot.metadata.get("tag"):
-#                 map_data.sectors[door_idx]['tag'] = slot.metadata["tag"]
-            
-#             # Apply door properties (REMOTE type since ACS controls it)
-#             door_config = DoorConfig(
-#                 width=slot.width,
-#                 depth=slot.depth,
-#                 door_type=DoorType.REMOTE
-#             )
-#             # Note: For ACS-controlled doors, we don't use normal door actions
-#             # The ACS script uses Door_Open/Door_Close with the sector tag
-#             apply_door_to_sector(editor, door_idx, door_config, DoorAction.SR_OPEN_WAIT_CLOSE)
-    
-#     # =========================================================================
-#     # Place Things
-#     # =========================================================================
-    
-#     # Player spawns in armory
-#     player_starts = [
-#         ThingType.PLAYER1_START,
-#         ThingType.PLAYER2_START,
-#         ThingType.PLAYER3_START,
-#         ThingType.PLAYER4_START
-#     ]
-    
-#     for i in range(min(num_players, 4)):
-#         if num_players == 1:
-#             # Single player at center
-#             editor.add_thing(0, 0, player_starts[i], angle=0, check_geometry=False)
-#         else:
-#             # Multiple players in a circle
-#             angle = (i / num_players) * 2 * math.pi
-#             x = 64 * math.cos(angle)
-#             y = 64 * math.sin(angle)
-#             facing = int(math.degrees(angle + math.pi)) % 360
-#             editor.add_thing(x, y, player_starts[i], angle=facing, check_geometry=False)
-    
-#     # Starter items in armory
-#     for item_type, (x, y) in get_armory_starter_items():
-#         editor.add_thing(x, y, item_type, check_geometry=False)
-    
-#     # Items in supply rooms
-#     for label, room_info in supply_rooms.items():
-#         cx, cy = room_info["center"]
-#         items = get_supply_room_items(label)
-        
-#         # Distribute items in a circle around the room center
-#         for j, item_type in enumerate(items):
-#             angle = (j / len(items)) * 2 * math.pi
-#             radius = room_info["radius"] * 0.4  # Place at 40% of room radius
-#             x = cx + radius * math.cos(angle)
-#             y = cy + radius * math.sin(angle)
-#             editor.add_thing(x, y, item_type, check_geometry=False)
-    
-#     # Add spawn spots for ACS enemy spawning (using MapSpot, TID=100)
-#     # Place spawn spots in a ring around the armory center
-#     num_spawn_spots = 8  # Number of spawn locations
-#     spawn_radius = armory_radius * 0.5  # 50% of armory radius
-    
-#     for i in range(num_spawn_spots):
-#         angle = (i / num_spawn_spots) * 2 * math.pi
-#         x = spawn_radius * math.cos(angle)
-#         y = spawn_radius * math.sin(angle)
-#         # MapSpot with TID 100 - used by ACS SpawnSpot function
-#         editor.add_thing(x, y, ThingType.MAP_SPOT, angle=0, check_geometry=False, tid=100)
-    
-#     # =========================================================================
-#     # ACS Scripts
-#     # =========================================================================
-    
-#     # Door tags match the order: A=1, B=2, C=3 (as passed in add_corridor_door above)
-#     door_tags = {"A": 1, "B": 2, "C": 3}
-#     acs_builder = create_timed_door_acs(door_tags, difficulty)
-    
-#     if output_path:
-#         output_path = Path(output_path)
-        
-#         # Always save ACS source for reference
-#         acs_path = output_path.with_suffix('.acs')
-#         acs_builder.save_source(acs_path)
-        
-#         try:
-#             behavior = acs_builder.compile()
-#             if behavior:
-#                 map_data.behavior = behavior
-#                 map_data.scripts = acs_builder.to_code()
-#                 print("ACS compiled and embedded successfully!")
-#         except FileNotFoundError:
-#             print(f"Note: ACC compiler not found. ACS source saved to {acs_path}")
-#             print("       Install ACC to embed compiled scripts in the WAD.")
-#         except Exception as e:
-#             print(f"Warning: ACS compilation failed: {e}")
-#             print(f"         ACS source saved to {acs_path}")
-        
-#         wad.save(str(output_path))
-    
-#     # Calculate stats
-#     stats = {
-#         "room_count": len(result.rooms),
-#         "corridor_count": len(result.corridors),
-#         "sector_count": len(map_data.sectors),
-#         "total_things": len(map_data.things),
-#         "vertices": len(map_data.vertices),
-#         "linedefs": len(map_data.linedefs),
-#     }
-    
-#     return wad, map_data, stats
+    return positions
 
 
-# def main():
-#     import argparse
+def get_positions_around_center(
+    polygon: Polygon,
+    count: int,
+    radius: float = 50.0,
+    margin: float = 24.0
+) -> List[Tuple[float, float]]:
+    """
+    Generate positions arranged in a circle around the polygon centroid.
     
-#     parser = argparse.ArgumentParser(description="Generate Armory Siege Defense scenario")
-#     parser.add_argument("--seed", type=int, default=None, help="Random seed")
-#     parser.add_argument(
-#         "--difficulty",
-#         choices=["easy", "medium", "hard"],
-#         default="medium",
-#         help="Enemy difficulty"
-#     )
-#     parser.add_argument(
-#         "--players",
-#         type=int,
-#         default=4,
-#         choices=[1, 2, 3, 4],
-#         help="Number of player starts"
-#     )
-#     parser.add_argument("--output", type=str, default=None, help="Output path")
-#     parser.add_argument("--batch", type=int, default=1, help="Number of maps to generate")
+    Useful for player starts and central item placement.
     
-#     args = parser.parse_args()
+    Args:
+        polygon: The room polygon.
+        count: Number of positions.
+        radius: Distance from center.
+        margin: Minimum distance from walls.
     
-#     output_dir = Path("output")
-#     output_dir.mkdir(exist_ok=True)
+    Returns:
+        List of (x, y) positions.
+    """
+    centroid = polygon.centroid
+    safe_area = polygon.buffer(-margin)
     
-#     if args.batch > 1:
-#         # Batch generation
-#         base_seed = args.seed if args.seed is not None else 0
-#         for i in range(args.batch):
-#             seed = base_seed + i
-#             output_path = output_dir / f"armory_siege_{seed}.wad"
-#             _, _, stats = create_armory_siege(
-#                 seed=seed,
-#                 output_path=str(output_path),
-#                 difficulty=args.difficulty,
-#                 num_players=args.players
-#             )
-#             print(f"Generated: {output_path} (seed={seed}, things={stats['total_things']})")
-#     else:
-#         # Single map generation
-#         seed = args.seed if args.seed is not None else 42
-#         output_path = args.output or str(output_dir / "armory_siege.wad")
+    positions = []
+    for i in range(count):
+        angle = (2 * np.pi * i / count) - np.pi / 2  # Start from top
+        x = centroid.x + radius * np.cos(angle)
+        y = centroid.y + radius * np.sin(angle)
         
-#         print("=" * 60)
-#         print("ARMORY SIEGE DEFENSE")
-#         print("=" * 60)
-#         print(f"\nSeed: {seed}")
-#         print(f"Difficulty: {args.difficulty}")
-#         print(f"Players: {args.players}")
-#         print()
-        
-#         _, _, stats = create_armory_siege(
-#             seed=seed,
-#             output_path=output_path,
-#             difficulty=args.difficulty,
-#             num_players=args.players
-#         )
-        
-#         print(f"\nMap Statistics:")
-#         print(f"  Rooms: {stats['room_count']}")
-#         print(f"  Corridors: {stats['corridor_count']}")
-#         print(f"  Sectors: {stats['sector_count']}")
-#         print(f"  Things: {stats['total_things']}")
-#         print(f"  Vertices: {stats['vertices']}")
-#         print(f"  Linedefs: {stats['linedefs']}")
-        
-#         print(f"\nSaved: {output_path}")
-#         print(f"\nLoad with: gzdoom -iwad doom2.wad -file {output_path}")
-        
-#         print("\n" + "=" * 60)
-#         print("DOOR TIMING (35 tics = 1 second)")
-#         print("=" * 60)
-#         print("Room A (Heavy Weapons): ticks 0-200, 500-700, 1000-1200")
-#         print("Room B (Ammunition):    ticks 200-400, 700-900")
-#         print("Room C (Health/Armor):  ticks 400-600, 900-1100")
-#         print("Cycle repeats every 1200 ticks (~34 seconds)")
+        # Ensure position is inside safe area
+        point = Point(x, y)
+        if safe_area.contains(point):
+            positions.append((x, y))
+        else:
+            # Fallback to centroid with small offset
+            x = centroid.x + (i * 20 - count * 10)
+            y = centroid.y + (i * 20 - count * 10)
+            positions.append((x, y))
+    
+    return positions
 
 
-# if __name__ == "__main__":
-#     main()
+def create_armory_siege(
+    seed: Optional[int] = None,
+    output_path: str = "output/armory_siege.wad"
+) -> Path:
+    """
+    Create the Armory Siege Defense scenario.
+    
+    Args:
+        seed: Random seed for reproducible layouts (None for random each time)
+        output_path: Output WAD file path
+    
+    Returns:
+        Path to the created WAD file
+    """
+    print("=== Armory Siege Defense - MARL Benchmark ===\n")
+    
+    # Initialize random generator for structural randomness
+    rng = np.random.default_rng(seed)
+    
+    # Create shape builder to access room polygons for thing placement
+    shape_builder = ShapeBuilder(seed=seed)
+    
+    # Create builder with seed for reproducible geometry
+    builder = DoomMapBuilder(seed=seed)
+    
+    # =========================================================================
+    # Layout Constraints
+    # =========================================================================
+    
+    # Minimum distance from armory center to supply room center
+    MIN_ROOM_DISTANCE = 500
+    MAX_ROOM_DISTANCE = 700
+    
+    # Armory radius range
+    MIN_ARMORY_RADIUS = 300
+    MAX_ARMORY_RADIUS = 400
+    
+    # Supply room size range
+    MIN_SUPPLY_ROOM_SIZE = 170
+    MAX_SUPPLY_ROOM_SIZE = 230
+    
+    # =========================================================================
+    # Room Configurations with thematic textures
+    # =========================================================================
+    
+    armory_cfg = RoomConfig(
+        floor_height=0,
+        ceiling_height=160,  # Taller central room
+        floor_texture="FLOOR4_8",
+        ceiling_texture="CEIL3_5",
+        wall_texture="STARTAN2",
+        light_level=200  # Well-lit armory
+    )
+    
+    # Supply rooms have slightly different visual themes
+    room_a_cfg = RoomConfig(
+        floor_height=0,
+        ceiling_height=128,
+        floor_texture="FLAT14",  # Tech floor
+        ceiling_texture="CEIL3_3",
+        wall_texture="TEKWALL4",
+        light_level=160  # Dimmer
+    )
+    
+    room_b_cfg = RoomConfig(
+        floor_height=0,
+        ceiling_height=128,
+        floor_texture="FLAT5_4",  # Metal floor
+        ceiling_texture="CEIL3_5",
+        wall_texture="STARGR1",
+        light_level=144
+    )
+    
+    room_c_cfg = RoomConfig(
+        floor_height=0,
+        ceiling_height=128,
+        floor_texture="FLAT5_1",  # Medical floor
+        ceiling_texture="CEIL3_1",
+        wall_texture="GRAY7",
+        light_level=176
+    )
+    
+    # =========================================================================
+    # Create Armory (Central Hub) - Using irregular or regular polygon randomly
+    # =========================================================================
+    
+    # Randomly choose between octagon, hexagon, or irregular polygon
+    armory_style = rng.choice(["octagon", "hexagon", "irregular"])
+    armory_radius = rng.integers(MIN_ARMORY_RADIUS, MAX_ARMORY_RADIUS + 1)
+    
+    # Create armory polygon for thing placement validation
+    if armory_style == "octagon":
+        armory_polygon = shape_builder.create_polygon(8, armory_radius, (0, 0))
+        builder.add_polygon_room(
+            "armory",
+            sides=8,
+            radius=armory_radius,
+            center=(0, 0),
+            config=armory_cfg
+        )
+        print(f"Armory: Regular octagon (radius={armory_radius})")
+    elif armory_style == "hexagon":
+        armory_polygon = shape_builder.create_polygon(6, armory_radius, (0, 0))
+        builder.add_polygon_room(
+            "armory",
+            sides=6,
+            radius=armory_radius,
+            center=(0, 0),
+            config=armory_cfg
+        )
+        print(f"Armory: Regular hexagon (radius={armory_radius})")
+    else:
+        irregularity = 0.1 + rng.random() * 0.15  # 0.1 to 0.25
+        sides = rng.integers(6, 10)
+        armory_polygon = shape_builder.create_irregular_polygon(
+            (0, 0), armory_radius, sides, irregularity
+        )
+        builder.add_irregular_room(
+            "armory",
+            radius=armory_radius,
+            sides=sides,
+            irregularity=irregularity,
+            center=(0, 0),
+            config=armory_cfg
+        )
+        print(f"Armory: Irregular polygon (radius={armory_radius}, irregularity={irregularity:.2f})")
+    
+    # =========================================================================
+    # Create Supply Rooms - Each with structural variation
+    # =========================================================================
+    
+    # Room positions at 120-degree intervals around armory
+    # Distance is calculated to ensure minimum gap from armory edge
+    room_angles = [90, 210, 330]  # Roughly north, southwest, southeast
+    
+    supply_rooms = [
+        ("supply_a", room_a_cfg, room_angles[0], "Heavy Weapons"),
+        ("supply_b", room_b_cfg, room_angles[1], "Ammunition"),
+        ("supply_c", room_c_cfg, room_angles[2], "Health/Armor"),
+    ]
+    
+    room_centers = {}
+    room_polygons = {}  # Store polygons for safe thing placement
+    
+    for room_name, cfg, angle, desc in supply_rooms:
+        # Calculate room size first
+        room_size = rng.integers(MIN_SUPPLY_ROOM_SIZE, MAX_SUPPLY_ROOM_SIZE + 1)
+        
+        # Calculate distance: ensure minimum gap between armory edge and room edge
+        # gap = room_distance - armory_radius - room_size
+        # We want gap >= corridor_width (80) + buffer (50) = 130
+        min_gap = 130
+        min_distance = armory_radius + room_size + min_gap
+        max_distance = max(min_distance + 150, MAX_ROOM_DISTANCE)
+        
+        room_distance = rng.integers(min_distance, max_distance + 1)
+        
+        # Calculate position with slight angle variation
+        rad = np.radians(angle + rng.integers(-15, 16))
+        cx = room_distance * np.cos(rad)
+        cy = room_distance * np.sin(rad)
+        room_centers[room_name] = (cx, cy)
+        
+        # Randomly choose room shape
+        shape_type = rng.choice(["rectangle", "irregular", "polygon"])
+        
+        if shape_type == "rectangle":
+            width = room_size + rng.integers(-40, 41)
+            height = room_size + rng.integers(-40, 41)
+            room_polygons[room_name] = shape_builder.create_rectangle(width, height, (cx, cy))
+            builder.add_room(
+                room_name,
+                width=width,
+                height=height,
+                center=(cx, cy),
+                config=cfg
+            )
+            print(f"{room_name} ({desc}): Rectangle {width}x{height} at ({cx:.0f}, {cy:.0f}), dist={room_distance}")
+        elif shape_type == "irregular":
+            irregularity = 0.1 + rng.random() * 0.2
+            sides = rng.integers(5, 8)
+            room_polygons[room_name] = shape_builder.create_irregular_polygon(
+                (cx, cy), room_size, sides, irregularity
+            )
+            builder.add_irregular_room(
+                room_name,
+                radius=room_size,
+                sides=sides,
+                irregularity=irregularity,
+                center=(cx, cy),
+                config=cfg
+            )
+            print(f"{room_name} ({desc}): Irregular {sides}-gon at ({cx:.0f}, {cy:.0f}), dist={room_distance}")
+        else:
+            sides = rng.integers(5, 9)
+            room_polygons[room_name] = shape_builder.create_polygon(sides, room_size, (cx, cy))
+            builder.add_polygon_room(
+                room_name,
+                sides=sides,
+                radius=room_size,
+                center=(cx, cy),
+                config=cfg
+            )
+            print(f"{room_name} ({desc}): Regular {sides}-gon at ({cx:.0f}, {cy:.0f}), dist={room_distance}")
+    
+    # =========================================================================
+    # Connect Rooms with Varied Corridor Styles
+    # =========================================================================
+    
+    corridor_width = 80  # Wide enough for multiple players
+    
+    # Available L-system grammars for organic corridors
+    lsystem_grammars = ["organic", "wavy", "gentle", "serpentine", "wobble"]
+    
+    # Connect each supply room to armory with different corridor styles
+    corridor_styles = [
+        rng.choice(["straight", "lsystem"]),
+        rng.choice(["straight", "lsystem"]),
+        rng.choice(["straight", "lsystem"]),
+    ]
+    
+    corridor_names = ["corridor_a", "corridor_b", "corridor_c"]
+    
+    for i, (room_name, _, _, _) in enumerate(supply_rooms):
+        style = corridor_styles[i]
+        name = corridor_names[i]
+        
+        if style == "lsystem":
+            grammar = rng.choice(lsystem_grammars)
+            builder.connect(
+                "armory", room_name,
+                corridor_width=corridor_width,
+                name=name,
+                style=f"lsystem:{grammar}",
+                iterations=2,
+                max_deviation=0.15
+            )
+            print(f"{name}: L-system ({grammar}) connecting armory to {room_name}")
+        else:
+            builder.connect(
+                "armory", room_name,
+                corridor_width=corridor_width,
+                name=name,
+                style="straight"
+            )
+            print(f"{name}: Straight corridor connecting armory to {room_name}")
+    
+    # =========================================================================
+    # Add Time-Gated Doors at Each Corridor Entrance
+    # Door tags: 1 = Room A, 2 = Room B, 3 = Room C
+    # =========================================================================
+    
+    print("\nAdding time-gated doors...")
+    
+    # Add doors at the supply room end of each corridor
+    # These will be controlled by ACS scripts for time-gating
+    for i, name in enumerate(corridor_names):
+        tag = i + 1  # Tags 1, 2, 3 for rooms A, B, C
+        builder.add_corridor_door(
+            name,
+            end="b",  # Door at supply room side
+            width=corridor_width,
+            depth=24,
+            tag=tag
+        )
+        print(f"  Door {tag} at {name} (end=b)")
+    
+    # =========================================================================
+    # ACS Scripts for Time-Gated Doors and Game Logic
+    # =========================================================================
+    
+    print("\nGenerating ACS scripts...")
+    
+    # Add defines for timing
+    builder.add_acs_define("DOOR_OPEN_DURATION", 200)  # ~6 seconds open
+    builder.add_acs_define("CYCLE_LENGTH", 500)
+    builder.add_acs_define("DOOR_A_TAG", 1)
+    builder.add_acs_define("DOOR_B_TAG", 2)
+    builder.add_acs_define("DOOR_C_TAG", 3)
+    
+    # Enemy spawn tags
+    builder.add_acs_define("SPAWN_TAG_1", 10)
+    builder.add_acs_define("SPAWN_TAG_2", 11)
+    builder.add_acs_define("SPAWN_TAG_3", 12)
+    builder.add_acs_define("SPAWN_TAG_4", 13)
+    
+    # Global variables
+    builder.add_acs_global_var("gameTime", "int", 0)
+    builder.add_acs_global_var("doorAOpen", "int", 0)
+    builder.add_acs_global_var("doorBOpen", "int", 0)
+    builder.add_acs_global_var("doorCOpen", "int", 0)
+    builder.add_acs_global_var("waveNumber", "int", 0)
+    
+    # Main game controller script
+    main_script = '''
+// Welcome message
+Delay(35);
+Print(s:"ARMORY SIEGE DEFENSE");
+Delay(70);
+Print(s:"Defend the Core! Collect supplies from rooms A, B, C.");
+Delay(70);
+Print(s:"Doors open on rotation: A, B, C, repeat...");
+Delay(105);
+
+// Start door controller and spawner
+ACS_Execute(2, 0);  // Door controller
+ACS_Execute(3, 0);  // Enemy spawner
+
+// Main game loop - track time
+while(true) {
+    Delay(1);
+    gameTime = gameTime + 1;
+}
+'''
+    builder.add_acs_script(ScriptType.OPEN, main_script)
+    
+    # Door controller script (Script 2)
+    door_script = '''
+// Time-gated door controller
+// Room A: 0-200, 500-700, 1000-1200, ...
+// Room B: 200-400, 700-900, 1200-1400, ...
+// Room C: 400-600 (within first cycle), 900-1100, 1400-1600, ...
+
+while(true) {
+    int cyclePos = gameTime % CYCLE_LENGTH;
+    
+    // Door A: Open at cycle positions 0-200
+    if (cyclePos >= 0 && cyclePos < DOOR_OPEN_DURATION && doorAOpen == 0) {
+        Door_Open(DOOR_A_TAG, 64);
+        doorAOpen = 1;
+        Print(s:"Room A OPEN - Heavy Weapons!");
+    }
+    if (cyclePos >= DOOR_OPEN_DURATION && doorAOpen == 1) {
+        Door_Close(DOOR_A_TAG, 64);
+        doorAOpen = 0;
+        Print(s:"Room A LOCKED");
+    }
+    
+    // Door B: Open at cycle positions 200-400
+    if (cyclePos >= 200 && cyclePos < 400 && doorBOpen == 0) {
+        Door_Open(DOOR_B_TAG, 64);
+        doorBOpen = 1;
+        Print(s:"Room B OPEN - Ammunition!");
+    }
+    if (cyclePos >= 400 && cyclePos < 500 && doorBOpen == 1) {
+        Door_Close(DOOR_B_TAG, 64);
+        doorBOpen = 0;
+        Print(s:"Room B LOCKED");
+    }
+    
+    // Door C: Open at cycle positions 400-600 (wraps around)
+    // For simplicity in first 500 ticks: 400-500 open
+    if (cyclePos >= 400 && doorCOpen == 0) {
+        Door_Open(DOOR_C_TAG, 64);
+        doorCOpen = 1;
+        Print(s:"Room C OPEN - Health/Armor!");
+    }
+    if (cyclePos < 100 && cyclePos > 0 && doorCOpen == 1) {
+        Door_Close(DOOR_C_TAG, 64);
+        doorCOpen = 0;
+        Print(s:"Room C LOCKED");
+    }
+    
+    Delay(1);
+}
+'''
+    builder.add_acs_script(ScriptType.OPEN, door_script, number=2)
+    
+    # Enemy spawner script (Script 3)
+    enemy_script = '''
+// Enemy spawner - waves of increasing difficulty
+Delay(175);  // 5 seconds before first wave
+
+while(true) {
+    waveNumber = waveNumber + 1;
+    
+    // Announce wave
+    if (waveNumber == 1) {
+        Print(s:"WAVE 1 - Zombies incoming!");
+    }
+    else if (waveNumber == 2) {
+        Print(s:"WAVE 2 - Imps joining the fight!");
+    }
+    else if (waveNumber == 3) {
+        Print(s:"WAVE 3 - Demons attack!");
+    }
+    else if (waveNumber == 4) {
+        Print(s:"WAVE 4 - Heavy resistance!");
+    }
+    else {
+        Print(s:"WAVE ", d:waveNumber, s:" - Endless assault!");
+    }
+    
+    // Spawn enemies at MapSpots (spawn points around the map)
+    // SpawnSpot takes class name and spot TID
+    SpawnSpot("Zombieman", SPAWN_TAG_1, 0, 0);
+    SpawnSpot("Zombieman", SPAWN_TAG_2, 0, 0);
+    
+    if (waveNumber >= 2) {
+        SpawnSpot("DoomImp", SPAWN_TAG_3, 0, 0);
+        SpawnSpot("DoomImp", SPAWN_TAG_4, 0, 0);
+    }
+    
+    if (waveNumber >= 3) {
+        SpawnSpot("Demon", SPAWN_TAG_1, 0, 0);
+        SpawnSpot("Demon", SPAWN_TAG_2, 0, 0);
+    }
+    
+    if (waveNumber >= 4) {
+        SpawnSpot("ChaingunGuy", SPAWN_TAG_3, 0, 0);
+        SpawnSpot("ChaingunGuy", SPAWN_TAG_4, 0, 0);
+    }
+    
+    // Wait between waves (scales with wave number, minimum 8 seconds)
+    int waveDelay = 420 - (waveNumber * 35);
+    if (waveDelay < 280) { waveDelay = 280; }
+    Delay(waveDelay);
+}
+'''
+    builder.add_acs_script(ScriptType.OPEN, enemy_script, number=3)
+    
+    # =========================================================================
+    # Place Things - Starting Equipment in Armory (Safe Placement)
+    # =========================================================================
+    
+    print("\nPlacing things (safe placement inside polygons)...")
+    
+    # Player starts (4 players for MARL, arranged around center)
+    player_positions = get_positions_around_center(armory_polygon, 4, radius=60, margin=32)
+    for i, (px, py) in enumerate(player_positions):
+        if i == 0:
+            builder.add_player_start("armory", position=(px, py), angle=0)
+        else:
+            thing_type = [ThingType.PLAYER2_START, ThingType.PLAYER3_START, ThingType.PLAYER4_START][i-1]
+            builder.add_thing("armory", thing_type, position=(px, py), angle=0)
+    print("  4 player starts in armory (safe placement)")
+    
+    # Get safe positions for weapons and ammo in armory
+    weapon_positions = get_safe_positions_in_polygon(armory_polygon, 3, min_spacing=48, margin=40, rng=rng)
+    ammo_positions = get_safe_positions_in_polygon(armory_polygon, 7, min_spacing=32, margin=40, rng=rng)
+    
+    # Starting weapons in armory (limited!)
+    builder.add_thing("armory", ThingType.SHOTGUN, position=weapon_positions[0], angle=90)
+    builder.add_thing("armory", ThingType.SHOTGUN, position=weapon_positions[1], angle=270)
+    builder.add_thing("armory", ThingType.CHAINGUN, position=weapon_positions[2], angle=180)
+    print("  Starting weapons: 2 Shotguns, 1 Chaingun")
+    
+    # Starting ammo in armory (limited!)
+    builder.add_thing("armory", ThingType.BOX_OF_SHELLS, position=ammo_positions[0])  # 20 shells
+    builder.add_thing("armory", ThingType.SHELLS, position=ammo_positions[1])  # 4 shells  
+    builder.add_thing("armory", ThingType.SHELLS, position=ammo_positions[2])  # 4 shells
+    builder.add_thing("armory", ThingType.SHELLS, position=ammo_positions[3])  # 4 shells = 32 total
+    builder.add_thing("armory", ThingType.CLIP, position=ammo_positions[4])  # 10 bullets
+    builder.add_thing("armory", ThingType.CLIP, position=ammo_positions[5])  # 10 bullets
+    builder.add_thing("armory", ThingType.CLIP, position=ammo_positions[6])  # 10 bullets = 30 total
+    print("  Starting ammo: ~32 shells, 30 bullets")
+    
+    # Core marker at armory centroid
+    centroid = armory_polygon.centroid
+    builder.add_thing("armory", ThingType.CANDELABRA, position=(centroid.x, centroid.y))
+    print("  Core marker (candelabra) at center")
+    
+    # =========================================================================
+    # Place Things - Supply Room A (Heavy Weapons) - Safe Placement
+    # =========================================================================
+    
+    room_a_poly = room_polygons["supply_a"]
+    room_a_positions = get_safe_positions_in_polygon(room_a_poly, 4, min_spacing=40, margin=32, rng=rng)
+    
+    builder.add_thing("supply_a", ThingType.ROCKET_LAUNCHER, position=room_a_positions[0])
+    builder.add_thing("supply_a", ThingType.PLASMA_RIFLE, position=room_a_positions[1])
+    builder.add_thing("supply_a", ThingType.BOX_OF_ROCKETS, position=room_a_positions[2])
+    builder.add_thing("supply_a", ThingType.ENERGY_CELL_PACK, position=room_a_positions[3])
+    print("  Room A: Rocket Launcher, Plasma Rifle, rockets, cells (safe placement)")
+    
+    # =========================================================================
+    # Place Things - Supply Room B (Ammunition) - Safe Placement
+    # =========================================================================
+    
+    room_b_poly = room_polygons["supply_b"]
+    room_b_positions = get_safe_positions_in_polygon(room_b_poly, 6, min_spacing=32, margin=32, rng=rng)
+    
+    builder.add_thing("supply_b", ThingType.BOX_OF_SHELLS, position=room_b_positions[0])
+    builder.add_thing("supply_b", ThingType.BOX_OF_SHELLS, position=room_b_positions[1])
+    builder.add_thing("supply_b", ThingType.BOX_OF_BULLETS, position=room_b_positions[2])
+    builder.add_thing("supply_b", ThingType.BOX_OF_BULLETS, position=room_b_positions[3])
+    builder.add_thing("supply_b", ThingType.BOX_OF_ROCKETS, position=room_b_positions[4])
+    builder.add_thing("supply_b", ThingType.ENERGY_CELL_PACK, position=room_b_positions[5])
+    print("  Room B: Shells, bullets, rockets, cells (safe placement)")
+    
+    # =========================================================================
+    # Place Things - Supply Room C (Health/Armor) - Safe Placement
+    # =========================================================================
+    
+    room_c_poly = room_polygons["supply_c"]
+    room_c_positions = get_safe_positions_in_polygon(room_c_poly, 6, min_spacing=32, margin=32, rng=rng)
+    
+    builder.add_thing("supply_c", ThingType.MEDIKIT, position=room_c_positions[0])
+    builder.add_thing("supply_c", ThingType.MEDIKIT, position=room_c_positions[1])
+    builder.add_thing("supply_c", ThingType.SOULSPHERE, position=room_c_positions[2])
+    builder.add_thing("supply_c", ThingType.BLUE_ARMOR, position=room_c_positions[3])
+    builder.add_thing("supply_c", ThingType.STIMPACK, position=room_c_positions[4])
+    builder.add_thing("supply_c", ThingType.STIMPACK, position=room_c_positions[5])
+    print("  Room C: Medikits, Soulsphere, Blue Armor, Stimpacks (safe placement)")
+    
+    # =========================================================================
+    # Enemy Spawn Points (MapSpots inside armory near perimeter)
+    # =========================================================================
+    
+    # Place spawn points inside the armory, near the edges but safely within bounds
+    # Use a ring pattern around the armory for enemy spawns
+    spawn_positions = get_safe_positions_in_polygon(
+        armory_polygon, 4, min_spacing=100, margin=48, rng=rng
+    )
+    
+    # Add MapSpots for enemy spawning (TID 10-13)
+    for i, (sx, sy) in enumerate(spawn_positions):
+        tid = 10 + i
+        # MapSpot uses angle field as TID in ZDoom/GZDoom
+        builder.add_thing("armory", ThingType.MAP_SPOT, position=(sx, sy), angle=tid)
+    print(f"  {len(spawn_positions)} enemy spawn points (MapSpots TID 10-13, safe placement)")
+    
+    # =========================================================================
+    # Add some initial enemies inside the armory
+    # =========================================================================
+    
+    # Get positions for initial enemies
+    enemy_positions = get_safe_positions_in_polygon(
+        armory_polygon, 2, min_spacing=80, margin=60, rng=rng
+    )
+    
+    for ex, ey in enemy_positions:
+        # Face toward center
+        cx, cy = armory_polygon.centroid.x, armory_polygon.centroid.y
+        angle = int(np.degrees(np.arctan2(cy - ey, cx - ex))) % 360
+        builder.add_thing("armory", ThingType.ZOMBIEMAN, position=(ex, ey), angle=angle)
+    print(f"  {len(enemy_positions)} initial zombiemen (safe placement)")
+    
+    # =========================================================================
+    # Add Lighting Effects to rooms
+    # =========================================================================
+    
+    builder.add_lighting("armory", effect="blink_random", light_level=200)
+    
+    # =========================================================================
+    # Save the WAD
+    # =========================================================================
+    
+    print("\n" + "=" * 50)
+    output_file = builder.save(output_path)
+    
+    print("\n" + "=" * 50)
+    print("ARMORY SIEGE DEFENSE - SCENARIO SUMMARY")
+    print("=" * 50)
+    print(f"Seed: {seed}")
+    print(f"Output: {output_file}")
+    print("\nRooms:")
+    print("  - Armory (center): Starting weapons, Core marker, 4 player spawns")
+    print("  - Supply A (north): Heavy weapons (Rocket Launcher, Plasma)")
+    print("  - Supply B (southwest): Bulk ammunition")
+    print("  - Supply C (southeast): Health and armor")
+    print("\nDoor Schedule (500-tick cycle):")
+    print("  - Room A: Open ticks 0-200")
+    print("  - Room B: Open ticks 200-400")
+    print("  - Room C: Open ticks 400-600 (wraps)")
+    print("\nEnemy Waves: Every ~12 seconds, increasing difficulty")
+    print("\nLoad with: gzdoom -iwad doom2.wad -file", output_file)
+    
+    return output_file
+
+
+def main():
+    """Main entry point - create scenario with random seed for variety."""
+    import sys
+    
+    # Use command-line seed if provided, otherwise random
+    if len(sys.argv) > 1:
+        try:
+            seed = int(sys.argv[1])
+        except ValueError:
+            seed = None
+    else:
+        seed = None  # Random layout each time
+    
+    output_dir = Path("output")
+    output_dir.mkdir(exist_ok=True)
+    
+    create_armory_siege(
+        seed=seed,
+        output_path=str(output_dir / "armory_siege.wad")
+    )
+
+
+if __name__ == "__main__":
+    main()

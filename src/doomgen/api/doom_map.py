@@ -679,10 +679,32 @@ class DoomMapBuilder:
             builder.connect("hub", "arena", name="corridor1", style="lsystem:serpentine")
             builder.add_corridor_door("corridor1", end="b", tag=1)  # Door at arena
         """
+        # Get corridor data to determine actual width and position
+        corridor = self._map_builder._corridors.get(corridor_name)
+        if corridor is None:
+            raise KeyError(f"Corridor '{corridor_name}' not found")
+        
+        actual_width = width if width is not None else corridor.width
+        
+        # Register the slot with the geometry builder
         self._map_builder.add_corridor_door(
-            corridor_name, end=end, width=width, depth=depth,
+            corridor_name, end=end, width=actual_width, depth=depth,
             tag=tag, key_type=key_type, **metadata
         )
+        
+        # Register a prefab for door creation during save()
+        # room_name stores corridor name, room_b_name stores which end
+        cfg = DoomDoorConfig(width=int(actual_width), depth=int(depth), key_type=key_type)
+        
+        self._prefabs.append(PrefabInfo(
+            prefab_type="corridor_door",
+            room_name=corridor_name,  # Store corridor name
+            room_b_name=end,  # Store which end ("a" or "b")
+            position=(0, 0),  # Position determined from slot during build
+            config=cfg,
+            tag=tag if tag is not None else self._get_next_tag()
+        ))
+        
         return self
     
     def apply_modifier(
@@ -1515,6 +1537,8 @@ class DoomMapBuilder:
         for prefab in self._prefabs:
             if prefab.prefab_type == "door":
                 self._apply_door_prefab(editor, prefab, result)
+            elif prefab.prefab_type == "corridor_door":
+                self._apply_corridor_door_prefab(editor, prefab, result)
             elif prefab.prefab_type == "lift":
                 self._apply_lift_prefab(editor, prefab, result)
             elif prefab.prefab_type == "crusher":
@@ -1597,6 +1621,48 @@ class DoomMapBuilder:
                     door_type = DoorType.KEY_YELLOW
                 
                 apply_door_to_sector(editor, idx, DoorConfig(door_type=door_type))
+                break
+    
+    def _apply_corridor_door_prefab(self, editor: MapEditor, prefab: PrefabInfo, result: BuildResult) -> None:
+        """Apply a corridor door prefab to the map."""
+        cfg: DoomDoorConfig = prefab.config
+        corridor_name = prefab.room_name  # Stored corridor name
+        end = prefab.room_b_name  # Stored which end ("a" or "b")
+        
+        # Find the matching corridor slot
+        for slot in result.slots:
+            if (slot.slot_type == SlotType.DOOR and 
+                slot.metadata.get("corridor_slot") and
+                slot.metadata.get("corridor") == corridor_name and
+                slot.metadata.get("end") == end):
+                
+                door_sector_config = SectorConfig(
+                    floor_height=0,
+                    ceiling_height=0,  # Closed door
+                    floor_texture="FLOOR4_8",
+                    ceiling_texture="CEIL3_5",
+                    light_level=160
+                )
+                
+                idx = editor.add_sector_from_polygon(
+                    slot.polygon,
+                    door_sector_config,
+                    WallConfig(middle_texture=cfg.wall_texture)
+                )
+                
+                # Determine door type from key_type
+                door_type = cfg.door_type
+                if cfg.key_type == "blue":
+                    door_type = DoorType.KEY_BLUE
+                elif cfg.key_type == "red":
+                    door_type = DoorType.KEY_RED
+                elif cfg.key_type == "yellow":
+                    door_type = DoorType.KEY_YELLOW
+                
+                # Apply door with tag for ACS control
+                from doomgen.prefabs.door import DoorPrefab
+                door_prefab = DoorPrefab(DoorConfig(door_type=door_type))
+                door_prefab.apply_to_map(editor, idx, tag=prefab.tag or 0)
                 break
     
     def _apply_lift_prefab(self, editor: MapEditor, prefab: PrefabInfo, result: BuildResult) -> None:

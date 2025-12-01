@@ -56,7 +56,7 @@ def main():
         radius=150,
         sides=5,
         irregularity=0.15,
-        center=(450, 0),
+        center=(500, 0),
         config=room_cfg
     )
     
