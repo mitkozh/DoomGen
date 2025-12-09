@@ -2,10 +2,10 @@
 Geometry module for DoomGen.
 """
 
-from doomgen.geometry.seeds import SeedEngine, StencilLibrary, Seed
+from doomgen.geometry.seeds import generate_relaxed_seeds, Seed
 from doomgen.geometry.mesh import VoronoiMesh
 
 __all__ = [
-    "SeedEngine", "StencilLibrary", "Seed",
+    "generate_relaxed_seeds", "Seed",
     "VoronoiMesh"
 ]

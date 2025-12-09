@@ -1,96 +1,69 @@
-from doomgen import (
-    LayoutGraph, Area, AreaConfig, Transform, SeedStrategy, ConnectionType,
-    SeedEngine, VoronoiMesh, WADWriter, MapTranslator, Prefab
-)
-from doomgen.utils.visualization import visualize_mesh
-import shutil
-import subprocess
-from pathlib import Path
+from doomgen.builder import ProceduralMapBuilder
+from doomgen.abstraction.layout import ConnectionType
+from shapely.geometry import Point, box
 import os
 
 def create_voronoi_map():
     print("Generating Voronoi Map...")
     
-    # 1. Define Layout
-    graph = LayoutGraph()
+    # Initialize Builder with larger bounds to cover all rooms comfortably
+    builder = ProceduralMapBuilder(bounds=(-600, -600, 600, 600), num_seeds=2000, seed=42)
     
-    # Main Hall (Grid seeds for structure)
-    hall = Area(
+    # Main Hall (Rectangle)
+    # Positioned at (0, 0)
+    builder.add_area(
         name="Main Hall",
-        transform=Transform(0, 0),
-        strategy=SeedStrategy.GRID,
-        dimensions=(384, 384),
-        seed_density=0.5,
-        config=AreaConfig(floor_height=0, ceiling_height=128)
+        shape=(0, 0, 384, 384),
+        floor_height=0,
+        ceiling_height=128
     )
-    hall_id = graph.add_area(hall)
     
-    # Cave (Poisson seeds for organic look)
-    cave = Area(
+    # Cave (Circle-ish via polygon)
+    # Positioned close to Main Hall so they touch.
+    # Main Hall is x: -192 to 192.
+    # Let's put Cave center at x=300. Radius 128 means it goes from 172 to 428.
+    # Overlap: 172 < 192. So they overlap by 20 units.
+    
+    circle_poly = Point(300, 0).buffer(128)
+    
+    builder.add_area(
         name="Cave",
-        transform=Transform(400, 0),
-        strategy=SeedStrategy.POISSON,
-        dimensions=(256, 256),
-        shape_hint="circle",
-        seed_density=1.0,
-        config=AreaConfig(floor_height=-16, floor_texture="NUKAGE1")
+        shape=circle_poly,
+        floor_height=-16,
+        floor_texture="NUKAGE1"
     )
-    cave_id = graph.add_area(cave)
     
-    # Prefab: Pillar in the hall
-    # Make it a raised platform
-    pillar = Prefab(
-        name="Pillar",
-        transform=Transform(0, 0),
-        stencil_name="circle_filled", # Use filled circle to make it solid
-        dimensions=(64, 64),
-        config=AreaConfig(floor_height=32, ceiling_height=128, floor_texture="GATE1", wall_texture="SUPPORT3")
+    # Connect them directly without a door/boundary area
+    # We just want them to be logically connected so the translator makes the shared wall passable.
+    builder.connect_adjacent("Main Hall", "Cave", ConnectionType.OPEN)
+    
+    # Add Pillar in Main Hall using generic add_area with overwrite mode
+    # A pillar is just a solid area (VOID) or a raised area inside another area.
+    # Let's make a decorative pillar (raised floor)
+    pillar_shape = Point(0, 0).buffer(48)
+    builder.add_area(
+        name="Center Pillar",
+        shape=pillar_shape,
+        floor_height=32,
+        wall_texture="SUPPORT3",
+        mode="overwrite"
     )
-    # Note: Prefabs are just Areas. To make it a "pillar", we might want it to be solid?
-    # Or maybe it's a decorative area.
-    # If we want it to be a solid pillar, we should probably make it a separate area 
-    # and NOT connect it to the hall?
-    # But in Voronoi, everything is connected.
-    # To make a solid pillar, we can make the area have a higher floor or be void?
-    # Or just a different texture.
-    # Let's just add it as a sub-area.
-    pillar_id = graph.add_area(pillar)
     
-    # Connect them
-    graph.connect(hall_id, cave_id, ConnectionType.OPEN)
-    graph.connect(hall_id, pillar_id, ConnectionType.OPEN) # Connected but distinct
+    # Add Void Pillar (Hole) in Cave using set_void
+    hole_shape = Point(300, 0).buffer(32)
+    builder.set_void(hole_shape)
     
-    # 2. Generate Seeds
-    engine = SeedEngine(seed=42)
-    seeds = engine.generate(graph)
-    print(f"Generated {len(seeds)} seeds.")
+    # Add Player Start
+    builder.add_thing("PLAYER1_START", -100, 0, angle=0)
     
-    # 3. Build Mesh
-    mesh = VoronoiMesh(seeds, graph)
-    mesh.build()
-    print(f"Built mesh with {len(mesh.cells)} cells.")
+    # Build
+    os.makedirs("examples/output", exist_ok=True)
+    builder.build("examples/output/voronoi_test.wad")
     
     # Visualize
-    os.makedirs("examples/output", exist_ok=True)
-    visualize_mesh(mesh, "examples/output/voronoi_debug.png")
-    print("Saved visualization to examples/output/voronoi_debug.png")
-    
-    # 4. Translate to Doom
-    wad = WADWriter()
-    map_data = wad.create_map("MAP01")
-    translator = MapTranslator(map_data)
-    
-    translator.translate(mesh, graph)
-    translator.add_player_start(hall_id, 100, 0)
-    
-    # 5. Save
-    output_path = "examples/output/voronoi_test.wad"
-    wad.save(output_path)
-    print(f"Saved to {output_path}")
-    
-    # 6. Build Nodes (Optional but recommended)
-    if shutil.which("zdbsp"):
-        subprocess.run(["zdbsp", "-o", output_path, output_path], check=False)
+    from doomgen.utils.visualization import visualize_mesh
+    visualize_mesh(builder.mesh, "examples/output/voronoi_test.png")
+    print("Visualization saved to examples/output/voronoi_test.png")
 
 if __name__ == "__main__":
     create_voronoi_map()

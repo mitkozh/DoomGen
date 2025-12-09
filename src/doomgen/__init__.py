@@ -2,7 +2,7 @@
 DoomGen - Voronoi-first procedural Doom map generation library.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 # Abstract Layer
 from doomgen.abstraction.layout import (
@@ -10,13 +10,11 @@ from doomgen.abstraction.layout import (
     Area, 
     AreaConfig, 
     Transform, 
-    SeedStrategy, 
-    ConnectionType,
-    Prefab
+    ConnectionType
 )
 
 # Geometry Layer
-from doomgen.geometry.seeds import SeedEngine, StencilLibrary
+from doomgen.geometry.seeds import generate_relaxed_seeds
 from doomgen.geometry.mesh import VoronoiMesh
 
 # Doom Layer
@@ -28,8 +26,8 @@ from doomgen.doom.things import ThingType
 from doomgen.builder import ProceduralMapBuilder as MapBuilder
 
 __all__ = [
-    "LayoutGraph", "Area", "AreaConfig", "Transform", "SeedStrategy", "ConnectionType",
-    "SeedEngine", "StencilLibrary",
+    "LayoutGraph", "Area", "AreaConfig", "Transform", "ConnectionType",
+    "generate_relaxed_seeds",
     "VoronoiMesh",
     "WADWriter", "DoomMapData", "MapTranslator", "ThingType",
     "MapBuilder"

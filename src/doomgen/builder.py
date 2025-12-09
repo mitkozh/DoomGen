@@ -1,342 +1,426 @@
 """
 High-level builder for creating Doom maps procedurally.
-Simplifies the creation of rooms, corridors, and connections.
+Uses a global relaxed Voronoi field for organic generation.
 """
 
 from __future__ import annotations
-from typing import Optional, Tuple, List, Dict, Any
+from typing import Optional, Tuple, List, Dict, Any, Union
 import math
 import random
 import numpy as np
+from shapely.geometry import Polygon, Point, box
+from shapely.affinity import translate, rotate
 
-from doomgen.abstraction.layout import LayoutGraph, Area, AreaConfig, Transform, SeedStrategy, ConnectionType, Prefab
-from doomgen.geometry.seeds import SeedEngine
+from doomgen.abstraction.layout import LayoutGraph, Area, AreaConfig, Transform, ConnectionType
+from doomgen.geometry.seeds import generate_relaxed_seeds, Seed
 from doomgen.geometry.mesh import VoronoiMesh
 from doomgen.doom.wad import WADWriter, DoomMapData
 from doomgen.doom.translator import MapTranslator
-from doomgen.utils.geometry_utils import create_wavy_path
+from doomgen.doom.things import ThingType
 
 class ProceduralMapBuilder:
     """
     A builder class that provides a simplified API for generating Doom maps.
-    Wraps LayoutGraph and SeedEngine.
+    Uses Lloyd's relaxation and cell-based construction.
     """
-    def __init__(self, seed: int = 42):
+    def __init__(self, bounds: Tuple[float, float, float, float] = (-1024, -1024, 1024, 1024), 
+                 num_seeds: int = 2000, seed: int = 42):
         self.graph = LayoutGraph()
         self.seed = seed
-        self.engine = SeedEngine(seed=seed)
+        self.rng = np.random.default_rng(seed)
         self.wad_writer = WADWriter()
-        self.mesh: Optional[VoronoiMesh] = None
-        self.map_data: Optional[DoomMapData] = None
+        self.map_data = self.wad_writer.create_map("MAP01")
         self.things_to_add: List[Dict[str, Any]] = []
         self.name_to_id: Dict[str, str] = {}
         
-    def add_room(
+        # Generate Global Seed Field
+        self.seeds = generate_relaxed_seeds(bounds, num_seeds, seed=seed)
+        
+        # Build Mesh immediately to establish topology
+        self.mesh = VoronoiMesh(self.seeds, self.graph)
+        self.mesh.build()
+        
+    def add_area(
         self,
         name: str,
-        x: float,
-        y: float,
-        shape: str = "circle",
-        width: float = 256,
-        height: float = 256,
+        shape: Union[Polygon, Tuple[float, float, float, float]], # Polygon or (x, y, w, h)
         floor_height: int = 0,
         ceiling_height: int = 128,
         floor_texture: str = "FLOOR4_8",
         ceiling_texture: str = "CEIL3_5",
         wall_texture: str = "STARTAN3",
         special: int = 0,
-        auto_boundary: bool = True
+        tag: int = 0,
+        mode: str = "claim_void" # "claim_void" or "overwrite"
     ) -> str:
         """
-        Adds a room to the map.
+        Adds an area (room, pillar, etc.) by selecting Voronoi cells within a shape.
         
         Args:
-            name: Room name.
-            x, y: Center coordinates.
-            shape: "circle" or "rectangle".
-            width, height: Dimensions (for circle, width is diameter).
-            auto_boundary: If True, automatically generates void seeds around the room.
+            mode: "claim_void" (default) only claims unassigned cells.
+                  "overwrite" claims any cell within the shape (useful for sub-areas like pillars).
         """
-        strategy = SeedStrategy.POISSON if shape == "circle" else SeedStrategy.GRID
-        
+        # Create Polygon if tuple provided
+        if isinstance(shape, tuple) or isinstance(shape, list):
+            x, y, w, h = shape
+            poly = box(x - w/2, y - h/2, x + w/2, y + h/2)
+        else:
+            poly = shape
+            
         config = AreaConfig(
             floor_height=floor_height,
             ceiling_height=ceiling_height,
             floor_texture=floor_texture,
             ceiling_texture=ceiling_texture,
             wall_texture=wall_texture,
-            special=special
+            special=special,
+            tag=tag
         )
         
+        # Create Area (mostly for config storage now)
         area = Area(
             name=name,
-            transform=Transform(x, y),
-            strategy=strategy,
-            shape_hint=shape,
-            dimensions=(width, height),
-            seed_density=1.5 if shape == "circle" else 1.0,
-            config=config,
-            auto_boundary=auto_boundary
+            transform=Transform(0, 0), # Not really used in new system
+            config=config
         )
         
         area_id = self.graph.add_area(area)
         self.name_to_id[name] = area_id
+        
+        # Assign seeds
+        count = 0
+        for s in self.seeds:
+            should_claim = False
+            if mode == "overwrite":
+                should_claim = True
+            elif mode == "claim_void" and s.area_id == "VOID":
+                should_claim = True
+                
+            if should_claim:
+                if poly.contains(Point(s.x, s.y)):
+                    s.area_id = area_id
+                    count += 1
+                    
+        if count == 0:
+            print(f"Warning: Area {name} claimed 0 seeds. Check bounds/density.")
+            
         return area_id
 
-    def _resolve_id(self, id_or_name: str) -> str:
-        """Helper to resolve name to ID if possible."""
-        if id_or_name in self.name_to_id:
-            return self.name_to_id[id_or_name]
-        return id_or_name
+
 
     def add_corridor(
         self,
-        room_a_id: str,
-        room_b_id: str,
-        width: float = 96,
-        style: str = "straight", # "straight", "wavy"
-        door_a: bool = False,
-        door_b: bool = False
+        room_a_name: str,
+        room_b_name: str,
+        width: int = 1, # Width in cells (dilation)
+        floor_height: int = 0,
+        ceiling_height: int = 128,
+        floor_texture: str = "FLOOR4_8",
+        ceiling_texture: str = "CEIL3_5",
+        wall_texture: str = "STARTAN3"
     ) -> str:
         """
-        Adds a corridor connecting two rooms.
-        Automatically calculates start/end points to avoid overlapping room centers.
+        Adds a corridor connecting two rooms using A* pathfinding on the cell mesh.
         """
-        room_a_id = self._resolve_id(room_a_id)
-        room_b_id = self._resolve_id(room_b_id)
+        id_a = self.name_to_id.get(room_a_name, room_a_name)
+        id_b = self.name_to_id.get(room_b_name, room_b_name)
         
-        room_a = self.graph.get_area(room_a_id)
-        room_b = self.graph.get_area(room_b_id)
+        # Find seeds for start and end
+        seeds_a = [i for i, s in enumerate(self.seeds) if s.area_id == id_a]
+        seeds_b = [i for i, s in enumerate(self.seeds) if s.area_id == id_b]
         
-        if not room_a or not room_b:
-            raise ValueError(f"Room IDs not found: {room_a_id}, {room_b_id}")
+        if not seeds_a or not seeds_b:
+            print(f"Warning: Cannot connect {room_a_name} and {room_b_name}, one has no seeds.")
+            return ""
             
-        # Calculate geometry
-        x1, y1 = room_a.transform.x, room_a.transform.y
-        x2, y2 = room_b.transform.x, room_b.transform.y
+        # Find path
+        path_indices = self.mesh.find_path(seeds_a, seeds_b)
         
-        dx = x2 - x1
-        dy = y2 - y1
-        dist = math.sqrt(dx*dx + dy*dy)
-        angle = math.atan2(dy, dx)
-        
-        # Determine start/end offsets based on room size
-        # Assume circular approximation for simplicity
-        r_a = room_a.dimensions[0] / 2
-        r_b = room_b.dimensions[0] / 2
-        
-        # Start/End points (slightly inside rooms for connection)
-        start_dist = r_a - 16
-        end_dist = dist - r_b + 16
-        
-        sx = x1 + start_dist * math.cos(angle)
-        sy = y1 + start_dist * math.sin(angle)
-        ex = x1 + end_dist * math.cos(angle)
-        ey = y1 + end_dist * math.sin(angle)
-        
-        # Generate path points
-        if style == "wavy":
-            path_points = create_wavy_path((sx, sy), (ex, ey), amplitude=30)
-        else:
-            path_points = [(sx, sy), (ex, ey)]
-            
-        # Filter points inside rooms (prevent mixed cells)
-        filtered_points = []
-        for px, py in path_points:
-            d_a = math.sqrt((px-x1)**2 + (py-y1)**2)
-            d_b = math.sqrt((px-x2)**2 + (py-y2)**2)
-            
-            # Keep if outside rooms (with buffer)
-            if d_a > (r_a - 8) and d_b > (r_b - 8):
-                filtered_points.append((px, py))
-                
-        if not filtered_points:
-            filtered_points = [(sx, sy), (ex, ey)]
+        if not path_indices:
+            print(f"Warning: No path found between {room_a_name} and {room_b_name}.")
+            return ""
             
         # Create Corridor Area
-        corridor = Area(
-            name=f"Corridor {room_a.name}-{room_b.name}",
-            transform=Transform(0, 0),
-            strategy=SeedStrategy.PATH,
-            path_points=filtered_points,
-            dimensions=(width, 0),
-            seed_density=1.0,
-            config=AreaConfig(
-                floor_height=min(room_a.config.floor_height, room_b.config.floor_height),
-                ceiling_height=min(room_a.config.ceiling_height, room_b.config.ceiling_height) - 16,
-                floor_texture="CEIL3_5"
-            )
+        corridor_name = f"corridor_{room_a_name}_{room_b_name}"
+        config = AreaConfig(
+            floor_height=floor_height,
+            ceiling_height=ceiling_height,
+            floor_texture=floor_texture,
+            ceiling_texture=ceiling_texture,
+            wall_texture=wall_texture
         )
-        corr_id = self.graph.add_area(corridor)
         
-        # Handle Doors
-        # For simplicity in this version, we'll just add the door prefab if requested
-        # and rewire the connections.
+        area = Area(name=corridor_name, transform=Transform(0,0), config=config)
+        area_id = self.graph.add_area(area)
         
-        current_start_id = room_a_id
+        # Assign seeds along path
+        path_set = set(path_indices)
         
-        if door_a:
-            # Add door at start
-            door_dist = r_a + 16 # Just outside room
-            dx = door_dist * math.cos(angle)
-            dy = door_dist * math.sin(angle)
-            
-            door_id = self._create_door_prefab(
-                f"Door {room_a.name}", 
-                x1 + dx, y1 + dy, 
-                math.degrees(angle) + 90
-            )
-            
-            self.graph.connect(current_start_id, door_id, ConnectionType.DOOR)
-            current_start_id = door_id
-            
-        self.graph.connect(current_start_id, corr_id, ConnectionType.OPEN)
+        # Dilate path if width > 1
+        if width > 1:
+            for _ in range(width - 1):
+                new_neighbors = set()
+                for idx in path_set:
+                    for neighbor in self.mesh.adjacency.get(idx, []):
+                        if self.seeds[neighbor].area_id == "VOID":
+                            new_neighbors.add(neighbor)
+                path_set.update(new_neighbors)
         
-        current_end_id = room_b_id
+        for idx in path_set:
+            # Only overwrite VOID (don't eat into rooms)
+            if self.seeds[idx].area_id == "VOID":
+                self.seeds[idx].area_id = area_id
+                
+        # Add logical connections to graph
+        self.graph.connect(id_a, area_id, ConnectionType.OPEN)
+        self.graph.connect(area_id, id_b, ConnectionType.OPEN)
         
-        if door_b:
-            # Add door at end
-            door_dist = r_b + 16
-            dx = door_dist * math.cos(angle + math.pi) # Opposite direction
-            dy = door_dist * math.sin(angle + math.pi)
-            
-            door_id = self._create_door_prefab(
-                f"Door {room_b.name}", 
-                x2 + dx, y2 + dy, 
-                math.degrees(angle) + 90
-            )
-            
-            self.graph.connect(corr_id, door_id, ConnectionType.OPEN)
-            self.graph.connect(door_id, room_b_id, ConnectionType.DOOR)
-        else:
-            self.graph.connect(corr_id, room_b_id, ConnectionType.OPEN)
-            
-        return corr_id
+        return area_id
 
-    def add_thing(
-        self, 
-        room_id: str, 
-        thing_type: int, 
-        count: int = 1, 
-        **kwargs
-    ):
+    def add_stairs(
+        self,
+        room_a_name: str,
+        room_b_name: str,
+        num_steps: int = 4,
+        width: int = 1,
+        floor_texture: str = "STEP1",
+        ceiling_texture: str = "CEIL3_5",
+        wall_texture: str = "BROWN1",
+        riser_texture: str = "STEP1"
+    ) -> List[str]:
         """
-        Schedules things to be added to a room.
-        
-        Args:
-            room_id: The ID/Name of the room to place things in.
-            thing_type: The Doom Thing Type ID (e.g., from ThingType enum).
-            count: Number of things to spawn.
-            **kwargs: Additional arguments passed to map_data.add_thing (e.g., angle, flags).
+        Connects two rooms with a staircase by finding a path and segmenting it into steps.
+        Returns the list of IDs for the created step areas.
         """
-        room_id = self._resolve_id(room_id)
+        id_a = self.name_to_id.get(room_a_name, room_a_name)
+        id_b = self.name_to_id.get(room_b_name, room_b_name)
         
-        if not self.graph.get_area(room_id):
-             raise ValueError(f"Room {room_id} not found")
+        # Get heights
+        area_a = self.graph.get_area(id_a)
+        area_b = self.graph.get_area(id_b)
         
+        h_start = area_a.config.floor_height
+        h_end = area_b.config.floor_height
+        
+        # Find path
+        seeds_a = [i for i, s in enumerate(self.seeds) if s.area_id == id_a]
+        seeds_b = [i for i, s in enumerate(self.seeds) if s.area_id == id_b]
+        
+        if not seeds_a or not seeds_b:
+            print(f"Warning: Cannot connect {room_a_name} and {room_b_name} with stairs.")
+            return []
+            
+        path_indices = self.mesh.find_path(seeds_a, seeds_b)
+        if not path_indices:
+            print(f"Warning: No path found for stairs between {room_a_name} and {room_b_name}.")
+            return []
+
+        # Clamp steps
+        if len(path_indices) < num_steps:
+            print(f"Warning: Path length ({len(path_indices)}) < requested steps ({num_steps}). Reducing steps.")
+            num_steps = max(1, len(path_indices))
+            
+        # Map cells to step index (0 to num_steps-1)
+        # We use the centerline path to define the steps
+        cell_to_step = {}
+        for i, cell_idx in enumerate(path_indices):
+            # Map position i in path to step k
+            # i goes from 0 to len-1
+            # k goes from 0 to num_steps-1
+            k = int((i / len(path_indices)) * num_steps)
+            k = min(k, num_steps - 1) # Clamp to max index
+            cell_to_step[cell_idx] = k
+            
+        # Dilate
+        current_set = set(path_indices)
+        if width > 1:
+            for _ in range(width - 1):
+                new_neighbors = set()
+                for idx in current_set:
+                    step_idx = cell_to_step[idx]
+                    for neighbor in self.mesh.adjacency.get(idx, []):
+                        if self.seeds[neighbor].area_id == "VOID":
+                            if neighbor not in cell_to_step:
+                                cell_to_step[neighbor] = step_idx # Assign to same step
+                                new_neighbors.add(neighbor)
+                current_set.update(new_neighbors)
+                
+        # Create Areas for each step
+        step_ids = []
+        for k in range(num_steps):
+            # Calculate height
+            # Linear interpolation
+            # k=0 -> h_start + delta * 1/N
+            # k=N-1 -> h_start + delta * N/N = h_end
+            
+            t = (k + 1) / num_steps
+            h = int(h_start + (h_end - h_start) * t)
+            
+            step_name = f"stairs_{room_a_name}_{room_b_name}_step_{k+1}"
+            
+            config = AreaConfig(
+                floor_height=h,
+                ceiling_height=max(area_a.config.ceiling_height, area_b.config.ceiling_height), # High ceiling
+                floor_texture=floor_texture,
+                ceiling_texture=ceiling_texture,
+                wall_texture=wall_texture,
+                lower_texture=riser_texture,
+                upper_texture=riser_texture
+            )
+            
+            area = Area(name=step_name, transform=Transform(0,0), config=config)
+            area_id = self.graph.add_area(area)
+            step_ids.append(area_id)
+            
+            # Assign seeds
+            for cell_idx, s_k in cell_to_step.items():
+                if s_k == k:
+                    self.seeds[cell_idx].area_id = area_id
+                    
+        # Connect
+        # A -> Step 1
+        self.graph.connect(id_a, step_ids[0], ConnectionType.OPEN)
+        
+        # Step i -> Step i+1
+        for k in range(num_steps - 1):
+            self.graph.connect(step_ids[k], step_ids[k+1], ConnectionType.OPEN)
+            
+        # Step N -> B
+        self.graph.connect(step_ids[-1], id_b, ConnectionType.OPEN)
+        
+        return step_ids
+
+    def set_void(self, shape: Union[Polygon, Tuple[float, float, float, float]]):
+        """
+        Sets cells within the shape to VOID (solid wall/hole).
+        """
+        if isinstance(shape, tuple) or isinstance(shape, list):
+            x, y, w, h = shape
+            poly = box(x - w/2, y - h/2, x + w/2, y + h/2)
+        else:
+            poly = shape
+            
+        for s in self.seeds:
+            if poly.contains(Point(s.x, s.y)):
+                s.area_id = "VOID"
+
+    def add_boundary(
+        self,
+        room_a_name: str,
+        room_b_name: str,
+        name: str = "boundary",
+        floor_height: Optional[int] = None,
+        ceiling_height: Optional[int] = None,
+        floor_texture: str = "FLOOR4_8",
+        ceiling_texture: str = "CEIL3_5",
+        wall_texture: str = "BIGDOOR2",
+        special: int = 0,
+        connection_type: ConnectionType = ConnectionType.OPEN
+    ) -> str:
+        """
+        Creates a new area from the boundary cells between two existing areas.
+        Useful for doors, windows, or transition zones.
+        """
+        id_a = self.name_to_id.get(room_a_name, room_a_name)
+        id_b = self.name_to_id.get(room_b_name, room_b_name)
+        
+        # Find boundary cells (cells in A that touch B)
+        candidates = []
+        seeds_a = [i for i, s in enumerate(self.seeds) if s.area_id == id_a]
+        
+        for idx in seeds_a:
+            for neighbor in self.mesh.adjacency.get(idx, []):
+                if self.seeds[neighbor].area_id == id_b:
+                    candidates.append(idx)
+                    
+        if not candidates:
+            print(f"Warning: No boundary found between {room_a_name} and {room_b_name}.")
+            return ""
+            
+        # Inherit heights if not specified
+        # We need to look up the areas to get their config
+        area_a = self.graph.get_area(id_a)
+        
+        config = AreaConfig(
+            floor_height=floor_height if floor_height is not None else area_a.config.floor_height,
+            ceiling_height=ceiling_height if ceiling_height is not None else area_a.config.ceiling_height,
+            floor_texture=floor_texture,
+            ceiling_texture=ceiling_texture,
+            wall_texture=wall_texture,
+            special=special
+        )
+        
+        area = Area(name=name, transform=Transform(0,0), config=config)
+        area_id = self.graph.add_area(area)
+        
+        # Assign candidates
+        for idx in candidates:
+            self.seeds[idx].area_id = area_id
+            
+        # Update connections
+        self.graph.connect(id_a, area_id, connection_type)
+        self.graph.connect(area_id, id_b, connection_type)
+        
+        return area_id
+
+    def connect_adjacent(self, room_a_name: str, room_b_name: str, type: ConnectionType = ConnectionType.OPEN):
+        """
+        Explicitly connects two areas in the graph if they are physically adjacent in the mesh.
+        """
+        id_a = self.name_to_id.get(room_a_name, room_a_name)
+        id_b = self.name_to_id.get(room_b_name, room_b_name)
+        
+        # Check adjacency
+        is_adjacent = False
+        seeds_a = [i for i, s in enumerate(self.seeds) if s.area_id == id_a]
+        for idx in seeds_a:
+            for neighbor in self.mesh.adjacency.get(idx, []):
+                if self.seeds[neighbor].area_id == id_b:
+                    is_adjacent = True
+                    break
+            if is_adjacent: break
+            
+        if is_adjacent:
+            self.graph.connect(id_a, id_b, type)
+        else:
+            print(f"Warning: {room_a_name} and {room_b_name} are not adjacent.")
+
+    def add_thing(self, thing_type: str, x: float, y: float, **kwargs):
+        """Adds a thing to the map."""
         self.things_to_add.append({
-            "room_id": room_id,
             "type": thing_type,
-            "count": count,
-            "kwargs": kwargs
+            "x": x,
+            "y": y,
+            **kwargs
         })
 
-    def _create_door_prefab(self, name: str, x: float, y: float, rotation: float) -> str:
-        door = Prefab(
-            name=name,
-            transform=Transform(x, y, rotation=rotation),
-            stencil_name="door_linear",
-            dimensions=(64, 16),
-            config=AreaConfig(
-                floor_height=0, ceiling_height=0,
-                floor_texture="FLOOR4_8", ceiling_texture="CEIL3_5",
-                wall_texture="BIGDOOR2", upper_texture="BIGDOOR2", lower_texture="BIGDOOR2"
-            )
-        )
-        return self.graph.add_area(door)
-
-    def generate_geometry(self) -> VoronoiMesh:
-        """Generates seeds and builds the Voronoi mesh."""
-        print("Generating seeds...")
-        seeds = self.engine.generate(self.graph)
-        print(f"Generated {len(seeds)} seeds.")
-        
-        print("Building mesh...")
-        self.mesh = VoronoiMesh(seeds, self.graph)
-        self.mesh.build()
-        return self.mesh
-
-    def translate(self, map_name: str = "MAP01") -> DoomMapData:
-        """Translates the mesh to Doom format and places things."""
-        if not self.mesh:
-            raise RuntimeError("Mesh not built. Call generate_geometry() first.")
+    def build(self, output_path: str):
+        """
+        Generates the WAD file.
+        """
+        # 1. Update Mesh Mappings
+        # The seeds have been modified (area_id assigned), so we need to update the mesh's internal map
+        for i, seed in enumerate(self.seeds):
+            self.mesh.point_idx_to_area_id[i] = seed.area_id
             
-        print("Translating to Doom format...")
-        self.map_data = self.wad_writer.create_map(map_name)
+        # 2. Translate to Doom Data
         translator = MapTranslator(self.map_data)
         translator.translate(self.mesh, self.graph)
         
-        # Add scheduled things
-        self._place_things()
-        
-        return self.map_data
-
-    def _place_things(self):
-        """Places scheduled things into the map data."""
-        if not self.map_data:
-            return
-
-        rng = random.Random(self.seed)
-        
-        for item in self.things_to_add:
-            room = self.graph.get_area(item["room_id"])
-            if not room: continue
-
-            # Determine spawn area bounds
-            cx, cy = room.transform.x, room.transform.y
-            w, h = room.dimensions
+        # 3. Add Things
+        for thing in self.things_to_add:
+            # Resolve type name to ID
+            t_type = getattr(ThingType, thing["type"], 2001) # Default to Imp if not found
             
-            # Safe margin to avoid spawning in walls
-            margin = 32
+            self.map_data.add_thing(
+                x=thing["x"],
+                y=thing["y"],
+                thing_type=t_type,
+                angle=thing.get("angle", 0),
+                flags=thing.get("flags", 7)
+            )
             
-            for _ in range(item["count"]):
-                if room.shape_hint == "circle":
-                    # Random point in circle
-                    radius = (w / 2) - margin
-                    if radius < 0: radius = 0
-                    
-                    angle = rng.uniform(0, 2 * math.pi)
-                    r = rng.uniform(0, radius) # Uniform distribution (not area-correct but fine for spawning)
-                    # For area-correct: r = radius * math.sqrt(rng.random())
-                    
-                    x = cx + r * math.cos(angle)
-                    y = cy + r * math.sin(angle)
-                else:
-                    # Random point in rectangle
-                    half_w = (w / 2) - margin
-                    half_h = (h / 2) - margin
-                    if half_w < 0: half_w = 0
-                    if half_h < 0: half_h = 0
-                    
-                    x = cx + rng.uniform(-half_w, half_w)
-                    y = cy + rng.uniform(-half_h, half_h)
-                
-                # Add to map data
-                self.map_data.add_thing(
-                    x=int(x),
-                    y=int(y),
-                    thing_type=item["type"],
-                    **item["kwargs"]
-                )
-
-    def save(self, output_path: str):
-        """Saves the WAD to disk."""
-        print(f"Saving to {output_path}...")
+        # 4. Write WAD
         self.wad_writer.save(output_path)
-
-    def build(self, output_path: str, map_name: str = "MAP01"):
-        """Runs the full pipeline: Generate -> Translate -> Save."""
-        self.generate_geometry()
-        self.translate(map_name)
-        self.save(output_path)
+        print(f"WAD written to {output_path}")
 

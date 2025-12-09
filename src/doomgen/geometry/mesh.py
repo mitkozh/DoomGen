@@ -6,6 +6,7 @@ Computes the diagram and manages the topological graph of cells and ridges.
 from __future__ import annotations
 from typing import List, Dict, Set, Tuple, Optional
 import numpy as np
+import heapq
 from scipy.spatial import Voronoi
 from shapely.geometry import Polygon, LineString, Point
 
@@ -17,7 +18,7 @@ class VoronoiMesh:
     Represents the computed Voronoi diagram as a topological mesh.
     Maps cells back to Areas and handles adjacency logic.
     """
-    def __init__(self, seeds: List[Seed], graph: LayoutGraph):
+    def __init__(self, seeds: List[Seed], graph: Optional[LayoutGraph] = None):
         self.seeds = seeds
         self.graph = graph
         self.vor: Optional[Voronoi] = None
@@ -29,6 +30,7 @@ class VoronoiMesh:
         # Computed Geometry
         self.cells: Dict[int, Polygon] = {} # point_idx -> Polygon
         self.ridges: List[Tuple[int, int, LineString]] = [] # (point_idx_a, point_idx_b, geometry)
+        self.adjacency: Dict[int, List[int]] = {}
 
     def build(self):
         """Compute Voronoi diagram and process topology."""
@@ -68,6 +70,92 @@ class VoronoiMesh:
             
             line = LineString([v_start, v_end])
             self.ridges.append((p1, p2, line))
+            
+        # 6. Build Adjacency
+        self.build_adjacency()
+
+    def build_adjacency(self):
+        """Builds the adjacency graph of the mesh."""
+        self.adjacency = {}
+        for p1, p2, _ in self.ridges:
+            if p1 not in self.adjacency: self.adjacency[p1] = []
+            if p2 not in self.adjacency: self.adjacency[p2] = []
+            self.adjacency[p1].append(p2)
+            self.adjacency[p2].append(p1)
+
+    def find_path(self, start_indices: List[int], end_indices: List[int]) -> List[int]:
+        """
+        Finds a path of cells between start and end sets using A*.
+        Returns a list of point indices (seeds) representing the path.
+        """
+        if not self.adjacency:
+            self.build_adjacency()
+            
+        start_set = set(start_indices)
+        end_set = set(end_indices)
+        
+        # Priority queue: (f_score, current_node)
+        open_set = []
+        
+        # Maps
+        came_from = {}
+        g_score = {node: float('inf') for node in range(len(self.seeds))}
+        f_score = {node: float('inf') for node in range(len(self.seeds))}
+        
+        # Initialize start nodes
+        for start_node in start_indices:
+            g_score[start_node] = 0
+            # Heuristic: min distance to any end seed
+            h = min(np.linalg.norm(np.array([self.seeds[start_node].x, self.seeds[start_node].y]) - 
+                                   np.array([self.seeds[end_node].x, self.seeds[end_node].y])) 
+                    for end_node in end_indices)
+            f_score[start_node] = h
+            heapq.heappush(open_set, (h, start_node))
+            
+        visited = set()
+        
+        while open_set:
+            _, current = heapq.heappop(open_set)
+            
+            if current in end_set:
+                # Reconstruct path
+                path = [current]
+                while current in came_from:
+                    current = came_from[current]
+                    path.append(current)
+                return path[::-1]
+            
+            if current in visited:
+                continue
+            visited.add(current)
+            
+            for neighbor in self.adjacency.get(current, []):
+                if neighbor in visited:
+                    continue
+                
+                # Cost calculation
+                dist = np.linalg.norm(np.array([self.seeds[current].x, self.seeds[current].y]) - 
+                                      np.array([self.seeds[neighbor].x, self.seeds[neighbor].y]))
+                
+                # Penalty for passing through existing non-VOID rooms (unless it's the destination)
+                penalty = 0
+                if self.seeds[neighbor].area_id != "VOID" and neighbor not in end_set:
+                    penalty = 1000
+                
+                tentative_g = g_score[current] + dist + penalty
+                
+                if tentative_g < g_score[neighbor]:
+                    came_from[neighbor] = current
+                    g_score[neighbor] = tentative_g
+                    
+                    h = min(np.linalg.norm(np.array([self.seeds[neighbor].x, self.seeds[neighbor].y]) - 
+                                           np.array([self.seeds[end_node].x, self.seeds[end_node].y])) 
+                            for end_node in end_indices)
+                    
+                    f_score[neighbor] = tentative_g + h
+                    heapq.heappush(open_set, (f_score[neighbor], neighbor))
+                
+        return []
 
     def get_ridges_for_translation(self) -> List[Dict]:
         """
