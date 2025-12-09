@@ -1,20 +1,75 @@
 # Doom module
-"""Doom-specific structures and WAD file manipulation."""
+"""
+Doom-specific structures and WAD file manipulation.
 
+This module contains everything Doom-specific:
+- WAD file I/O
+- Sector/linedef translation
+- Thing types and linedef specials
+"""
+
+# Configuration
+from doomgen.doom.config import (
+    SectorConfig,
+    WallConfig,
+    PrefabDoomConfig,
+)
+
+# WAD I/O
 from doomgen.doom.wad import WADWriter
-from doomgen.doom.translator import MapEditor, SectorConfig, WallConfig
+
+# Map Translation
+from doomgen.doom.translator import MapTranslator
+
+# Things
 from doomgen.doom.things import ThingType
+
+# Tags
 from doomgen.doom.tags import TagRegistry
+
+# Specials
 from doomgen.doom.specials import (
-    LinedefFlags, DoorAction, LiftAction, TeleportAction,
-    FloorAction, CeilingAction, CrusherAction, StairAction,
-    ExitAction, LightAction,
+    LinedefFlags,
+    DoorAction,
+    LiftAction,
+    TeleportAction,
+    FloorAction,
+    CeilingAction,
+    CrusherAction,
+    StairAction,
+    ExitAction,
+    LightAction,
+    SectorSpecial,
 )
 
 __all__ = [
-    "WADWriter", "MapEditor", "SectorConfig", "WallConfig",
-    "ThingType", "TagRegistry", "LinedefFlags",
-    "DoorAction", "LiftAction", "TeleportAction",
-    "FloorAction", "CeilingAction", "CrusherAction", 
-    "StairAction", "ExitAction", "LightAction",
+    # Config
+    "SectorConfig",
+    "WallConfig",
+    "PrefabDoomConfig",
+    
+    # WAD
+    "WADWriter",
+    
+    # Translation
+    "MapEditor",
+    
+    # Things
+    "ThingType",
+    
+    # Tags
+    "TagRegistry",
+    
+    # Specials
+    "LinedefFlags",
+    "DoorAction",
+    "LiftAction",
+    "TeleportAction",
+    "FloorAction",
+    "CeilingAction",
+    "CrusherAction",
+    "StairAction",
+    "ExitAction",
+    "LightAction",
+    "SectorSpecial",
 ]

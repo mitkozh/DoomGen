@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Optional, Any
+from typing import Optional, Any, Union
 from pathlib import Path
 
-from shapely.geometry import Polygon, Point
+from shapely.geometry import Polygon, Point, MultiPolygon, GeometryCollection
+from shapely.validation import make_valid as shapely_make_valid
 
 from doomgen.utils.constants import (
     MIN_SECTOR_AREA,
@@ -13,6 +14,111 @@ from doomgen.utils.constants import (
     MAP_MIN_COORD,
     MAP_MAX_COORD,
 )
+
+
+# =============================================================================
+# Coordinate Operations (moved from geometry/operations.py)
+# =============================================================================
+
+def snap_to_grid(value: float, grid_size: int = 8) -> int:
+    """
+    Snap a coordinate value to the nearest grid point.
+    
+    Doom coordinates should be integers, and aligning to a grid
+    (typically 8 units) helps avoid rendering issues.
+    
+    Args:
+        value: The coordinate value to snap.
+        grid_size: Grid spacing (default 8).
+    
+    Returns:
+        The snapped integer value.
+    """
+    return int(round(value / grid_size) * grid_size)
+
+
+def snap_polygon_to_grid(polygon: Polygon, grid_size: int = 8) -> Polygon:
+    """
+    Snap all vertices of a polygon to grid coordinates.
+    
+    Args:
+        polygon: The polygon to snap.
+        grid_size: Grid spacing (default 8).
+    
+    Returns:
+        A new polygon with snapped coordinates.
+    """
+    coords = list(polygon.exterior.coords)
+    snapped = [(snap_to_grid(x, grid_size), snap_to_grid(y, grid_size)) for x, y in coords]
+    return Polygon(snapped)
+
+
+def to_integer_coords(polygon: Polygon) -> Polygon:
+    """
+    Convert polygon coordinates to integers.
+    
+    Args:
+        polygon: The polygon to convert.
+    
+    Returns:
+        A new polygon with integer coordinates.
+    """
+    coords = list(polygon.exterior.coords)
+    int_coords = [(int(round(x)), int(round(y))) for x, y in coords]
+    return Polygon(int_coords)
+
+
+def make_valid(geom: Union[Polygon, MultiPolygon, GeometryCollection]) -> Union[Polygon, MultiPolygon]:
+    """
+    Ensure geometry is valid.
+    
+    Wrapper around Shapely's make_valid for consistency.
+    
+    Args:
+        geom: Input geometry.
+    
+    Returns:
+        Valid geometry.
+    """
+    return shapely_make_valid(geom)
+
+
+def ensure_polygon(geom: Union[Polygon, MultiPolygon, GeometryCollection]) -> Polygon:
+    """
+    Ensure geometry is a single Polygon.
+    
+    When operations produce MultiPolygon or GeometryCollection,
+    this extracts the largest polygon.
+    
+    Args:
+        geom: Input geometry (Polygon, MultiPolygon, or GeometryCollection).
+    
+    Returns:
+        A single Polygon (the largest if multiple).
+    
+    Raises:
+        ValueError: If no polygon can be extracted.
+    """
+    if isinstance(geom, Polygon):
+        return geom
+    
+    if isinstance(geom, MultiPolygon):
+        if len(geom.geoms) == 0:
+            raise ValueError("Empty MultiPolygon")
+        return max(geom.geoms, key=lambda p: p.area)
+    
+    if isinstance(geom, GeometryCollection):
+        polygons = [g for g in geom.geoms if isinstance(g, Polygon)]
+        if not polygons:
+            raise ValueError("GeometryCollection contains no polygons")
+        return max(polygons, key=lambda p: p.area)
+    
+    raise ValueError(f"Cannot convert {type(geom).__name__} to Polygon")
+
+
+# =============================================================================
+# Validation Functions
+# =============================================================================
 
 
 def validate_polygon(

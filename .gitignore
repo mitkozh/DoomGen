@@ -93,11 +93,23 @@ dmypy.json
 
 # Generated WAD files (unless intentionally committed)
 *.wad
+*.png
 
 # Benchmark output
 benchmarks/
 marl_benchmarks/
 benchmark_suite/
+
+# Generated project code dump
+project_code.txt
+
+# Output directories
+output/
+
+# Windows specific
+Thumbs.db
+ehthumbs.db
+Desktop.ini
 
 # ACS compilation artifacts
 *.o

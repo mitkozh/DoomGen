@@ -1,1 +1,0 @@
-"""Configuration-driven batch map generation."""

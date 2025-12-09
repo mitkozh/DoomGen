@@ -124,9 +124,9 @@ class WADWriter:
             editor.sidedefs.append(Sidedef(
                 off_x=sd.get('x_offset', 0),
                 off_y=sd.get('y_offset', 0),
-                tx_up=sd.get('upper_texture', '-'),
-                tx_low=sd.get('lower_texture', '-'),
-                tx_mid=sd.get('middle_texture', 'STARTAN2'),
+                tx_up=sd.get('upper_texture', '-') if sd.get('upper_texture') != '-' else '-',
+                tx_low=sd.get('lower_texture', '-') if sd.get('lower_texture') != '-' else '-',
+                tx_mid=sd.get('middle_texture', 'STARTAN2') if sd.get('middle_texture') != '-' else '-',
                 sector=sd.get('sector', 0)
             ))
         
