@@ -410,14 +410,35 @@ class ProceduralMapBuilder:
         # 3. Add Things
         for thing in self.things_to_add:
             # Resolve type name to ID
-            t_type = getattr(ThingType, thing["type"], 2001) # Default to Imp if not found
+            t_type = 2001 # Default to Imp
+            raw_type = thing["type"]
+            
+            if isinstance(raw_type, int):
+                t_type = raw_type
+            elif isinstance(raw_type, str):
+                if hasattr(ThingType, raw_type):
+                    t_type = getattr(ThingType, raw_type).value
+                elif raw_type.isdigit():
+                    t_type = int(raw_type)
+                else:
+                    print(f"Warning: Unknown thing type '{raw_type}', defaulting to Imp (2001)")
+            
+            # Extract known args
+            x = thing["x"]
+            y = thing["y"]
+            angle = thing.get("angle", 0)
+            flags = thing.get("flags", 7)
+            
+            # Pass everything else as kwargs
+            extra_args = {k: v for k, v in thing.items() if k not in ["type", "x", "y", "angle", "flags"]}
             
             self.map_data.add_thing(
-                x=thing["x"],
-                y=thing["y"],
+                x=x,
+                y=y,
                 thing_type=t_type,
-                angle=thing.get("angle", 0),
-                flags=thing.get("flags", 7)
+                angle=angle,
+                flags=flags,
+                **extra_args
             )
             
         # 4. Write WAD

@@ -24,6 +24,7 @@ class ScriptType(Enum):
     EVENT = auto()      # Custom event script
     KILL = auto()       # Runs when thing is killed
     REOPEN = auto()     # Runs when returning to hub
+    VOID = auto()       # Callable script (void)
 
 
 @dataclass
@@ -56,6 +57,7 @@ class ACSScript:
             ScriptType.EVENT: "EVENT",
             ScriptType.KILL: "KILL",
             ScriptType.REOPEN: "REOPEN",
+            ScriptType.VOID: "",
         }.get(self.script_type, "")
         
         # Build argument list

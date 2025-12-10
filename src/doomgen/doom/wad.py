@@ -69,6 +69,17 @@ class WADWriter:
             raise KeyError(f"Map {name} does not exist")
         return self.maps[name]
     
+    def add_lump(self, name: str, data: bytes) -> None:
+        """
+        Add a global lump to the WAD.
+        
+        Args:
+            name: Name of the lump (e.g., "DECORATE").
+            data: Binary data of the lump.
+        """
+        from omg.lump import Lump
+        self.wad.data[name] = Lump(data)
+    
     def save(self, filepath: str | Path) -> None:
         """
         Save the WAD to a file.
@@ -172,7 +183,13 @@ class WADWriter:
                 thing.type = t['type']
                 thing.angle = t.get('angle', 0)
                 # Use provided flags, or default to all skills + all game modes
-                thing.flags = t.get('flags', HEXEN_DEFAULT_FLAGS)
+                f = t.get('flags', HEXEN_DEFAULT_FLAGS)
+                # Fix: If flags are standard Doom flags (low values), they lack Hexen game mode bits.
+                # If no game mode bits (256, 512, 1024) are set, assume we want all modes.
+                if f < 256:
+                    f |= (256 | 512 | 1024)
+                thing.flags = f
+                
                 thing.tid = t.get('tid', 0)
                 thing.height = t.get('height', 0)
                 thing.action = t.get('action', 0)
@@ -376,7 +393,8 @@ class DoomMapData:
         thing_type: int,
         angle: int = 0,
         flags: int = 7,
-        tid: int = 0
+        tid: int = 0,
+        **kwargs
     ) -> int:
         """
         Add a thing (entity).
@@ -388,17 +406,20 @@ class DoomMapData:
             angle: Facing angle in degrees (0=East, 90=North).
             flags: Thing flags (skill level appearance).
             tid: Thing ID for ACS scripts (Hexen/ZDoom format only).
+            **kwargs: Additional properties (action, args, etc.) for Hexen format.
         
         Returns:
             Index of the thing.
         """
         index = len(self.things)
-        self.things.append({
+        thing_data = {
             'x': int(round(x)),
             'y': int(round(y)),
             'type': thing_type,
             'angle': angle,
             'flags': flags,
             'tid': tid
-        })
+        }
+        thing_data.update(kwargs)
+        self.things.append(thing_data)
         return index
