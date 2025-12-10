@@ -29,6 +29,9 @@ class AreaConfig:
     light_level: int = 160
     special: int = 0
     tag: int = 0
+    linedef_special: Optional[int] = None # Special for linedefs connecting to this area (e.g. for doors)
+    linedef_args: List[int] = field(default_factory=list) # Args for the linedef special
+    linedef_flags: Optional[int] = None # Explicit flags for the linedef (e.g. activation flags)
 
 class Area:
     """

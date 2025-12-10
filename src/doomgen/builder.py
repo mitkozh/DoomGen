@@ -315,7 +315,10 @@ class ProceduralMapBuilder:
         ceiling_texture: str = "CEIL3_5",
         wall_texture: str = "BIGDOOR2",
         special: int = 0,
-        connection_type: ConnectionType = ConnectionType.OPEN
+        connection_type: ConnectionType = ConnectionType.OPEN,
+        linedef_special: Optional[int] = None,
+        linedef_args: Optional[List[int]] = None,
+        linedef_flags: Optional[int] = None
     ) -> str:
         """
         Creates a new area from the boundary cells between two existing areas.
@@ -347,11 +350,15 @@ class ProceduralMapBuilder:
             floor_texture=floor_texture,
             ceiling_texture=ceiling_texture,
             wall_texture=wall_texture,
-            special=special
+            special=special,
+            linedef_special=linedef_special,
+            linedef_args=linedef_args or [],
+            linedef_flags=linedef_flags
         )
         
         area = Area(name=name, transform=Transform(0,0), config=config)
         area_id = self.graph.add_area(area)
+        self.name_to_id[name] = area_id
         
         # Assign candidates
         for idx in candidates:

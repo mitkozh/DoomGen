@@ -88,11 +88,28 @@ class MapTranslator:
                         sector=sec_front,
                         middle_texture=config_front.wall_texture
                     )
+                    self.map_data.add_linedef(
+                        start_vertex=v1_idx,
+                        end_vertex=v2_idx,
+                        front_sidedef=side_front,
+                        back_sidedef=-1,
+                        flags=LinedefFlags.BLOCKING
+                    )
+                    
                 if sec_back is not None:
                     side_back = self.map_data.add_sidedef(
                         sector=sec_back,
                         middle_texture=config_back.wall_texture
                     )
+                    self.map_data.add_linedef(
+                        start_vertex=v2_idx, # Reversed for back side
+                        end_vertex=v1_idx,
+                        front_sidedef=side_back,
+                        back_sidedef=-1,
+                        flags=LinedefFlags.BLOCKING
+                    )
+                
+                continue # Skip the default add_linedef at the end
                     
             elif rtype == "portal":
                 # Two-sided portal (passable)
@@ -224,10 +241,43 @@ class MapTranslator:
                     # Maybe check textures?
                     elif "DOOR" in config_front.wall_texture or "DOOR" in config_back.wall_texture:
                          special = 1
+                    
+                    # Check for custom linedef special in the Door Area config
+                    # The door area is the one that is the "door" (is_front_door or is_back_door)
+                    door_config = None
+                    if is_front_door:
+                        door_config = config_front
+                    elif is_back_door:
+                        door_config = config_back
+                    
+                    if door_config and door_config.linedef_special is not None:
+                        special = door_config.linedef_special
+                        # We also need to handle args if we are in Hexen format
+                        # But MapTranslator doesn't know about Hexen format directly here?
+                        # Actually it does, it creates Linedefs.
+                        # But the Linedef object in omgifol (ZLinedef) has arg0-4.
+                        # The standard Linedef doesn't.
+                        # We are storing args in a list.
+                        # We need to pass them to add_linedef.
 
             elif rtype == "void_wall":
                 flags |= LinedefFlags.BLOCKING # Implicit for 1-sided, but good to be explicit if needed
+            
+            # Extract args if available
+            args = []
+            if special > 0:
+                # Check if we have args from the door config
+                door_config = None
+                if connection and connection.type == ConnectionType.DOOR:
+                    if is_front_door: door_config = config_front
+                    elif is_back_door: door_config = config_back
                 
+                if door_config:
+                    if door_config.linedef_args:
+                        args = door_config.linedef_args
+                    if door_config.linedef_flags is not None:
+                        flags |= door_config.linedef_flags
+
             self.map_data.add_linedef(
                 start_vertex=v1_idx,
                 end_vertex=v2_idx,
@@ -235,7 +285,8 @@ class MapTranslator:
                 back_sidedef=side_back,
                 flags=flags,
                 special=special,
-                tag=tag
+                tag=tag,
+                args=args
             )
 
     def add_player_start(self, area_id: str, x: float, y: float, angle: int = 0):

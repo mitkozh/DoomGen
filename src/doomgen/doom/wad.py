@@ -357,7 +357,8 @@ class DoomMapData:
         back_sidedef: int = -1,
         flags: int = 1,
         special: int = 0,
-        tag: int = 0
+        tag: int = 0,
+        args: Optional[list[int]] = None
     ) -> int:
         """
         Add a linedef.
@@ -370,12 +371,13 @@ class DoomMapData:
             flags: Linedef flags (1=impassable, etc.).
             special: Linedef special type.
             tag: Linedef tag for scripting.
+            args: List of arguments for Hexen format specials (arg0-arg4).
         
         Returns:
             Index of the linedef.
         """
         index = len(self.linedefs)
-        self.linedefs.append({
+        ld = {
             'start_vertex': start_vertex,
             'end_vertex': end_vertex,
             'front_sidedef': front_sidedef,
@@ -383,7 +385,13 @@ class DoomMapData:
             'flags': flags,
             'special': special,
             'tag': tag
-        })
+        }
+        if args:
+            for i, arg in enumerate(args):
+                if i < 5:
+                    ld[f'arg{i}'] = arg
+        
+        self.linedefs.append(ld)
         return index
     
     def add_thing(
