@@ -428,6 +428,14 @@ class DoomMapData:
             'flags': flags,
             'tid': tid
         }
+        
+        # Handle args list if provided (unpack to arg0-4)
+        if 'args' in kwargs:
+            args_list = kwargs.pop('args')
+            for i, arg in enumerate(args_list):
+                if i < 5:
+                    kwargs[f'arg{i}'] = arg
+                    
         thing_data.update(kwargs)
         self.things.append(thing_data)
         return index

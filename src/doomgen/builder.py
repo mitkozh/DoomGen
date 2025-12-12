@@ -370,7 +370,7 @@ class ProceduralMapBuilder:
         
         return area_id
 
-    def connect_adjacent(self, room_a_name: str, room_b_name: str, type: ConnectionType = ConnectionType.OPEN):
+    def connect_adjacent(self, room_a_name: str, room_b_name: str, type: ConnectionType = ConnectionType.OPEN, **kwargs):
         """
         Explicitly connects two areas in the graph if they are physically adjacent in the mesh.
         """
@@ -388,7 +388,7 @@ class ProceduralMapBuilder:
             if is_adjacent: break
             
         if is_adjacent:
-            self.graph.connect(id_a, id_b, type)
+            self.graph.connect(id_a, id_b, type, **kwargs)
         else:
             print(f"Warning: {room_a_name} and {room_b_name} are not adjacent.")
 

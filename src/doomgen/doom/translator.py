@@ -191,6 +191,15 @@ class MapTranslator:
             elif rtype == "portal":
                 flags |= LinedefFlags.TWO_SIDED
                 
+                # Check for Window/Fence
+                mid_tex = "-"
+                if connection and connection.type == ConnectionType.WINDOW:
+                    mid_tex = connection.properties.get("middle_texture", "MIDGRATE")
+                    # Windows usually block movement but allow sight/bullets (unless specified)
+                    # If it has a texture, we might want to block movement.
+                    if connection.properties.get("blocking", True):
+                        flags |= LinedefFlags.BLOCKING
+
                 # Handle Door Connection
                 if connection and connection.type == ConnectionType.DOOR:
                     # Identify which side is the door (usually closed or specific texture)
@@ -259,14 +268,33 @@ class MapTranslator:
                         # The standard Linedef doesn't.
                         # We are storing args in a list.
                         # We need to pass them to add_linedef.
+                
+                # Update sidedefs with mid_tex if needed
+                if mid_tex != "-":
+                    if side_front != -1:
+                        self.map_data.sidedefs[side_front]['middle_texture'] = mid_tex
+                    if side_back != -1:
+                        self.map_data.sidedefs[side_back]['middle_texture'] = mid_tex
 
             elif rtype == "void_wall":
                 flags |= LinedefFlags.BLOCKING # Implicit for 1-sided, but good to be explicit if needed
             
             # Extract args if available
             args = []
-            if special > 0:
-                # Check if we have args from the door config
+            
+            # Apply properties from connection (overrides defaults)
+            if connection:
+                if "special" in connection.properties:
+                    special = connection.properties["special"]
+                if "tag" in connection.properties:
+                    tag = connection.properties["tag"]
+                if "args" in connection.properties:
+                    args = connection.properties["args"]
+                if "flags" in connection.properties:
+                    flags |= connection.properties["flags"]
+
+            if special > 0 and not args:
+                # Check if we have args from the door config (legacy support)
                 door_config = None
                 if connection and connection.type == ConnectionType.DOOR:
                     if is_front_door: door_config = config_front

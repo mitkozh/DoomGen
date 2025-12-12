@@ -189,6 +189,8 @@ class VoronoiMesh:
                         ridge_type = "portal"
                     elif connection.type == ConnectionType.DOOR:
                         ridge_type = "portal"
+                    elif connection.type == ConnectionType.WINDOW:
+                        ridge_type = "portal"
                     elif connection.type == ConnectionType.SOLID:
                         ridge_type = "solid"
             
