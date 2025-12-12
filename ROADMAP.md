@@ -1,114 +1,69 @@
-# doomgen - Roadmap
+# DoomGen - Roadmap
 
-## Current Status: Feature Complete ✅
+## Current Status: Voronoi Core Complete ✅
 
-The library is feature-complete for its target use case (MARL benchmarks). Core functionality for map generation works end-to-end.
+The library has transitioned to a **Voronoi-First** architecture. The core pipeline (Seed -> Relax -> Mesh -> Layout -> WAD) is fully functional and capable of generating complex, organic maps with logic.
 
 ---
 
 ## Completed Features ✅
 
-### Core WAD Generation
-- [x] WAD file I/O via omgifol
-- [x] Shapely polygon → Doom sectors/linedefs
-- [x] Vertex deduplication and grid snapping
-- [x] Shared edge detection for connected rooms
-- [x] Proper linedef orientation (clockwise winding)
+### Core Architecture
+- [x] **Voronoi Mesh Generation**: Lloyd's relaxation for organic cell distribution.
+- [x] **Cell Claiming**: Assigning cells to logical areas based on geometric shapes (Polygons).
+- [x] **Topology Management**: Automatic adjacency detection between areas.
+- [x] **Map Translation**: Converting Voronoi cells into valid Doom sectors and linedefs.
 
-### Geometry System
-- [x] Shape primitives: rectangles, regular polygons, circles
-- [x] Irregular polygon generation
-- [x] CSG operations: cut, merge, buffer
-- [x] L-System corridor generation
-- [x] Recursive edge subdivision
-- [x] MapBuilder for complex geometry management
+### Procedural Layout
+- [x] **ProceduralMapBuilder**: High-level API for defining rooms and connections.
+- [x] **Organic Corridors**: A* pathfinding on the cell mesh to connect distant areas.
+- [x] **Stairs Generation**: Segmented pathfinding with interpolated floor heights.
+- [x] **Boundaries**: Creating doors and windows from shared edges.
 
-### Entity & Things
-- [x] All Doom 2 thing types (enemies, items, decorations)
-- [x] Player starts (1-4 players)
-- [x] Thing placement with geometry validation
-- [x] Collision radius checks
+### Logic & Scripting
+- [x] **ACS Builder**: Pythonic API for generating ACS bytecode.
+- [x] **Script Types**: Support for OPEN, ENTER, VOID, and other script types.
+- [x] **Control Flow**: Loops, conditionals, and variable management in ACS.
+- [x] **Triggers**: Linedef executors (e.g., pressure plates, switches).
 
-### Prefabs
-- [x] Doors (manual, key-locked)
-- [x] Lifts (standard, fast, perpetual)
-- [x] Crushers (slow, fast, silent)
-- [x] Damage floors (nukage, lava, blood)
-- [x] Lighting effects (blink, flicker, oscillate)
-- [x] Stairs generation
-- [x] Teleporters
-
-### Scripting
-- [x] ACS script builder (Pythonic API)
-- [x] ACC compiler integration
-- [x] BEHAVIOR lump embedding
-- [x] Common script templates (messages, timers, doors)
-
-### High-Level API
-- [x] DoomMapBuilder - declarative map construction
-- [x] Room/corridor/prefab orchestration
-- [x] Procedural modifiers (subdivision, noise, L-systems)
-
-### Quality
-- [x] Full type hints (py.typed)
-- [x] Seedable randomness for reproducibility
-- [x] Error handling with meaningful messages
-- [x] unit tests passing
+### Benchmarking
+- [x] **Co-op Puzzle Benchmark**: A parameterized map generator for MARL testing (`coop_puzzle.py`).
+- [x] **Reproducibility**: Full seeding support for map geometry and logic.
 
 ---
 
 ## TODO 🔧
+
 ### Features
-- [ ] Fix connection algorithm (make more robust)
-- [ ] Make library more generalizable
-- [ ] Implement batch generation
+- [ ] **Advanced Prefabs**: More complex structures (lifts, crushers) adapted to the Voronoi mesh.
+- [ ] **Texture Alignment**: Better UV mapping for irregular Voronoi walls.
+- [ ] **Enemy Placement Strategies**: Heuristics for placing enemies (e.g., "ambush", "patrol").
+- [ ] **3D Floors**: Support for 3D floors (bridges, multi-story) using dummy sectors.
 
 ### Documentation
-- [ ] Clean up docstrings (remove bloat)
-- [ ] Add Sphinx documentation
-- [ ] API reference
-- [ ] Tutorial examples
+- [ ] **API Reference**: Detailed docstrings for `ProceduralMapBuilder` and `ACSBuilder`.
+- [ ] **Tutorials**: Step-by-step guides for creating specific map types.
 
 ### Testing
-- [ ] Integration tests (full WAD generation)
-- [ ] Edge case coverage
-- [ ] Performance benchmarks
-
-### Examples
-- [ ] More MARL-specific examples
-
-### Future Ideas (Low Priority)
-- [ ] PyPI publishing
-- [ ] Visual map preview
-- [ ] Texture pack support
-- [ ] Custom thing definitions
+- [ ] **Integration Tests**: Automated checks for WAD validity and playability.
+- [ ] **Performance Optimization**: Speeding up the Voronoi generation and mesh building for large maps.
 
 ---
 
 ## Architecture
 
 ```
-DoomMapBuilder (api/doom_map.py)     ← High-level declarative API
-        │
-MapBuilder (geometry/builder.py)     ← CSG-based geometry management
-        │
-ShapeBuilder + operations            ← Pure Shapely geometry
-        │
-MapEditor (doom/translator.py)       ← Shapely → Doom structures
-        │
-WADWriter (doom/wad.py)              ← Binary WAD I/O via omgifol
+ProceduralMapBuilder (doomgen/builder.py)   <- High-level API
+        |
+        v
+VoronoiMesh (doomgen/geometry/mesh.py)      <- Core Geometry (Cells, Edges)
+        |
+        v
+LayoutGraph (doomgen/abstraction/layout.py) <- Logical Graph (Areas, Connections)
+        |
+        v
+MapTranslator (doomgen/doom/translator.py)  <- "Baker": Mesh -> Doom Sectors
+        |
+        v
+WADWriter (doomgen/doom/wad.py)             <- Binary WAD I/O
 ```
-
----
-
-## Module Overview
-
-| Module | Purpose |
-|--------|---------|
-| `api/` | High-level DoomMapBuilder |
-| `geometry/` | Shape creation, CSG operations, modifiers |
-| `doom/` | WAD I/O, translator, things, specials |
-| `prefabs/` | Doors, lifts, crushers, damage, lighting, stairs |
-| `logic/` | ACS script generation |
-| `batch/` | YAML/JSON batch generation |
-| `utils/` | Constants, validation helpers |

@@ -1,22 +1,21 @@
 # DoomGen
 
-A modular, extensible Python library for generating valid `.wad` files for Doom (Doom 2 format). Specifically designed for creating benchmarks for **Multi-Agent Reinforcement Learning (MARL)**.
+A Python library for procedurally generating Doom WAD files, specifically designed for creating benchmarks for **Multi-Agent Reinforcement Learning (MARL)**.
+
+The library uses a **Voronoi-First** approach: the map is generated as a mesh of relaxed Voronoi cells (Lloyd's algorithm), which are then grouped into logical areas (rooms, corridors, doors). This ensures organic, non-grid-aligned geometry and robust topology suitable for navigation tasks.
 
 ## Features
 
-- **Abstract Geometry**: Work with Shapely polygons, convert to Doom sectors at compile time
-- **Procedural Generation**: L-systems, recursive subdivision, room templates
-- **Deterministic**: Fully seedable for reproducible RL benchmarks
-- **ACS Scripting**: Inject game logic via Python-generated ACS scripts
-- **High-Level API**: Define maps declaratively with minimal code
+- **Voronoi-Based Geometry**: Organic, mesh-based map generation using Lloyd's relaxation.
+- **Logical Layouts**: Define areas (rooms) and connections (doors, open passages) abstractly.
+- **Pathfinding Generation**: Automatically generate corridors and stairs between disconnected areas using A* on the cell mesh.
+- **ACS Scripting**: Inject game logic (puzzles, rewards, state tracking) via a Pythonic ACS builder.
+- **Deterministic**: Fully seedable for reproducible RL benchmarks.
+- **Doom 2 Compatible**: Generates standard UDMF or Hexen format WADs (via `omgifol`).
 
-## Installation (not yet applicable)
+## Installation
 
-```bash
-pip install doomgen
-```
-
-Or for development:
+Clone the repository and install in editable mode:
 
 ```bash
 git clone https://github.com/mitkozh/doomgen.git
@@ -27,41 +26,42 @@ pip install -e ".[dev]"
 ## Quick Start
 
 ```python
-from doomgen import DoomMapBuilder, ThingType
+from doomgen.builder import ProceduralMapBuilder
+from doomgen.abstraction.layout import ConnectionType
 
-# Create a map builder
-builder = DoomMapBuilder()
+# 1. Initialize Builder with bounds and seed
+builder = ProceduralMapBuilder(bounds=(-1024, -1024, 1024, 1024), num_seeds=2000, seed=42)
 
-# Add rooms
-builder.add_room("spawn", width=256, height=256)
-builder.add_room("arena", width=512, height=512, center=(600, 0))
+# 2. Define Areas (Claim Voronoi Cells)
+# "claim_void" (default): Only claims unassigned cells.
+builder.add_area("Main Hall", shape=(0, 0, 512, 512), floor_texture="FLOOR4_8")
+builder.add_area("Armory", shape=(600, 0, 256, 256), floor_texture="CEIL5_1")
 
-# Connect rooms with a corridor
-builder.connect("spawn", "arena", corridor_width=64)
+# 3. Connect Areas
+# Create a door between them (automatically finds shared boundary cells)
+builder.add_boundary("Main Hall", "Armory", name="Door1", connection_type=ConnectionType.DOOR)
 
-# Add player start and enemies
-builder.add_player_start("spawn")
-builder.add_enemies("arena", ThingType.IMP, count=4)
+# 4. Add Things
+builder.add_thing("PLAYER1_START", 0, 0, angle=0)
+builder.add_thing("Shotgun", 600, 0, angle=0)
 
-# Generate the WAD
-builder.save("output/my_map.wad")
+# 5. Build WAD
+builder.build("output/my_map.wad")
 ```
 
-## Documentation
+## Architecture
 
-See [SPECIFICATION.md](SPECIFICATION.md) for detailed architecture and [ROADMAP.md](ROADMAP.md) for implementation status.
+- **`ProceduralMapBuilder`**: High-level facade for map generation.
+- **`VoronoiMesh`**: Manages the underlying graph of Voronoi cells and their adjacency.
+- **`ACSBuilder`**: Generates Action Code Script (ACS) bytecode for map logic.
+- **`MapTranslator`**: Converts the abstract Voronoi mesh into Doom sectors and linedefs.
 
 ## Requirements
 
 - Python 3.10+
-- omgifol >= 0.5.0
-- Shapely >= 2.0.0
-- NumPy >= 1.24.0
-- NetworkX >= 3.0
-
-### Optional
-
-- `acc` (ACS Compiler) for logic injection - must be in PATH
+- `scipy`, `numpy`, `shapely` (for geometry)
+- `omgifol` (for WAD I/O)
+- `acc` (ACS Compiler) - usually included with GZDoom or available separately.
 
 ## License
 
