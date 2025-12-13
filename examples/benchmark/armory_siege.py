@@ -19,7 +19,7 @@ def create_armory_siege():
 ACTOR DefenseCore 15000
 {
   //$Category "Objectives"
-  Health 100
+  Health 2000
   Radius 16
   Height 50
   Speed 0
@@ -186,12 +186,18 @@ ACTOR DefenseCore 15000
     acs = ACSBuilder()
     acs.add_include("zcommon.acs")
     
+    acs.add_global_var("core_health_global", 1, "int")
+    
+    # Assign TIDs to players on Enter so we can target them for Score syncing
+    acs.add_script(ScriptType.ENTER, "Thing_ChangeTID(0, 1000 + PlayerNumber());")
+    
     # Script 1: Game Loop (Door Control & Spawning)
     # Room A: 0-200 Open, 500-700 Open, 1000-1200 Open
     # Room B: 200-400 Open, 700-900 Open
     # Room C: 400-600 Open, 900-1100 Open
     
     script_body = f"""
+    core_health_global = 2000;
     int tick = 0;
     int cycle = 0;
     int TID_ITEM_A = 401;
@@ -206,6 +212,9 @@ ACTOR DefenseCore 15000
     
     while (TRUE) {{
         cycle = tick % 1200;
+        
+        // Sync Core Health to Global Variable 1
+        core_health_global = GetActorProperty({TID_CORE}, APROP_HEALTH);
         
         // Room A Control
         if ((cycle >= 0 && cycle < 200) || (cycle >= 500 && cycle < 700) || (cycle >= 1000 && cycle < 1200)) {{
@@ -250,12 +259,11 @@ ACTOR DefenseCore 15000
             if (ThingCount(T_NONE, TID_ITEM_C) == 0) {{
                 SpawnSpot("Medikit", {TID_SPAWN_C}, TID_ITEM_C, 0);
             }}
-            
-            Print(s:"Supplies Checked!");
         }}
         
-        // Enemy Spawn (Continuous, e.g., every 100 ticks)
-        if (tick % 100 == 0 && tick > 0 && ThingCount(T_NONE, TID_ENEMY_UNIT) < 50) {{
+        // Enemy Spawn (Continuous, e.g., every 200 ticks)
+        // Slower spawn rate (200 ticks) and lower max count (20)
+        if (tick % 200 == 0 && tick > 0 && ThingCount(T_NONE, TID_ENEMY_UNIT) < 20) {{
             SpawnSpot("DoomImp", {TID_SPAWN_ENEMY}, TID_ENEMY_UNIT, 0);
             SpawnSpot("ShotgunGuy", {TID_SPAWN_ENEMY}, TID_ENEMY_UNIT, 0);
         }}
@@ -268,7 +276,6 @@ ACTOR DefenseCore 15000
     
     # Script 999: Game Over (Called by DefenseCore death)
     game_over_script = """
-    Print(s:"CORE DESTROYED! GAME OVER!");
     Delay(35*3);
     Exit_Normal(0);
     """

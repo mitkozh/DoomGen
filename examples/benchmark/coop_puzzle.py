@@ -222,8 +222,8 @@ def create_coop_puzzle(num_zones=10):
                 # AND Logic: Two plates required
                 var1 = f"plate_{i}_1"
                 var2 = f"plate_{i}_2"
-                acs.add_global_var(var1, "int", 0)
-                acs.add_global_var(var2, "int", 0)
+                acs.add_map_var(var1, "int", 0)
+                acs.add_map_var(var2, "int", 0)
                 
                 plate1_tag = 5000 + (i * 2)
                 plate2_tag = 5000 + (i * 2) + 1

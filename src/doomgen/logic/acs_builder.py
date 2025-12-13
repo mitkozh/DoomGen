@@ -27,6 +27,48 @@ class ScriptType(Enum):
     VOID = auto()       # Callable script (void)
 
 
+class VariableScope(Enum):
+    """Scopes for ACS variables."""
+    MAP = auto()        # Visible to all scripts in the map
+    WORLD = auto()      # Visible across hub (reset on hub entry)
+    GLOBAL = auto()     # Visible across all maps (persistent)
+
+
+@dataclass
+class ACSVariable:
+    """
+    Represents a variable in ACS.
+    """
+    name: str
+    var_type: str
+    scope: VariableScope
+    initial: Any = None
+    index: Optional[int] = None
+
+    def to_code(self) -> str:
+        """Generate ACS code for this variable declaration."""
+        if self.scope == VariableScope.MAP:
+            # int map_var = 0;
+            line = f"{self.var_type} {self.name}"
+            if self.initial is not None:
+                line += f" = {self.initial}"
+            return line + ";"
+            
+        elif self.scope == VariableScope.WORLD:
+            # world int 1:world_var;
+            if self.index is None:
+                raise ValueError(f"World variable '{self.name}' must have an index.")
+            return f"world {self.var_type} {self.index}:{self.name};"
+            
+        elif self.scope == VariableScope.GLOBAL:
+            # global int 1:global_var;
+            if self.index is None:
+                raise ValueError(f"Global variable '{self.name}' must have an index.")
+            return f"global {self.var_type} {self.index}:{self.name};"
+            
+        return ""
+
+
 @dataclass
 class ACSScript:
     """
@@ -97,7 +139,7 @@ class ACSBuilder:
         self.scripts: list[ACSScript] = []
         self.includes: list[str] = []
         self.defines: dict[str, Any] = {}
-        self.global_vars: list[tuple[str, str, Any]] = []  # (name, type, initial)
+        self.variables: list[ACSVariable] = []
         self._next_script_num = 1
     
     def add_include(self, filename: str) -> 'ACSBuilder':
@@ -127,24 +169,58 @@ class ACSBuilder:
         self.defines[name] = value
         return self
     
-    def add_global_var(
+    def add_map_var(
         self,
         name: str,
         var_type: str = "int",
         initial: Any = None
     ) -> 'ACSBuilder':
         """
-        Add a global variable.
+        Add a map-scope variable.
+        Visible to all scripts in the current map.
         
         Args:
             name: Variable name.
             var_type: Variable type ("int", "str", "bool").
             initial: Initial value.
-        
-        Returns:
-            Self for chaining.
         """
-        self.global_vars.append((name, var_type, initial))
+        self.variables.append(ACSVariable(name, var_type, VariableScope.MAP, initial=initial))
+        return self
+
+    def add_world_var(
+        self,
+        name: str,
+        index: int,
+        var_type: str = "int"
+    ) -> 'ACSBuilder':
+        """
+        Add a world-scope variable.
+        Visible across a hub of maps. Reset when entering a new hub.
+        
+        Args:
+            name: Variable name.
+            index: Unique index (1-256).
+            var_type: Variable type.
+        """
+        self.variables.append(ACSVariable(name, var_type, VariableScope.WORLD, index=index))
+        return self
+
+    def add_global_var(
+        self,
+        name: str,
+        index: int,
+        var_type: str = "int"
+    ) -> 'ACSBuilder':
+        """
+        Add a global-scope variable.
+        Visible across all maps and persistent.
+        
+        Args:
+            name: Variable name.
+            index: Unique index (1-64).
+            var_type: Variable type.
+        """
+        self.variables.append(ACSVariable(name, var_type, VariableScope.GLOBAL, index=index))
         return self
     
     def add_script(
@@ -329,14 +405,11 @@ while (true)
         if self.defines:
             lines.append("")
         
-        # Map variables (script-level variables)
-        for i, (name, var_type, initial) in enumerate(self.global_vars):
-            if initial is not None:
-                lines.append(f"{var_type} {name} = {initial};")
-            else:
-                lines.append(f"{var_type} {name};")
+        # Variables
+        for var in self.variables:
+            lines.append(var.to_code())
         
-        if self.global_vars:
+        if self.variables:
             lines.append("")
         
         # Scripts
