@@ -401,6 +401,52 @@ class ProceduralMapBuilder:
             **kwargs
         })
 
+    def get_random_point_in_area(self, area_name_or_id: str, safe: bool = True) -> Optional[Tuple[float, float]]:
+        """
+        Returns the (x, y) coordinates of a random cell in the specified area.
+        If safe=True, prefers cells that are not adjacent to other areas (internal cells).
+        """
+        area_id = self.name_to_id.get(area_name_or_id, area_name_or_id)
+        
+        # Get all indices for this area
+        candidate_indices = [i for i, s in enumerate(self.seeds) if s.area_id == area_id]
+        
+        if not candidate_indices:
+            return None
+            
+        if safe:
+            # Filter for internal cells (all neighbors are in the same area)
+            safe_indices = []
+            for idx in candidate_indices:
+                is_internal = True
+                neighbors = self.mesh.adjacency.get(idx, [])
+                for n_idx in neighbors:
+                    if self.seeds[n_idx].area_id != area_id:
+                        is_internal = False
+                        break
+                if is_internal:
+                    safe_indices.append(idx)
+            
+            if safe_indices:
+                idx = self.rng.choice(safe_indices)
+                s = self.seeds[idx]
+                return (s.x, s.y)
+                
+        # Fallback or if safe=False
+        idx = self.rng.choice(candidate_indices)
+        s = self.seeds[idx]
+        return (s.x, s.y)
+
+    def get_area_centroid(self, area_name_or_id: str) -> Optional[Tuple[float, float]]:
+        """Returns the centroid (average x, y) of the area."""
+        area_id = self.name_to_id.get(area_name_or_id, area_name_or_id)
+        seeds = [s for s in self.seeds if s.area_id == area_id]
+        if not seeds:
+            return None
+        avg_x = sum(s.x for s in seeds) / len(seeds)
+        avg_y = sum(s.y for s in seeds) / len(seeds)
+        return (avg_x, avg_y)
+
     def build(self, output_path: str):
         """
         Generates the WAD file.

@@ -19,7 +19,7 @@ def create_armory_siege():
 ACTOR DefenseCore 15000
 {
   //$Category "Objectives"
-  Health 2000
+  Health 800
   Radius 16
   Height 50
   Speed 0
@@ -49,6 +49,11 @@ ACTOR DefenseCore 15000
     TLMP A 0 ACS_Execute(999, 0)
     Stop
   }
+}
+
+ACTOR PlaceablePistol : Pistol 15001
+{
+  //$Category "Weapons"
 }
 """
     builder.wad_writer.add_lump("DECORATE", decorate_str.encode('utf-8'))
@@ -143,44 +148,56 @@ ACTOR DefenseCore 15000
     
     # 5. Add Things
     
-    # Core in Armory (TID 100)
+    # Core in Armory (TID 100) - REMOVED, Spawning via ACS
     TID_CORE = 100
-    builder.add_thing(15000, 0, 0, tid=TID_CORE)
+    # builder.add_thing(15000, 0, 0, tid=TID_CORE)
     
     # Player Starts (3 Players)
+    # Keep them for initialization, but they will be moved
     builder.add_thing("PLAYER1_START", -64, -64, angle=45)
     builder.add_thing("PLAYER2_START", 64, -64, angle=135)
     builder.add_thing("PLAYER3_START", 0, 64, angle=270)
     
-    # Starting Weapons in Armory
-    builder.add_thing("SHOTGUN", -100, 0)
-    builder.add_thing("SHOTGUN", 100, 0)
-    builder.add_thing("CHAINGUN", 0, -100)
-    builder.add_thing("BOX_OF_SHELLS", -120, 20) # 50 shells approx (Box=20, Shells=4. Need multiple?)
-    # Actually Box is 20. 2 Boxes + 2 Shells = 48. Close enough.
-    builder.add_thing("BOX_OF_SHELLS", -140, 20)
-    builder.add_thing("SHELLS", -160, 20)
-    builder.add_thing("BOX_OF_BULLETS", 120, -20) # 50 bullets (Box=50)
+    # Helper to place clusters of MapSpots
+    def place_spawn_cluster(area_name, base_tid, count=5):
+        for i in range(count):
+            pt = builder.get_random_point_in_area(area_name)
+            if pt:
+                builder.add_thing("MAP_SPOT", pt[0], pt[1], tid=base_tid + i)
+                
+    # Place Spawn Clusters
+    # Core Spawn Cluster (Armory): Base 50
+    place_spawn_cluster("Armory", 50, count=5)
     
-    # MapSpots for Spawning (TIDs 200+)
-    # Room A (Heavy Weapons)
-    TID_SPAWN_A = 201
-    builder.add_thing("MAP_SPOT", 0, 800, tid=TID_SPAWN_A)
+    # Player Spawn Cluster (Armory): Base 60
+    place_spawn_cluster("Armory", 60, count=10)
+
+    # Room A Supply (RocketLauncher): Base 100
+    place_spawn_cluster("Room A", 100)
     
-    # Room B (Ammo)
-    TID_SPAWN_B = 202
-    builder.add_thing("MAP_SPOT", 700, -600, tid=TID_SPAWN_B)
+    # Room B Supply (BoxOfRockets): Base 110
+    place_spawn_cluster("Room B", 110)
     
-    # Room C (Health/Armor)
-    TID_SPAWN_C = 203
-    builder.add_thing("MAP_SPOT", -700, -600, tid=TID_SPAWN_C)
+    # Room C Supply (Medikit): Base 120
+    place_spawn_cluster("Room C", 120)
     
-    # Enemy Spawns (Outside corridors, maybe?)
-    # Let's put them in the corridors or near the rooms
-    TID_SPAWN_ENEMY = 300
-    builder.add_thing("MAP_SPOT", 0, 600, tid=TID_SPAWN_ENEMY) # Near A
-    builder.add_thing("MAP_SPOT", 500, -400, tid=TID_SPAWN_ENEMY) # Near B
-    builder.add_thing("MAP_SPOT", -500, -400, tid=TID_SPAWN_ENEMY) # Near C
+    # Enemy Spawns: Base 200, 210, 220
+    place_spawn_cluster(corr_a, 200)
+    place_spawn_cluster(corr_b, 210)
+    place_spawn_cluster(corr_c, 220)
+    
+    # Corridor Items (Pistol/Clip)
+    # Corridor A: Pistol 300, Clip 310
+    place_spawn_cluster(corr_a, 300)
+    place_spawn_cluster(corr_a, 310)
+    
+    # Corridor B: Pistol 320, Clip 330
+    place_spawn_cluster(corr_b, 320)
+    place_spawn_cluster(corr_b, 330)
+    
+    # Corridor C: Pistol 340, Clip 350
+    place_spawn_cluster(corr_c, 340)
+    place_spawn_cluster(corr_c, 350)
     
     # 6. Generate ACS Script
     acs = ACSBuilder()
@@ -189,7 +206,26 @@ ACTOR DefenseCore 15000
     acs.add_global_var("core_health_global", 1, "int")
     
     # Assign TIDs to players on Enter so we can target them for Score syncing
-    acs.add_script(ScriptType.ENTER, "Thing_ChangeTID(0, 1000 + PlayerNumber());")
+    acs.add_script(ScriptType.ENTER, """
+        int p_tid = 1000 + PlayerNumber();
+        Thing_ChangeTID(0, p_tid);
+        ClearInventory();
+        
+        // Randomize position using Player Spawn Cluster (60-69)
+        int dest_spot = 60 + Random(0, 9);
+        SetActorPosition(0, GetActorX(dest_spot), GetActorY(dest_spot), GetActorZ(dest_spot), 0);
+    """)
+
+    # Respawn script: Lose everything
+    acs.add_script(ScriptType.RESPAWN, """
+        int p_tid = 1000 + PlayerNumber();
+        Thing_ChangeTID(0, p_tid);
+        ClearInventory();
+        
+        // Randomize position on respawn too?
+        int dest_spot = 60 + Random(0, 9);
+        SetActorPosition(0, GetActorX(dest_spot), GetActorY(dest_spot), GetActorZ(dest_spot), 0);
+    """)
     
     # Script 1: Game Loop (Door Control & Spawning)
     # Room A: 0-200 Open, 500-700 Open, 1000-1200 Open
@@ -197,75 +233,128 @@ ACTOR DefenseCore 15000
     # Room C: 400-600 Open, 900-1100 Open
     
     script_body = f"""
-    core_health_global = 2000;
+    core_health_global = 800;
     int tick = 0;
     int cycle = 0;
+    int wave = 0;
     int TID_ITEM_A = 401;
     int TID_ITEM_B = 402;
     int TID_ITEM_C = 403;
     int TID_ENEMY_UNIT = 500;
+    
+    // Spawn Core at random spot (50-54)
+    SpawnSpot("DefenseCore", 50 + Random(0, 4), {TID_CORE}, 0);
+    
+    // Spawn Initial Corridor Items (Pistols/Clips)
+    // Pick random spot from clusters (0-4)
+    SpawnSpot("PlaceablePistol", 300 + Random(0, 4), 0, 0);
+    SpawnSpot("Clip", 310 + Random(0, 4), 0, 0);
+    
+    SpawnSpot("PlaceablePistol", 320 + Random(0, 4), 0, 0);
+    SpawnSpot("Clip", 330 + Random(0, 4), 0, 0);
+    
+    SpawnSpot("PlaceablePistol", 340 + Random(0, 4), 0, 0);
+    SpawnSpot("Clip", 350 + Random(0, 4), 0, 0);
     
     // Initial State: All Closed
     Sector_SetColor({TAG_DOOR_A}, 255, 0, 0); // Red
     Sector_SetColor({TAG_DOOR_B}, 255, 0, 0);
     Sector_SetColor({TAG_DOOR_C}, 255, 0, 0);
     
+    int door_a_open = 0;
+    int door_b_open = 0;
+    int door_c_open = 0;
+    
     while (TRUE) {{
         cycle = tick % 1200;
+        wave = tick / 1050; // Increase difficulty every ~30 seconds
         
         // Sync Core Health to Global Variable 1
         core_health_global = GetActorProperty({TID_CORE}, APROP_HEALTH);
         
         // Room A Control
-        if ((cycle >= 0 && cycle < 200) || (cycle >= 500 && cycle < 700) || (cycle >= 1000 && cycle < 1200)) {{
-            Door_Open({TAG_DOOR_A}, 16, 0);
-            Sector_SetColor({TAG_DOOR_A}, 0, 255, 0); // Green
+        int should_open_a = (cycle >= 0 && cycle < 200) || (cycle >= 500 && cycle < 700) || (cycle >= 1000 && cycle < 1200);
+        if (should_open_a) {{
+            if (!door_a_open) {{
+                Door_Open({TAG_DOOR_A}, 16, 0);
+                Sector_SetColor({TAG_DOOR_A}, 0, 255, 0); // Green
+                door_a_open = 1;
+                // Spawn ONLY ONCE when opening
+                if (ThingCount(T_NONE, TID_ITEM_A) == 0) {{
+                    SpawnSpot("RocketLauncher", 100 + Random(0, 4), TID_ITEM_A, 0);
+                }}
+            }}
         }} else {{
-            Door_Close({TAG_DOOR_A}, 16, 0);
-            Sector_SetColor({TAG_DOOR_A}, 255, 0, 0); // Red
+            if (door_a_open) {{
+                Door_Close({TAG_DOOR_A}, 16, 0);
+                Sector_SetColor({TAG_DOOR_A}, 255, 0, 0); // Red
+                door_a_open = 0;
+            }}
         }}
         
         // Room B Control
-        if ((cycle >= 200 && cycle < 400) || (cycle >= 700 && cycle < 900)) {{
-            Door_Open({TAG_DOOR_B}, 16, 0);
-            Sector_SetColor({TAG_DOOR_B}, 0, 255, 0);
+        int should_open_b = (cycle >= 200 && cycle < 400) || (cycle >= 700 && cycle < 900);
+        if (should_open_b) {{
+            if (!door_b_open) {{
+                Door_Open({TAG_DOOR_B}, 16, 0);
+                Sector_SetColor({TAG_DOOR_B}, 0, 255, 0);
+                door_b_open = 1;
+                if (ThingCount(T_NONE, TID_ITEM_B) == 0) {{
+                    SpawnSpot("RocketBox", 110 + Random(0, 4), TID_ITEM_B, 0);
+                }}
+            }}
         }} else {{
-            Door_Close({TAG_DOOR_B}, 16, 0);
-            Sector_SetColor({TAG_DOOR_B}, 255, 0, 0);
+            if (door_b_open) {{
+                Door_Close({TAG_DOOR_B}, 16, 0);
+                Sector_SetColor({TAG_DOOR_B}, 255, 0, 0);
+                door_b_open = 0;
+            }}
         }}
         
         // Room C Control
-        if ((cycle >= 400 && cycle < 600) || (cycle >= 900 && cycle < 1100)) {{
-            Door_Open({TAG_DOOR_C}, 16, 0);
-            Sector_SetColor({TAG_DOOR_C}, 0, 255, 0);
+        int should_open_c = (cycle >= 400 && cycle < 600) || (cycle >= 900 && cycle < 1100);
+        if (should_open_c) {{
+            if (!door_c_open) {{
+                Door_Open({TAG_DOOR_C}, 16, 0);
+                Sector_SetColor({TAG_DOOR_C}, 0, 255, 0);
+                door_c_open = 1;
+                if (ThingCount(T_NONE, TID_ITEM_C) == 0) {{
+                    SpawnSpot("Medikit", 120 + Random(0, 4), TID_ITEM_C, 0);
+                }}
+            }}
         }} else {{
-            Door_Close({TAG_DOOR_C}, 16, 0);
-            Sector_SetColor({TAG_DOOR_C}, 255, 0, 0);
-        }}
-        
-        // Resource Respawn (Every 300 ticks)
-        if (tick % 300 == 0) {{
-            // Room A: Heavy Weapons
-            if (ThingCount(T_NONE, TID_ITEM_A) == 0) {{
-                SpawnSpot("RocketLauncher", {TID_SPAWN_A}, TID_ITEM_A, 0);
-            }}
-            
-            // Room B: Ammo
-            if (ThingCount(T_NONE, TID_ITEM_B) == 0) {{
-                SpawnSpot("BoxOfRockets", {TID_SPAWN_B}, TID_ITEM_B, 0);
-            }}
-            
-            // Room C: Health/Armor
-            if (ThingCount(T_NONE, TID_ITEM_C) == 0) {{
-                SpawnSpot("Medikit", {TID_SPAWN_C}, TID_ITEM_C, 0);
+            if (door_c_open) {{
+                Door_Close({TAG_DOOR_C}, 16, 0);
+                Sector_SetColor({TAG_DOOR_C}, 255, 0, 0);
+                door_c_open = 0;
             }}
         }}
         
-        // Enemy Spawn (Continuous, e.g., every 200 ticks)
-        // Slower spawn rate (200 ticks) and lower max count (20)
-        if (tick % 200 == 0 && tick > 0 && ThingCount(T_NONE, TID_ENEMY_UNIT) < 20) {{
-            SpawnSpot("DoomImp", {TID_SPAWN_ENEMY}, TID_ENEMY_UNIT, 0);
-            SpawnSpot("ShotgunGuy", {TID_SPAWN_ENEMY}, TID_ENEMY_UNIT, 0);
+        // Wave System
+        
+        // Wave System
+        int spawn_interval = 200 - (wave * 20);
+        if (spawn_interval < 40) spawn_interval = 40; // Cap max speed
+        
+        if (tick % spawn_interval == 0 && tick > 0 && ThingCount(T_NONE, TID_ENEMY_UNIT) < (20 + wave * 5)) {{
+            int r = Random(0, 10);
+            int spawn_base = 200;
+            int r_spawn = Random(0, 2);
+            if (r_spawn == 1) spawn_base = 210;
+            if (r_spawn == 2) spawn_base = 220;
+            
+            int spawn_tid = spawn_base + Random(0, 4);
+            
+            if (wave == 0) {{
+                SpawnSpot("DoomImp", spawn_tid, TID_ENEMY_UNIT, 0);
+            }} else if (wave < 3) {{
+                if (r < 7) SpawnSpot("DoomImp", spawn_tid, TID_ENEMY_UNIT, 0);
+                else SpawnSpot("ShotgunGuy", spawn_tid, TID_ENEMY_UNIT, 0);
+            }} else {{
+                if (r < 5) SpawnSpot("DoomImp", spawn_tid, TID_ENEMY_UNIT, 0);
+                else if (r < 8) SpawnSpot("ShotgunGuy", spawn_tid, TID_ENEMY_UNIT, 0);
+                else SpawnSpot("Demon", spawn_tid, TID_ENEMY_UNIT, 0);
+            }}
         }}
         
         Delay(1);
