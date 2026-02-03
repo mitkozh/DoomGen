@@ -1,25 +1,47 @@
-import os
 import random
+import math
+from typing import Dict, Any
 from doomgen.builder import ProceduralMapBuilder
 from doomgen.abstraction.layout import ConnectionType
 from doomgen.logic.acs_builder import ACSBuilder, ScriptType
-from shapely.geometry import Point
+from doomgen.batch.scenario import Scenario
 
-def create_armory_siege():
-    print("Generating Armory Siege Defense Benchmark...")
+class ArmorySiegeScenario(Scenario):
+    """
+    Parameterized version of Armory Siege Defense Benchmark.
+    """
     
-    # 1. Initialize Builder
-    # Use a fixed seed for structural reproducibility if needed, or random for benchmark variation
-    seed = random.randint(0, 999999)
-    print(f"Seed: {seed}")
-    builder = ProceduralMapBuilder(bounds=(-1500, -1500, 1500, 1500), num_seeds=4000, seed=seed)
-    
-    # 0. Add DECORATE for Defense Core
-    decorate_str = """
+    def get_default_config(self) -> Dict[str, Any]:
+        return {
+            'distance': 600,             # Radius of supply rooms from center (Closer = Easier)
+            'corridor_width': 3,         # Width of connecting corridors (Wider = Easier)
+            'door_timer': 300,           # Door open duration (tics) (Longer = Easier access)
+            'core_health': 1000,         # Health of the defense core (Higher = Easier)
+            'enemy_difficulty': 0.5,     # Multiplier for enemy counts (Lower = Easier)
+            'seed': None,                # Random seed
+        }
+        
+    def generate(self, output_path: str) -> None:
+        cfg = self.config
+        seed = cfg['seed'] if cfg['seed'] is not None else random.randint(0, 999999)
+        
+        # Determine bounds based on distance
+        dist = int(cfg['distance']) # Ensure int
+        bound = dist + 1000 # Enough padding
+        
+        # 1. Initialize Builder
+        builder = ProceduralMapBuilder(
+            bounds=(-bound, -bound, bound, bound), 
+            num_seeds=5000, 
+            seed=seed
+        )
+        
+        # 0. Add DECORATE
+        decorate_str = f"""
 ACTOR DefenseCore 15000
-{
+{{
   //$Category "Objectives"
-  Health 800
+  Health {int(cfg['core_health'])}
   Radius 16
   Height 50
   Speed 0
@@ -32,7 +54,7 @@ ACTOR DefenseCore 15000
   DamageFactor "Player", 0
   
   States
-  {
+  {{
   Spawn:
     TLMP ABCD 4
     TLMP A 0 A_Look
@@ -48,352 +70,377 @@ ACTOR DefenseCore 15000
     TLMP A 1
     TLMP A 0 ACS_Execute(999, 0)
     Stop
-  }
-}
+  }}
+}}
 
 ACTOR PlaceablePistol : Pistol 15001
-{
+{{
   //$Category "Weapons"
-}
+}}
+
+ACTOR MeleeRevenant : Revenant 15002
+{{
+  States
+  {{
+  Missile:
+    SKEL A 0
+    Goto See
+  }}
+}}
+
+ACTOR MeleeZombieman : Zombieman 15003
+{{
+  States
+  {{
+  Missile:
+    POSS A 0
+    Goto See
+  Melee:
+    POSS E 10 A_FaceTarget
+    POSS F 8 A_CustomMeleeAttack(10)
+    POSS E 8
+    Goto See
+  }}
+}}
+
+ACTOR MeleeImp : DoomImp 15004
+{{
+  States
+  {{
+  Missile:
+    TROO A 0
+    Goto See
+  Melee:
+    TROO EF 8 A_FaceTarget
+    TROO G 6 A_CustomMeleeAttack(3 * random(1, 8), "imp/melee")
+    Goto See
+  }}
+}}
 """
-    builder.wad_writer.add_lump("DECORATE", decorate_str.encode('utf-8'))
-    
-    # 2. Define Areas
-    
-    # Central Armory
-    builder.add_area(
-        name="Armory",
-        shape=(0, 0, 512, 512),
-        floor_height=0,
-        ceiling_height=192,
-        floor_texture="FLOOR4_8",
-        ceiling_texture="TLITE6_4",
-        wall_texture="STARTAN3"
-    )
-    
-    # Supply Room A (Heavy Weapons) - North
-    builder.add_area(
-        name="Room A",
-        shape=(0, 800, 384, 384),
-        floor_height=0,
-        ceiling_height=160,
-        floor_texture="CEIL5_2", # Distinct floor
-        wall_texture="STONE2"
-    )
-    
-    # Supply Room B (Ammo) - South East
-    builder.add_area(
-        name="Room B",
-        shape=(700, -600, 384, 384),
-        floor_height=0,
-        ceiling_height=160,
-        floor_texture="FLAT5_4",
-        wall_texture="BROWN1"
-    )
-    
-    # Supply Room C (Health/Armor) - South West
-    builder.add_area(
-        name="Room C",
-        shape=(-700, -600, 384, 384),
-        floor_height=0,
-        ceiling_height=160,
-        floor_texture="MFLR8_1",
-        wall_texture="STARGR1"
-    )
-    
-    # 3. Connect via Corridors
-    
-    # Corridor A
-    corr_a = builder.add_corridor("Armory", "Room A", width=2, floor_texture="RROCK19")
-    # Corridor B
-    corr_b = builder.add_corridor("Armory", "Room B", width=2, floor_texture="RROCK19")
-    # Corridor C
-    corr_c = builder.add_corridor("Armory", "Room C", width=2, floor_texture="RROCK19")
-    
-    # 4. Add Doors (Time-Gated)
-    # We need tags for these doors to control them via ACS.
-    TAG_DOOR_A = 10
-    TAG_DOOR_B = 11
-    TAG_DOOR_C = 12
-    
-    # Door A (Between Corridor A and Room A)
-    door_a_id = builder.add_boundary(
-        "Room A", corr_a, 
-        name="Door A", 
-        connection_type=ConnectionType.DOOR,
-        floor_height=0, ceiling_height=0, # Closed
-        floor_texture="GATE1", ceiling_texture="GATE1", wall_texture="BIGDOOR2"
-    )
-    builder.graph.get_area(door_a_id).config.tag = TAG_DOOR_A
-    
-    # Door B
-    door_b_id = builder.add_boundary(
-        "Room B", corr_b, 
-        name="Door B", 
-        connection_type=ConnectionType.DOOR,
-        floor_height=0, ceiling_height=0,
-        floor_texture="GATE1", ceiling_texture="GATE1", wall_texture="BIGDOOR2"
-    )
-    builder.graph.get_area(door_b_id).config.tag = TAG_DOOR_B
-    
-    # Door C
-    door_c_id = builder.add_boundary(
-        "Room C", corr_c, 
-        name="Door C", 
-        connection_type=ConnectionType.DOOR,
-        floor_height=0, ceiling_height=0,
-        floor_texture="GATE1", ceiling_texture="GATE1", wall_texture="BIGDOOR2"
-    )
-    builder.graph.get_area(door_c_id).config.tag = TAG_DOOR_C
-    
-    # 5. Add Things
-    
-    # Core in Armory (TID 100) - REMOVED, Spawning via ACS
-    TID_CORE = 100
-    # builder.add_thing(15000, 0, 0, tid=TID_CORE)
-    
-    # Player Starts (3 Players)
-    # Keep them for initialization, but they will be moved
-    builder.add_thing("PLAYER1_START", -64, -64, angle=45)
-    builder.add_thing("PLAYER2_START", 64, -64, angle=135)
-    builder.add_thing("PLAYER3_START", 0, 64, angle=270)
-    
-    # Helper to place clusters of MapSpots
-    def place_spawn_cluster(area_name, base_tid, count=5):
-        for i in range(count):
-            pt = builder.get_random_point_in_area(area_name)
-            if pt:
-                builder.add_thing("MAP_SPOT", pt[0], pt[1], tid=base_tid + i)
-                
-    # Place Spawn Clusters
-    # Core Spawn Cluster (Armory): Base 50
-    place_spawn_cluster("Armory", 50, count=5)
-    
-    # Player Spawn Cluster (Armory): Base 60
-    place_spawn_cluster("Armory", 60, count=10)
+        builder.wad_writer.add_lump("DECORATE", decorate_str.encode('utf-8'))
+        
+        # 2. Define Areas
+        
+        # Central Armory
+        builder.add_area(
+            name="Armory",
+            shape=(0, 0, 512, 512),
+            floor_height=0,
+            ceiling_height=192,
+            floor_texture="FLOOR4_8",
+            ceiling_texture="TLITE6_4",
+            wall_texture="STARTAN3"
+        )
+        
+        # Calculate positions
+        # Room A (North) - 90 deg
+        pos_a = (0, dist)
+        # Room B (South East) - 330 deg (-30)
+        # x = r * cos(-30) = r * 0.866
+        # y = r * sin(-30) = r * -0.5
+        pos_b = (int(dist * 0.866), int(dist * -0.5))
+        # Room C (South West) - 210 deg
+        pos_c = (int(dist * -0.866), int(dist * -0.5))
+        
+        # Supply Room A (Heavy Weapons)
+        builder.add_area(
+            name="Room A",
+            shape=(pos_a[0], pos_a[1], 384, 384),
+            floor_height=0,
+            ceiling_height=160,
+            floor_texture="CEIL5_2",
+            wall_texture="STONE2"
+        )
+        
+        # Supply Room B (Ammo)
+        builder.add_area(
+            name="Room B",
+            shape=(pos_b[0], pos_b[1], 384, 384),
+            floor_height=0,
+            ceiling_height=160,
+            floor_texture="FLAT5_4",
+            wall_texture="BROWN1"
+        )
+        
+        # Supply Room C (Health/Armor)
+        builder.add_area(
+            name="Room C",
+            shape=(pos_c[0], pos_c[1], 384, 384),
+            floor_height=0,
+            ceiling_height=160,
+            floor_texture="MFLR8_1",
+            wall_texture="STARGR1"
+        )
+        
+        # 3. Connect via Corridors
+        cw = int(cfg['corridor_width'])
+        corr_a = builder.add_corridor("Armory", "Room A", width=cw, floor_texture="RROCK19")
+        corr_b = builder.add_corridor("Armory", "Room B", width=cw, floor_texture="RROCK19")
+        corr_c = builder.add_corridor("Armory", "Room C", width=cw, floor_texture="RROCK19")
+        
+        # 4. Add Doors
+        TAG_DOOR_A = 10
+        TAG_DOOR_B = 11
+        TAG_DOOR_C = 12
+        
+        door_a_id = builder.add_boundary(
+            "Room A", corr_a, 
+            name="Door A", connection_type=ConnectionType.DOOR,
+            floor_height=0, ceiling_height=0,
+            floor_texture="GATE1", ceiling_texture="GATE1", wall_texture="BIGDOOR2"
+        )
+        builder.graph.get_area(door_a_id).config.tag = TAG_DOOR_A
+        
+        door_b_id = builder.add_boundary(
+            "Room B", corr_b, 
+            name="Door B", connection_type=ConnectionType.DOOR,
+            floor_height=0, ceiling_height=0,
+            floor_texture="GATE1", ceiling_texture="GATE1", wall_texture="BIGDOOR2"
+        )
+        builder.graph.get_area(door_b_id).config.tag = TAG_DOOR_B
+        
+        door_c_id = builder.add_boundary(
+            "Room C", corr_c, 
+            name="Door C", connection_type=ConnectionType.DOOR,
+            floor_height=0, ceiling_height=0,
+            floor_texture="GATE1", ceiling_texture="GATE1", wall_texture="BIGDOOR2"
+        )
+        builder.graph.get_area(door_c_id).config.tag = TAG_DOOR_C
+        
+        # 5. Add Things (Spawners)
+        # Players
+        builder.add_thing("PLAYER1_START", -64, -64, angle=45)
+        builder.add_thing("PLAYER2_START", 64, -64, angle=135)
+        builder.add_thing("PLAYER3_START", 0, 64, angle=270)
+        
+        def place_spawn_cluster(area_name, base_tid, count=5):
+            for i in range(count):
+                pt = builder.get_random_point_in_area(area_name)
+                if pt:
+                    builder.add_thing("MAP_SPOT", pt[0], pt[1], tid=base_tid + i)
+        
+        place_spawn_cluster("Armory", 50, count=5) # Core spots - Critical
+        place_spawn_cluster("Armory", 60, count=10) # Player respawn spots - Critical
+        place_spawn_cluster("Room A", 100, count=5)
+        place_spawn_cluster("Room B", 110, count=5)
+        place_spawn_cluster("Room C", 120, count=5)
+        place_spawn_cluster(corr_a, 200, count=5) # Enemy spawns A
+        place_spawn_cluster(corr_b, 210, count=5)
+        place_spawn_cluster(corr_c, 220, count=5)
+        
+        # Corridor Items
+        place_spawn_cluster(corr_a, 300, count=5)
+        place_spawn_cluster(corr_a, 310, count=5)
+        place_spawn_cluster(corr_b, 320, count=5)
+        place_spawn_cluster(corr_b, 330, count=5)
+        place_spawn_cluster(corr_c, 340, count=5)
+        place_spawn_cluster(corr_c, 350, count=5)
+        
+        # 6. Generate ACS
+        acs = ACSBuilder()
+        acs.add_include("zcommon.acs")
+        acs.add_global_var("core_health_global", 1, "int")
+        
+        acs.add_script(ScriptType.ENTER, """
+            int p_tid = 1000 + PlayerNumber();
+            Thing_ChangeTID(0, p_tid);
+            ClearInventory();
+            int dest_spot = 60 + Random(0, 9);
+            SetActorPosition(0, GetActorX(dest_spot), GetActorY(dest_spot), GetActorZ(dest_spot), 0);
+        """)
+        
+        acs.add_script(ScriptType.RESPAWN, """
+            int p_tid = 1000 + PlayerNumber();
+            Thing_ChangeTID(0, p_tid);
+            ClearInventory();
+            int dest_spot = 60 + Random(0, 9);
+            SetActorPosition(0, GetActorX(dest_spot), GetActorY(dest_spot), GetActorZ(dest_spot), 0);
+        """)
+        
+        # Dynamic Script Variables
+        open_dur = int(cfg['door_timer'])
+        cycle_len = open_dur * 6 
 
-    # Room A Supply (RocketLauncher): Base 100
-    place_spawn_cluster("Room A", 100)
-    
-    # Room B Supply (BoxOfRockets): Base 110
-    place_spawn_cluster("Room B", 110)
-    
-    # Room C Supply (Medikit): Base 120
-    place_spawn_cluster("Room C", 120)
-    
-    # Enemy Spawns: Base 200, 210, 220
-    place_spawn_cluster(corr_a, 200)
-    place_spawn_cluster(corr_b, 210)
-    place_spawn_cluster(corr_c, 220)
-    
-    # Corridor Items (Pistol/Clip)
-    # Corridor A: Pistol 300, Clip 310
-    place_spawn_cluster(corr_a, 300)
-    place_spawn_cluster(corr_a, 310)
-    
-    # Corridor B: Pistol 320, Clip 330
-    place_spawn_cluster(corr_b, 320)
-    place_spawn_cluster(corr_b, 330)
-    
-    # Corridor C: Pistol 340, Clip 350
-    place_spawn_cluster(corr_c, 340)
-    place_spawn_cluster(corr_c, 350)
-    
-    # 6. Generate ACS Script
-    acs = ACSBuilder()
-    acs.add_include("zcommon.acs")
-    
-    acs.add_global_var("core_health_global", 1, "int")
-    
-    # Assign TIDs to players on Enter so we can target them for Score syncing
-    acs.add_script(ScriptType.ENTER, """
-        int p_tid = 1000 + PlayerNumber();
-        Thing_ChangeTID(0, p_tid);
-        ClearInventory();
+        # Calculate health multiplier
+        diff = float(cfg['enemy_difficulty'])
+        health_mult = diff if diff < 1.0 else 1.0
+        health_mult_fixed = int(health_mult * 65536)
         
-        // Randomize position using Player Spawn Cluster (60-69)
-        int dest_spot = 60 + Random(0, 9);
-        SetActorPosition(0, GetActorX(dest_spot), GetActorY(dest_spot), GetActorZ(dest_spot), 0);
-    """)
-
-    # Respawn script: Lose everything
-    acs.add_script(ScriptType.RESPAWN, """
-        int p_tid = 1000 + PlayerNumber();
-        Thing_ChangeTID(0, p_tid);
-        ClearInventory();
+        script_body = f"""
+        core_health_global = {int(cfg['core_health'])};
+        int tick = 0;
+        int cycle = 0;
+        int wave = 0;
+        int TID_ITEM_A = 401;
+        int TID_ITEM_B = 402;
+        int TID_ITEM_C = 403;
+        int TID_ENEMY_UNIT = 500;
+        int TID_CORE = 100;
+        int TID_TEMP_SPAWN = 900;
         
-        // Randomize position on respawn too?
-        int dest_spot = 60 + Random(0, 9);
-        SetActorPosition(0, GetActorX(dest_spot), GetActorY(dest_spot), GetActorZ(dest_spot), 0);
-    """)
-    
-    # Script 1: Game Loop (Door Control & Spawning)
-    # Room A: 0-200 Open, 500-700 Open, 1000-1200 Open
-    # Room B: 200-400 Open, 700-900 Open
-    # Room C: 400-600 Open, 900-1100 Open
-    
-    script_body = f"""
-    core_health_global = 800;
-    int tick = 0;
-    int cycle = 0;
-    int wave = 0;
-    int TID_ITEM_A = 401;
-    int TID_ITEM_B = 402;
-    int TID_ITEM_C = 403;
-    int TID_ENEMY_UNIT = 500;
-    
-    // Spawn Core at random spot (50-54)
-    SpawnSpot("DefenseCore", 50 + Random(0, 4), {TID_CORE}, 0);
-    
-    // Spawn Initial Corridor Items (Pistols/Clips)
-    // Pick random spot from clusters (0-4)
-    SpawnSpot("PlaceablePistol", 300 + Random(0, 4), 0, 0);
-    SpawnSpot("Clip", 310 + Random(0, 4), 0, 0);
-    
-    SpawnSpot("PlaceablePistol", 320 + Random(0, 4), 0, 0);
-    SpawnSpot("Clip", 330 + Random(0, 4), 0, 0);
-    
-    SpawnSpot("PlaceablePistol", 340 + Random(0, 4), 0, 0);
-    SpawnSpot("Clip", 350 + Random(0, 4), 0, 0);
-    
-    // Initial State: All Closed
-    Sector_SetColor({TAG_DOOR_A}, 255, 0, 0); // Red
-    Sector_SetColor({TAG_DOOR_B}, 255, 0, 0);
-    Sector_SetColor({TAG_DOOR_C}, 255, 0, 0);
-    
-    int door_a_open = 0;
-    int door_b_open = 0;
-    int door_c_open = 0;
-    
-    while (TRUE) {{
-        cycle = tick % 1200;
-        wave = tick / 1050; // Increase difficulty every ~30 seconds
+        SpawnSpot("DefenseCore", 50 + Random(0, 4), TID_CORE, 0);
         
-        // Sync Core Health to Global Variable 1
-        core_health_global = GetActorProperty({TID_CORE}, APROP_HEALTH);
+        // Initial Items (Scaled maybe? For now static)
+        SpawnSpot("PlaceablePistol", 300 + Random(0, 4), 0, 0);
+        SpawnSpot("Clip", 310 + Random(0, 4), 0, 0);
         
-        // Room A Control
-        int should_open_a = (cycle >= 0 && cycle < 200) || (cycle >= 500 && cycle < 700) || (cycle >= 1000 && cycle < 1200);
-        if (should_open_a) {{
-            if (!door_a_open) {{
-                Door_Open({TAG_DOOR_A}, 16, 0);
-                Sector_SetColor({TAG_DOOR_A}, 0, 255, 0); // Green
-                door_a_open = 1;
-                // Spawn ONLY ONCE when opening
-                if (ThingCount(T_NONE, TID_ITEM_A) == 0) {{
-                    SpawnSpot("RocketLauncher", 100 + Random(0, 4), TID_ITEM_A, 0);
-                }}
-            }}
-        }} else {{
-            if (door_a_open) {{
-                Door_Close({TAG_DOOR_A}, 16, 0);
-                Sector_SetColor({TAG_DOOR_A}, 255, 0, 0); // Red
-                door_a_open = 0;
-            }}
-        }}
+        SpawnSpot("PlaceablePistol", 320 + Random(0, 4), 0, 0);
+        SpawnSpot("Clip", 330 + Random(0, 4), 0, 0);
         
-        // Room B Control
-        int should_open_b = (cycle >= 200 && cycle < 400) || (cycle >= 700 && cycle < 900);
-        if (should_open_b) {{
-            if (!door_b_open) {{
-                Door_Open({TAG_DOOR_B}, 16, 0);
-                Sector_SetColor({TAG_DOOR_B}, 0, 255, 0);
-                door_b_open = 1;
-                if (ThingCount(T_NONE, TID_ITEM_B) == 0) {{
-                    SpawnSpot("RocketBox", 110 + Random(0, 4), TID_ITEM_B, 0);
-                }}
-            }}
-        }} else {{
-            if (door_b_open) {{
-                Door_Close({TAG_DOOR_B}, 16, 0);
-                Sector_SetColor({TAG_DOOR_B}, 255, 0, 0);
-                door_b_open = 0;
-            }}
-        }}
+        SpawnSpot("PlaceablePistol", 340 + Random(0, 4), 0, 0);
+        SpawnSpot("Clip", 350 + Random(0, 4), 0, 0);
         
-        // Room C Control
-        int should_open_c = (cycle >= 400 && cycle < 600) || (cycle >= 900 && cycle < 1100);
-        if (should_open_c) {{
-            if (!door_c_open) {{
-                Door_Open({TAG_DOOR_C}, 16, 0);
-                Sector_SetColor({TAG_DOOR_C}, 0, 255, 0);
-                door_c_open = 1;
-                if (ThingCount(T_NONE, TID_ITEM_C) == 0) {{
-                    SpawnSpot("Medikit", 120 + Random(0, 4), TID_ITEM_C, 0);
-                }}
-            }}
-        }} else {{
-            if (door_c_open) {{
-                Door_Close({TAG_DOOR_C}, 16, 0);
-                Sector_SetColor({TAG_DOOR_C}, 255, 0, 0);
-                door_c_open = 0;
-            }}
-        }}
+        Sector_SetColor({TAG_DOOR_A}, 255, 0, 0);
+        Sector_SetColor({TAG_DOOR_B}, 255, 0, 0);
+        Sector_SetColor({TAG_DOOR_C}, 255, 0, 0);
         
-        // Wave System
+        int door_a_open = 0;
+        int door_b_open = 0;
+        int door_c_open = 0;
         
-        // Wave System
-        int spawn_interval = 200 - (wave * 20);
-        if (spawn_interval < 40) spawn_interval = 40; // Cap max speed
-        
-        if (tick % spawn_interval == 0 && tick > 0 && ThingCount(T_NONE, TID_ENEMY_UNIT) < (20 + wave * 5)) {{
-            int r = Random(0, 10);
-            int spawn_base = 200;
-            int r_spawn = Random(0, 2);
-            if (r_spawn == 1) spawn_base = 210;
-            if (r_spawn == 2) spawn_base = 220;
+        while (TRUE) {{
+            cycle = tick % 1200;
+            wave = tick / 1050; // Difficulty scaling
             
-            int spawn_tid = spawn_base + Random(0, 4);
+            core_health_global = GetActorProperty(TID_CORE, APROP_HEALTH);
             
-            if (wave == 0) {{
-                SpawnSpot("DoomImp", spawn_tid, TID_ENEMY_UNIT, 0);
-            }} else if (wave < 3) {{
-                if (r < 7) SpawnSpot("DoomImp", spawn_tid, TID_ENEMY_UNIT, 0);
-                else SpawnSpot("ShotgunGuy", spawn_tid, TID_ENEMY_UNIT, 0);
+            // Door Logic with parameterized duration
+            // Durations are relative to open_dur.
+            
+            int dur = {open_dur};
+            int should_open_a = (cycle >= 0 && cycle < dur) || (cycle >= 500 && cycle < (500+dur)) || (cycle >= 1000 && cycle < (1000+dur));
+            int should_open_b = (cycle >= 200 && cycle < (200+dur)) || (cycle >= 700 && cycle < (700+dur));
+            int should_open_c = (cycle >= 400 && cycle < (400+dur)) || (cycle >= 900 && cycle < (900+dur));
+            
+            if (should_open_a) {{
+                if (!door_a_open) {{
+                    Door_Open({TAG_DOOR_A}, 16, 0);
+                    Sector_SetColor({TAG_DOOR_A}, 0, 255, 0);
+                    door_a_open = 1;
+                    if (ThingCount(T_NONE, TID_ITEM_A) == 0) {{
+                        SpawnSpot("SuperShotgun", 100 + Random(0, 4), TID_ITEM_A, 0);
+                    }}
+                }}
+                if (dur > 300 && tick % 300 == 0) {{
+                    if (ThingCount(T_NONE, TID_ITEM_A) == 0) {{
+                        SpawnSpot("SuperShotgun", 100 + Random(0, 4), TID_ITEM_A, 0);
+                    }}
+                }}
             }} else {{
-                if (r < 5) SpawnSpot("DoomImp", spawn_tid, TID_ENEMY_UNIT, 0);
-                else if (r < 8) SpawnSpot("ShotgunGuy", spawn_tid, TID_ENEMY_UNIT, 0);
-                else SpawnSpot("Demon", spawn_tid, TID_ENEMY_UNIT, 0);
+                if (door_a_open) {{
+                    Door_Close({TAG_DOOR_A}, 16, 0);
+                    Sector_SetColor({TAG_DOOR_A}, 255, 0, 0);
+                    door_a_open = 0;
+                }}
             }}
-        }}
-        
-        Delay(1);
-        tick++;
-    }}
-    """
-    acs.add_script(ScriptType.OPEN, script_body)
-    
-    # Script 999: Game Over (Called by DefenseCore death)
-    game_over_script = """
-    Delay(35*3);
-    Exit_Normal(0);
-    """
-    acs.add_script(ScriptType.VOID, game_over_script, number=999)
-    
-    # 7. Build
-    # Try to compile ACS
-    try:
-        print("Compiling ACS...")
-        # Assuming 'acc' is in PATH. If not, user might need to specify path or install it.
-        # If compilation fails, we fall back to dummy behavior (things work, but scripts won't run until compiled by GZDoom)
-        bytecode = acs.compile()
-        if bytecode:
-            builder.map_data.behavior = bytecode
-            print("ACS compiled successfully.")
-        else:
-            raise Exception("No bytecode generated.")
-    except Exception as e:
-        print(f"ACS compilation failed: {e}")
-        print("Using dummy BEHAVIOR lump. GZDoom will compile SCRIPTS on load.")
-        # Force Hexen format by setting a dummy behavior lump
-        builder.map_data.behavior = b'ACSE\x08\x00\x00\x00\x00\x00\x00\x00' # Minimal header
+            
+             if (should_open_b) {{
+                if (!door_b_open) {{
+                    Door_Open({TAG_DOOR_B}, 16, 0);
+                    Sector_SetColor({TAG_DOOR_B}, 0, 255, 0);
+                    door_b_open = 1;
+                    if (ThingCount(T_NONE, TID_ITEM_B) == 0) {{
+                        SpawnSpot("ShellBox", 110 + Random(0, 4), TID_ITEM_B, 0);
+                    }}
+                }}
+                if (dur > 300 && tick % 300 == 0) {{
+                    if (ThingCount(T_NONE, TID_ITEM_B) == 0) {{
+                        SpawnSpot("ShellBox", 110 + Random(0, 4), TID_ITEM_B, 0);
+                    }}
+                }}
+            }} else {{
+                if (door_b_open) {{
+                    Door_Close({TAG_DOOR_B}, 16, 0);
+                    Sector_SetColor({TAG_DOOR_B}, 255, 0, 0);
+                    door_b_open = 0;
+                }}
+            }}
+            
+             if (should_open_c) {{
+                if (!door_c_open) {{
+                    Door_Open({TAG_DOOR_C}, 16, 0);
+                    Sector_SetColor({TAG_DOOR_C}, 0, 255, 0);
+                    door_c_open = 1;
+                    if (ThingCount(T_NONE, TID_ITEM_C) == 0) {{
+                        SpawnSpot("Medikit", 120 + Random(0, 4), TID_ITEM_C, 0);
+                    }}
+                }}
+                if (dur > 300 && tick % 300 == 0) {{
+                     if (ThingCount(T_NONE, TID_ITEM_C) == 0) {{
+                        SpawnSpot("Medikit", 120 + Random(0, 4), TID_ITEM_C, 0);
+                     }}
+                }}
+            }} else {{
+                if (door_c_open) {{
+                    Door_Close({TAG_DOOR_C}, 16, 0);
+                    Sector_SetColor({TAG_DOOR_C}, 255, 0, 0);
+                    door_c_open = 0;
+                }}
+            }}
+            
+            // Wave System
+            int max_enemies = (20 + wave * 5) * {cfg['enemy_difficulty']};
+            int spawn_interval = 200 - (wave * 20);
+            if (spawn_interval < 40) spawn_interval = 40;
+            
+            if (tick % spawn_interval == 0 && tick > 0 && ThingCount(T_NONE, TID_ENEMY_UNIT) < max_enemies) {{
+                int r = Random(0, 10);
+                int spawn_base = 200;
+                int r_spawn = Random(0, 2);
+                if (r_spawn == 1) spawn_base = 210;
+                if (r_spawn == 2) spawn_base = 220;
+                
+                int spawn_tid = spawn_base + Random(0, 4);
+                str spawn_class = "MeleeZombieman";
+                
+                if (wave == 0) {{
+                    spawn_class = "MeleeZombieman";
+                }} else if (wave == 1) {{
+                    if (r < 6) spawn_class = "MeleeZombieman";
+                    else spawn_class = "MeleeImp";
+                }} else if (wave < 3) {{
+                    if (r < 4) spawn_class = "MeleeImp";
+                    else spawn_class = "Demon";
+                }} else {{
+                    if (r < 5) spawn_class = "Demon";
+                    else spawn_class = "LostSoul";
+                }}
 
-    builder.map_data.scripts = acs.to_code()
-    
-    output_path = "examples/benchmark/output/armory_siege.wad"
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    builder.build(output_path)
-    print(f"WAD written to {output_path}")
+                SpawnSpot(spawn_class, spawn_tid, TID_TEMP_SPAWN, 0);
+                int cur_h = GetActorProperty(TID_TEMP_SPAWN, APROP_HEALTH);
+                SetActorProperty(TID_TEMP_SPAWN, APROP_HEALTH, FixedMul(cur_h, {health_mult_fixed}));
+                Thing_ChangeTID(TID_TEMP_SPAWN, TID_ENEMY_UNIT);
+            }}
+            
+            Delay(1);
+            tick++;
+        }}
+        """
+        acs.add_script(ScriptType.OPEN, script_body)
+        
+        acs.add_script(ScriptType.VOID, "Delay(35*3); Exit_Normal(0);", number=999)
+        
+        # Build logic
+        try:
+            print(f"Compiling ACS for {self.name}...")
+            bytecode = acs.compile()
+            if bytecode:
+                builder.map_data.behavior = bytecode
+            else:
+                builder.map_data.behavior = b'ACSE\x08\x00\x00\x00\x00\x00\x00\x00'
+        except Exception as e:
+            print(f"ACS compile error: {e}")
+            builder.map_data.behavior = b'ACSE\x08\x00\x00\x00\x00\x00\x00\x00'
+        
+        builder.map_data.scripts = acs.to_code()
+        
+        builder.build(output_path)
+        print(f"WAD written to {output_path}")
 
 if __name__ == "__main__":
-    create_armory_siege()
+    import os
+    print("Generating default Armory Siege...")
+    output = "examples/benchmark/output/armory_siege.wad"
+    os.makedirs(os.path.dirname(output), exist_ok=True)
+    scenario = ArmorySiegeScenario()
+    scenario.generate(output)
