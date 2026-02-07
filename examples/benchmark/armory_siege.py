@@ -76,6 +76,13 @@ ACTOR DefenseCore 15000
 ACTOR PlaceablePistol : Pistol 15001
 {{
   //$Category "Weapons"
+  Weapon.SlotNumber 1
+}}
+
+ACTOR Slot2SSG : SuperShotgun 15005
+{{
+  //$Category "Weapons"
+  Weapon.SlotNumber 2
 }}
 
 ACTOR MeleeRevenant : Revenant 15002
@@ -100,6 +107,9 @@ ACTOR MeleeZombieman : Zombieman 15003
     POSS F 8 A_CustomMeleeAttack(10)
     POSS E 8
     Goto See
+  Death:
+    POSS H 0 ACS_ExecuteAlways(998, 0)
+    Goto Super::Death
   }}
 }}
 
@@ -114,6 +124,29 @@ ACTOR MeleeImp : DoomImp 15004
     TROO EF 8 A_FaceTarget
     TROO G 6 A_CustomMeleeAttack(3 * random(1, 8), "imp/melee")
     Goto See
+  Death:
+    TROO I 0 ACS_ExecuteAlways(998, 0)
+    Goto Super::Death
+  }}
+}}
+
+ACTOR SiegeDemon : Demon 15006
+{{
+  States
+  {{
+  Death:
+    SARG I 0 ACS_ExecuteAlways(998, 0)
+    Goto Super::Death
+  }}
+}}
+
+ACTOR SiegeLostSoul : LostSoul 15007
+{{
+  States
+  {{
+  Death:
+    SKUL F 0 ACS_ExecuteAlways(998, 0)
+    Goto Super::Death
   }}
 }}
 """
@@ -266,8 +299,17 @@ ACTOR MeleeImp : DoomImp 15004
         health_mult = diff if diff < 1.0 else 1.0
         health_mult_fixed = int(health_mult * 65536)
         
+        # Generate ACS Health Bar Switch
+        bar_cases = []
+        for i in range(21):
+             filled = "=" * i
+             empty = "-" * (20 - i)
+             bar_cases.append(f'case {i}: bar_gfx = "\\cD{filled}\\cG{empty}"; break;')
+        bar_switch_str = "\n                ".join(bar_cases)
+        
         script_body = f"""
-        core_health_global = {int(cfg['core_health'])};
+        int max_core_health = {int(cfg['core_health'])};
+        core_health_global = max_core_health;
         int tick = 0;
         int cycle = 0;
         int wave = 0;
@@ -303,6 +345,19 @@ ACTOR MeleeImp : DoomImp 15004
             wave = tick / 1050; // Difficulty scaling
             
             core_health_global = GetActorProperty(TID_CORE, APROP_HEALTH);
+
+            // Health Bar
+            int hp_idx = (core_health_global * 20) / max_core_health;
+            if (hp_idx < 0) hp_idx = 0;
+            if (hp_idx > 20) hp_idx = 20;
+            str bar_gfx = "";
+            switch(hp_idx) {{
+                {bar_switch_str}
+            }}
+            SetFont("BIGFONT");
+            HudMessage(s:"Core: ", s:bar_gfx, s:"\\c-"; HUDMSG_PLAIN, 1, CR_WHITE, 0.5, 0.9, 0.1);
+            SetFont("BIGFONT");
+            HudMessage(d:core_health_global, s:"/", d:max_core_health; HUDMSG_PLAIN, 2, CR_WHITE, 0.5, 0.93, 0.1);
             
             // Door Logic with parameterized duration
             // Durations are relative to open_dur.
@@ -318,12 +373,12 @@ ACTOR MeleeImp : DoomImp 15004
                     Sector_SetColor({TAG_DOOR_A}, 0, 255, 0);
                     door_a_open = 1;
                     if (ThingCount(T_NONE, TID_ITEM_A) == 0) {{
-                        SpawnSpot("SuperShotgun", 100 + Random(0, 4), TID_ITEM_A, 0);
+                        SpawnSpot("Slot2SSG", 100 + Random(0, 4), TID_ITEM_A, 0);
                     }}
                 }}
                 if (dur > 300 && tick % 300 == 0) {{
                     if (ThingCount(T_NONE, TID_ITEM_A) == 0) {{
-                        SpawnSpot("SuperShotgun", 100 + Random(0, 4), TID_ITEM_A, 0);
+                        SpawnSpot("Slot2SSG", 100 + Random(0, 4), TID_ITEM_A, 0);
                     }}
                 }}
             }} else {{
@@ -400,10 +455,10 @@ ACTOR MeleeImp : DoomImp 15004
                     else spawn_class = "MeleeImp";
                 }} else if (wave < 3) {{
                     if (r < 4) spawn_class = "MeleeImp";
-                    else spawn_class = "Demon";
+                    else spawn_class = "SiegeDemon";
                 }} else {{
-                    if (r < 5) spawn_class = "Demon";
-                    else spawn_class = "LostSoul";
+                    if (r < 5) spawn_class = "SiegeDemon";
+                    else spawn_class = "SiegeLostSoul";
                 }}
 
                 SpawnSpot(spawn_class, spawn_tid, TID_TEMP_SPAWN, 0);
@@ -418,6 +473,7 @@ ACTOR MeleeImp : DoomImp 15004
         """
         acs.add_script(ScriptType.OPEN, script_body)
         
+        acs.add_script(ScriptType.VOID, "Delay(35*3); Thing_Remove(0);", number=998)
         acs.add_script(ScriptType.VOID, "Delay(35*3); Exit_Normal(0);", number=999)
         
         # Build logic
