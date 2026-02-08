@@ -38,6 +38,27 @@ class ArmorySiegeScenario(Scenario):
         
         # 0. Add DECORATE
         decorate_str = f"""
+ACTOR HarmlessTargeter
+{{
+  Radius 3
+  Height 1
+  Speed 100
+  Damage 1
+  DamageType "Taunt"
+  Projectile
+  +BLOODLESSIMPACT
+  +FORCEPAIN
+  States
+  {{
+  Spawn:
+    TNT1 A 1
+    Loop
+  Death:
+    TNT1 A 1
+    Stop
+  }}
+}}
+
 ACTOR DefenseCore 15000
 {{
   //$Category "Objectives"
@@ -51,6 +72,8 @@ ACTOR DefenseCore 15000
   +FRIENDLY
   +ISMONSTER
   +LOOKALLAROUND
+  +MISSILEMORE
+  +MISSILEEVENMORE
   DamageFactor "Player", 0
   
   States
@@ -60,11 +83,11 @@ ACTOR DefenseCore 15000
     TLMP A 0 A_Look
     Loop
   See:
-    TLMP A 4 A_Chase
+    TLMP A 1 A_Chase
     Loop
   Missile:
-    TLMP A 0 A_CustomBulletAttack(0, 0, 1, 1, "BulletPuff", 10000)
-    TLMP A 5
+    TLMP A 0 A_CustomMissile("HarmlessTargeter", 32, 0, 0, 0, 0)
+    TLMP A 2
     Goto See
   Death:
     TLMP A 1
@@ -87,6 +110,7 @@ ACTOR Slot2SSG : SuperShotgun 15005
 
 ACTOR MeleeRevenant : Revenant 15002
 {{
+  DamageFactor "Taunt", 0
   States
   {{
   Missile:
@@ -97,6 +121,7 @@ ACTOR MeleeRevenant : Revenant 15002
 
 ACTOR MeleeZombieman : Zombieman 15003
 {{
+  DamageFactor "Taunt", 0
   States
   {{
   Missile:
@@ -115,6 +140,7 @@ ACTOR MeleeZombieman : Zombieman 15003
 
 ACTOR MeleeImp : DoomImp 15004
 {{
+  DamageFactor "Taunt", 0
   States
   {{
   Missile:
@@ -132,6 +158,7 @@ ACTOR MeleeImp : DoomImp 15004
 
 ACTOR SiegeDemon : Demon 15006
 {{
+  DamageFactor "Taunt", 0
   States
   {{
   Death:
@@ -142,6 +169,7 @@ ACTOR SiegeDemon : Demon 15006
 
 ACTOR SiegeLostSoul : LostSoul 15007
 {{
+  DamageFactor "Taunt", 0
   States
   {{
   Death:
@@ -317,7 +345,7 @@ ACTOR SiegeLostSoul : LostSoul 15007
         int TID_ITEM_B = 402;
         int TID_ITEM_C = 403;
         int TID_ENEMY_UNIT = 500;
-        int TID_CORE = 100;
+        int TID_CORE = 90;
         int TID_TEMP_SPAWN = 900;
         
         SpawnSpot("DefenseCore", 50 + Random(0, 4), TID_CORE, 0);
@@ -354,9 +382,9 @@ ACTOR SiegeLostSoul : LostSoul 15007
             switch(hp_idx) {{
                 {bar_switch_str}
             }}
-            SetFont("BIGFONT");
-            HudMessage(s:"Core: ", s:bar_gfx, s:"\\c-"; HUDMSG_PLAIN, 1, CR_WHITE, 0.5, 0.9, 0.1);
-            SetFont("BIGFONT");
+            SetFont("SMALLFONT");
+            HudMessage(s:"", s:bar_gfx, s:"\\c-"; HUDMSG_PLAIN, 1, CR_WHITE, 0.5, 0.9, 0.1);
+            SetFont("SMALLFONT");
             HudMessage(d:core_health_global, s:"/", d:max_core_health; HUDMSG_PLAIN, 2, CR_WHITE, 0.5, 0.93, 0.1);
             
             // Door Logic with parameterized duration
@@ -464,6 +492,7 @@ ACTOR SiegeLostSoul : LostSoul 15007
                 SpawnSpot(spawn_class, spawn_tid, TID_TEMP_SPAWN, 0);
                 int cur_h = GetActorProperty(TID_TEMP_SPAWN, APROP_HEALTH);
                 SetActorProperty(TID_TEMP_SPAWN, APROP_HEALTH, FixedMul(cur_h, {health_mult_fixed}));
+                Thing_Hate(TID_TEMP_SPAWN, TID_CORE, 0);
                 Thing_ChangeTID(TID_TEMP_SPAWN, TID_ENEMY_UNIT);
             }}
             
