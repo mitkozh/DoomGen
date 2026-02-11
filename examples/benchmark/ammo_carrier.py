@@ -199,7 +199,7 @@ class AmmoCarrierScenario(Scenario):
         # Simple squares above HUD
         script_hud = """
         while (TRUE) {
-            SetFont("BIGFONT");
+            SetFont("SMALLFONT");
             int tid = ActivatorTID();
             
             // Determine Role
