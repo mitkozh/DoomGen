@@ -49,9 +49,17 @@ class ProceduralMapBuilder:
         floor_texture: str = "FLOOR4_8",
         ceiling_texture: str = "CEIL3_5",
         wall_texture: str = "STARTAN3",
+        middle_texture: Optional[str] = None,
+        lower_texture: Optional[str] = None,
+        upper_texture: Optional[str] = None,
+        light_level: int = 160,
         special: int = 0,
         tag: int = 0,
-        mode: str = "claim_void" # "claim_void" or "overwrite"
+        linedef_special: Optional[int] = None,
+        linedef_args: Optional[List[int]] = None,
+        linedef_flags: Optional[int] = None,
+        mode: str = "claim_void", # "claim_void" or "overwrite"
+        **kwargs
     ) -> str:
         """
         Adds an area (room, pillar, etc.) by selecting Voronoi cells within a shape.
@@ -59,6 +67,7 @@ class ProceduralMapBuilder:
         Args:
             mode: "claim_void" (default) only claims unassigned cells.
                   "overwrite" claims any cell within the shape (useful for sub-areas like pillars).
+            **kwargs: Additional properties to pass to the AreaConfig (e.g. x_offset, y_offset, light).
         """
         # Create Polygon if tuple provided
         if isinstance(shape, tuple) or isinstance(shape, list):
@@ -73,8 +82,16 @@ class ProceduralMapBuilder:
             floor_texture=floor_texture,
             ceiling_texture=ceiling_texture,
             wall_texture=wall_texture,
+            middle_texture=middle_texture,
+            lower_texture=lower_texture,
+            upper_texture=upper_texture,
+            light_level=light_level,
             special=special,
-            tag=tag
+            tag=tag,
+            linedef_special=linedef_special,
+            linedef_args=linedef_args or [],
+            linedef_flags=linedef_flags,
+            properties=kwargs
         )
         
         # Create Area (mostly for config storage now)
@@ -117,7 +134,13 @@ class ProceduralMapBuilder:
         ceiling_height: int = 128,
         floor_texture: str = "FLOOR4_8",
         ceiling_texture: str = "CEIL3_5",
-        wall_texture: str = "STARTAN3"
+        wall_texture: str = "STARTAN3",
+        middle_texture: Optional[str] = None,
+        lower_texture: Optional[str] = None,
+        upper_texture: Optional[str] = None,
+        light_level: int = 160,
+        special: int = 0,
+        tag: int = 0
     ) -> str:
         """
         Adds a corridor connecting two rooms using A* pathfinding on the cell mesh.
@@ -147,7 +170,13 @@ class ProceduralMapBuilder:
             ceiling_height=ceiling_height,
             floor_texture=floor_texture,
             ceiling_texture=ceiling_texture,
-            wall_texture=wall_texture
+            wall_texture=wall_texture,
+            middle_texture=middle_texture,
+            lower_texture=lower_texture,
+            upper_texture=upper_texture,
+            light_level=light_level,
+            special=special,
+            tag=tag
         )
         
         area = Area(name=corridor_name, transform=Transform(0,0), config=config)
@@ -314,7 +343,11 @@ class ProceduralMapBuilder:
         floor_texture: str = "FLOOR4_8",
         ceiling_texture: str = "CEIL3_5",
         wall_texture: str = "BIGDOOR2",
+        lower_texture: Optional[str] = None,
+        upper_texture: Optional[str] = None,
+        light_level: int = 160,
         special: int = 0,
+        tag: int = 0,
         connection_type: ConnectionType = ConnectionType.OPEN,
         linedef_special: Optional[int] = None,
         linedef_args: Optional[List[int]] = None,
@@ -350,7 +383,11 @@ class ProceduralMapBuilder:
             floor_texture=floor_texture,
             ceiling_texture=ceiling_texture,
             wall_texture=wall_texture,
+            lower_texture=lower_texture,
+            upper_texture=upper_texture,
+            light_level=light_level,
             special=special,
+            tag=tag,
             linedef_special=linedef_special,
             linedef_args=linedef_args or [],
             linedef_flags=linedef_flags
@@ -370,7 +407,7 @@ class ProceduralMapBuilder:
         
         return area_id
 
-    def connect_adjacent(self, room_a_name: str, room_b_name: str, type: ConnectionType = ConnectionType.OPEN, **kwargs):
+    def connect_adjacent(self, room_a_name: str, room_b_name: str, type: ConnectionType = ConnectionType.OPEN, silent: bool = False, **kwargs):
         """
         Explicitly connects two areas in the graph if they are physically adjacent in the mesh.
         """
@@ -389,7 +426,7 @@ class ProceduralMapBuilder:
             
         if is_adjacent:
             self.graph.connect(id_a, id_b, type, **kwargs)
-        else:
+        elif not silent:
             print(f"Warning: {room_a_name} and {room_b_name} are not adjacent.")
 
     def add_thing(self, thing_type: str, x: float, y: float, **kwargs):

@@ -37,7 +37,8 @@ class MapTranslator:
                 ceiling_texture=area.config.ceiling_texture,
                 light_level=area.config.light_level,
                 special=area.config.special,
-                tag=area.config.tag
+                tag=area.config.tag,
+                **area.config.properties
             )
             self.area_to_sector_idx[area_id] = sector_idx
 
@@ -77,7 +78,8 @@ class MapTranslator:
                 if sec_front is not None:
                     side_front = self.map_data.add_sidedef(
                         sector=sec_front,
-                        middle_texture=config_front.wall_texture
+                        middle_texture=config_front.wall_texture,
+                        **config_front.properties
                     )
                     # No back side
             
@@ -86,7 +88,8 @@ class MapTranslator:
                 if sec_front is not None:
                     side_front = self.map_data.add_sidedef(
                         sector=sec_front,
-                        middle_texture=config_front.wall_texture
+                        middle_texture=config_front.wall_texture,
+                        **config_front.properties
                     )
                     self.map_data.add_linedef(
                         start_vertex=v1_idx,
@@ -99,7 +102,8 @@ class MapTranslator:
                 if sec_back is not None:
                     side_back = self.map_data.add_sidedef(
                         sector=sec_back,
-                        middle_texture=config_back.wall_texture
+                        middle_texture=config_back.wall_texture,
+                        **config_back.properties
                     )
                     self.map_data.add_linedef(
                         start_vertex=v2_idx, # Reversed for back side
@@ -131,52 +135,54 @@ class MapTranslator:
                 # Lower Texture: Needed on the side with the LOWER floor (to fill the step up).
                 # Upper Texture: Needed on the side with the HIGHER ceiling (to fill the step down).
                 
-                # Front Side (belongs to sec_front)
-                lower_front = "-"
-                upper_front = "-"
+                # Logic for Lower/Upper Textures of side_front (Sector Front)
+                # side_front faces Sector Front.
+                # If Sector Back is Higher, side_front exposes the Wall of Sector Back.
                 
-                # Check for explicit overrides in config
-                if config_front.lower_texture:
-                    lower_front = config_front.lower_texture
-                elif f_front < f_back: # Front is lower than Back -> Front needs lower texture
-                    # The step face belongs to the Back sector's wall
+                # Default assignments (Always populate to support dynamic movement)
+                if config_back:
                     lower_front = config_back.wall_texture
+                    if config_back.lower_texture: lower_front = config_back.lower_texture
+                else: 
+                    lower_front = "-"
+
+                # Upper Front: Reflects Front Sector
+                lower_back = "-"
+
+                upper_front = config_front.wall_texture
+                if config_front.upper_texture: upper_front = config_front.upper_texture
                     
-                if config_front.upper_texture:
-                    upper_front = config_front.upper_texture
-                elif c_front > c_back: # Front is higher than Back -> Front needs upper texture
-                    # The drop face belongs to the Back sector's wall
-                    upper_front = config_back.wall_texture
-                    
+                # Upper Back: Reflects Back Sector
+                if config_back:
+                    upper_back = config_back.wall_texture
+                    if config_back.upper_texture: upper_back = config_back.upper_texture
+                else:
+                    upper_back = "-"
+
+                # Lower Back: Reflects Front Sector (Seen from Back if Back is Low)
+                lower_back = config_front.wall_texture
+                if config_front.lower_texture: lower_back = config_front.lower_texture
+
+                # Optimization: Optional cleanup if no height diffs (but we disable for dynamic support)
+                # if f_front >= f_back: lower_front = "-" 
+                # if f_back >= f_front: lower_back = "-"
+                # if c_front <= c_back: upper_front = "-"
+                # if c_back <= c_front: upper_back = "-"
+
                 side_front = self.map_data.add_sidedef(
                     sector=sec_front,
-                    middle_texture="-",
+                    middle_texture=config_front.middle_texture if config_front.middle_texture else "-",
                     lower_texture=lower_front,
-                    upper_texture=upper_front
+                    upper_texture=upper_front,
+                    **config_front.properties
                 )
-                
-                # Back Side (belongs to sec_back)
-                lower_back = "-"
-                upper_back = "-"
-                
-                # Check for explicit overrides in config
-                if config_back.lower_texture:
-                    lower_back = config_back.lower_texture
-                elif f_back < f_front: # Back is lower than Front -> Back needs lower texture
-                    # The step face belongs to the Front sector's wall
-                    lower_back = config_front.wall_texture
-                    
-                if config_back.upper_texture:
-                    upper_back = config_back.upper_texture
-                elif c_back > c_front: # Back is higher than Front -> Back needs upper texture
-                    # The drop face belongs to the Front sector's wall
-                    upper_back = config_front.wall_texture
-                    
+                  
                 side_back = self.map_data.add_sidedef(
                     sector=sec_back,
-                    middle_texture="-",
+                    middle_texture=config_back.middle_texture if config_back.middle_texture else "-",
                     lower_texture=lower_back,
-                    upper_texture=upper_back
+                    upper_texture=upper_back,
+                    **config_back.properties
                 )
             
             # Create Linedef
@@ -199,6 +205,10 @@ class MapTranslator:
                     # If it has a texture, we might want to block movement.
                     if connection.properties.get("blocking", True):
                         flags |= LinedefFlags.BLOCKING
+
+                # Apply explicit linedef flags from connection properties if present
+                if connection and "linedef_flags" in connection.properties:
+                    flags |= connection.properties["linedef_flags"]
 
                 # Handle Door Connection
                 if connection and connection.type == ConnectionType.DOOR:

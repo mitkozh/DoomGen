@@ -120,26 +120,40 @@ class WADWriter:
         
         # Add sectors
         for s in map_data.sectors:
-            editor.sectors.append(Sector(
-                z_floor=s.get('floor_height', 0),
-                z_ceil=s.get('ceiling_height', 128),
-                tx_floor=s.get('floor_texture', 'FLOOR4_8'),
-                tx_ceil=s.get('ceiling_texture', 'CEIL3_5'),
-                light=s.get('light_level', 160),
-                type=s.get('special', 0),
-                tag=s.get('tag', 0)
-            ))
+            sector_kwargs = {
+                'z_floor': s.get('floor_height', 0),
+                'z_ceil': s.get('ceiling_height', 128),
+                'tx_floor': s.get('floor_texture', 'FLOOR4_8'),
+                'tx_ceil': s.get('ceiling_texture', 'CEIL3_5'),
+                'light': s.get('light_level', 160),
+                'type': s.get('special', 0),
+                'tag': s.get('tag', 0)
+            }
+             # Add any extra properties provided by user (e.g. aliases)
+            standard_keys = {'floor_height', 'ceiling_height', 'floor_texture', 'ceiling_texture', 'light_level', 'special', 'tag'}
+            for k, v in s.items():
+                if k not in standard_keys:
+                    sector_kwargs[k] = v
+
+            editor.sectors.append(Sector(**sector_kwargs))
         
         # Add sidedefs
         for sd in map_data.sidedefs:
-            editor.sidedefs.append(Sidedef(
-                off_x=sd.get('x_offset', 0),
-                off_y=sd.get('y_offset', 0),
-                tx_up=sd.get('upper_texture', '-') if sd.get('upper_texture') != '-' else '-',
-                tx_low=sd.get('lower_texture', '-') if sd.get('lower_texture') != '-' else '-',
-                tx_mid=sd.get('middle_texture', 'STARTAN2') if sd.get('middle_texture') != '-' else '-',
-                sector=sd.get('sector', 0)
-            ))
+            side_kwargs = {
+                'off_x': sd.get('x_offset', 0),
+                'off_y': sd.get('y_offset', 0),
+                'tx_up': sd.get('upper_texture', '-') if sd.get('upper_texture') != '-' else '-',
+                'tx_low': sd.get('lower_texture', '-') if sd.get('lower_texture') != '-' else '-',
+                'tx_mid': sd.get('middle_texture', 'STARTAN2') if sd.get('middle_texture') != '-' else '-',
+                'sector': sd.get('sector', 0)
+            }
+            # Add extra properties
+            standard_keys = {'x_offset', 'y_offset', 'upper_texture', 'lower_texture', 'middle_texture', 'sector'}
+            for k, v in sd.items():
+                if k not in standard_keys:
+                    side_kwargs[k] = v
+
+            editor.sidedefs.append(Sidedef(**side_kwargs))
         
         # Add linedefs
         if use_hexen_format:
@@ -286,7 +300,8 @@ class DoomMapData:
         ceiling_texture: str = 'CEIL3_5',
         light_level: int = 160,
         special: int = 0,
-        tag: int = 0
+        tag: int = 0,
+        **kwargs
     ) -> int:
         """
         Add a sector.
@@ -299,12 +314,13 @@ class DoomMapData:
             light_level: Light level (0-255).
             special: Sector special type.
             tag: Sector tag for scripting.
+            **kwargs: Additional properties (e.g. for specific backend mappings).
         
         Returns:
             Index of the sector.
         """
         index = len(self.sectors)
-        self.sectors.append({
+        sector_data = {
             'floor_height': floor_height,
             'ceiling_height': ceiling_height,
             'floor_texture': floor_texture,
@@ -312,7 +328,9 @@ class DoomMapData:
             'light_level': light_level,
             'special': special,
             'tag': tag
-        })
+        }
+        sector_data.update(kwargs)
+        self.sectors.append(sector_data)
         return index
     
     def add_sidedef(
@@ -322,7 +340,8 @@ class DoomMapData:
         middle_texture: str = 'STARTAN2',
         lower_texture: str = '-',
         x_offset: int = 0,
-        y_offset: int = 0
+        y_offset: int = 0,
+        **kwargs
     ) -> int:
         """
         Add a sidedef.
@@ -334,19 +353,22 @@ class DoomMapData:
             lower_texture: Lower texture name.
             x_offset: Texture X offset.
             y_offset: Texture Y offset.
+            **kwargs: Additional properties.
         
         Returns:
             Index of the sidedef.
         """
         index = len(self.sidedefs)
-        self.sidedefs.append({
+        side_data = {
             'sector': sector,
             'upper_texture': upper_texture,
             'middle_texture': middle_texture,
             'lower_texture': lower_texture,
             'x_offset': x_offset,
             'y_offset': y_offset
-        })
+        }
+        side_data.update(kwargs)
+        self.sidedefs.append(side_data)
         return index
     
     def add_linedef(

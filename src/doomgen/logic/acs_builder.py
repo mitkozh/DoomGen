@@ -140,7 +140,15 @@ class ACSBuilder:
         self.includes: list[str] = []
         self.defines: dict[str, Any] = {}
         self.variables: list[ACSVariable] = []
+        self.global_code_blocks: list[str] = []
         self._next_script_num = 1
+    
+    def add_global_code(self, code: str) -> 'ACSBuilder':
+        """
+        Add a block of raw global code (e.g. function definitions).
+        """
+        self.global_code_blocks.append(code)
+        return self
     
     def add_include(self, filename: str) -> 'ACSBuilder':
         """
@@ -412,6 +420,11 @@ while (true)
         if self.variables:
             lines.append("")
         
+        # Global Code Blocks
+        for block in self.global_code_blocks:
+            lines.append(block)
+            lines.append("")
+
         # Scripts
         for script in self.scripts:
             lines.append(script.to_code())

@@ -24,6 +24,7 @@ class AreaConfig:
     floor_texture: str = "FLOOR4_8"
     ceiling_texture: str = "CEIL3_5"
     wall_texture: str = "STARTAN3"
+    middle_texture: Optional[str] = None # Explicit middle texture (usually for 2-sided lines like windows)
     lower_texture: Optional[str] = None # Explicit lower texture (overrides logic)
     upper_texture: Optional[str] = None # Explicit upper texture (overrides logic)
     light_level: int = 160
@@ -32,6 +33,7 @@ class AreaConfig:
     linedef_special: Optional[int] = None # Special for linedefs connecting to this area (e.g. for doors)
     linedef_args: List[int] = field(default_factory=list) # Args for the linedef special
     linedef_flags: Optional[int] = None # Explicit flags for the linedef (e.g. activation flags)
+    properties: Dict[str, Any] = field(default_factory=dict) # Catch-all for extra properties
 
 class Area:
     """
