@@ -40,6 +40,12 @@ from doomgen.doom.specials import (
     ExitAction,
     LightAction,
     SectorSpecial,
+    PolyobjAction,
+)
+
+from doomgen.doom.polyobjects import (
+    PolyobjectBuilder,
+    PolyobjectConfig,
 )
 
 __all__ = [
@@ -72,4 +78,7 @@ __all__ = [
     "ExitAction",
     "LightAction",
     "SectorSpecial",
+    "PolyobjAction",
+    "PolyobjectBuilder",
+    "PolyobjectConfig",
 ]

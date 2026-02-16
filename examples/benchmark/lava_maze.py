@@ -146,6 +146,16 @@ def create_scenario(output_path: str = "examples/benchmark/output/lava_maze.wad"
     acs.add_map_var("g_flash_g", initial=0)
     acs.add_map_var("g_flash_b", initial=0)
     acs.add_map_var("g_flash_state", initial=0) # 0=clear, 1=active
+    acs.add_global_var("lm_maze_size_global", 11, "int")
+    acs.add_global_var("lm_goal_grid_x_global", 13, "int")
+    acs.add_global_var("lm_p1_grid_x_global", 14, "int")
+    acs.add_global_var("lm_p1_grid_y_global", 15, "int")
+    acs.add_global_var("lm_flash_signal_global", 16, "int")
+    acs.add_global_var("lm_flash_active_global", 17, "int")
+    acs.add_global_var("lm_goal_grid_y_global", 18, "int")
+    acs.add_global_var("lm_maze_bits_0_global", 19, "int")
+    acs.add_global_var("lm_maze_bits_1_global", 20, "int")
+    acs.add_global_var("lm_maze_bits_2_global", 21, "int")
     
     acs.scripts = []  
     
@@ -169,6 +179,7 @@ def create_scenario(output_path: str = "examples/benchmark/output/lava_maze.wad"
     // Arrays for DFS
     int visited[MAP_WIDTH * MAP_WIDTH];
     int stack[100]; // Stack for DFS
+    int maze_bits_chunk[3];
     
     // Helper: Get Tag from Grid Coords
     function int get_tag(int x, int y) {{
@@ -207,6 +218,12 @@ def create_scenario(output_path: str = "examples/benchmark/output/lava_maze.wad"
         ChangeFloor(tag, "FLOOR4_8"); 
         Sector_SetDamage(tag, 0, 0); 
         Light_ChangeToValue(tag, 160); 
+        if (x >= 0 && x < MAP_WIDTH && y >= 0 && y < MAP_WIDTH) {{
+            int bit_idx = y * MAP_WIDTH + x;
+            int chunk = bit_idx / 27;
+            int shift = bit_idx % 27;
+            maze_bits_chunk[chunk] = maze_bits_chunk[chunk] | (1 << shift);
+        }}
     }}
 
     // Main Loop
@@ -217,6 +234,16 @@ def create_scenario(output_path: str = "examples/benchmark/output/lava_maze.wad"
         g_start_y = Random(0, MAP_WIDTH - 1);
 
         current_start_tag = get_tag(g_start_x, g_start_y);
+        lm_maze_size_global = current_maze_size;
+        lm_goal_grid_x_global = -1;
+        lm_goal_grid_y_global = -1;
+        lm_p1_grid_x_global = -1;
+        lm_p1_grid_y_global = -1;
+        lm_flash_signal_global = 0;
+        lm_flash_active_global = 0;
+        lm_maze_bits_0_global = 0;
+        lm_maze_bits_1_global = 0;
+        lm_maze_bits_2_global = 0;
         
         ACS_NamedExecute("GenerateMaze", 0, g_start_x, g_start_y, current_maze_size);
         
@@ -228,6 +255,8 @@ def create_scenario(output_path: str = "examples/benchmark/output/lava_maze.wad"
     script "GenerateMaze" (int sx, int sy, int size) {{
         int start_tag = get_tag(sx, sy);
         reset_map(start_tag);
+
+        for (int i = 0; i < 3; i++) maze_bits_chunk[i] = 0;
         
         carve(sx, sy);
         Sector_SetColor(start_tag, 0, 255, 0);
@@ -246,6 +275,8 @@ def create_scenario(output_path: str = "examples/benchmark/output/lava_maze.wad"
         int n_count;
         int next_packed, nx, ny, wall_x, wall_y;
         int last_visited_tag = start_tag;
+        int last_x = sx;
+        int last_y = sy;
         
         while (count_carved < size && stack_ptr > 0) {{
             int packed = stack[stack_ptr-1];
@@ -278,6 +309,8 @@ def create_scenario(output_path: str = "examples/benchmark/output/lava_maze.wad"
                 visited[ny * MAP_WIDTH + nx] = 1;
                 count_carved += 2;
                 last_visited_tag = get_tag(nx, ny);
+                last_x = nx;
+                last_y = ny;
                 
                 stack[stack_ptr++] = next_packed;
             }} else {{
@@ -286,6 +319,12 @@ def create_scenario(output_path: str = "examples/benchmark/output/lava_maze.wad"
         }}
         
         current_end_tag = last_visited_tag;
+        lm_maze_size_global = current_maze_size;
+        lm_goal_grid_x_global = last_x;
+        lm_goal_grid_y_global = last_y;
+        lm_maze_bits_0_global = maze_bits_chunk[0];
+        lm_maze_bits_1_global = maze_bits_chunk[1];
+        lm_maze_bits_2_global = maze_bits_chunk[2];
         
         if (current_end_tag == start_tag && size > 1) {{
         }}
@@ -353,17 +392,23 @@ def create_scenario(output_path: str = "examples/benchmark/output/lava_maze.wad"
             int gy = ((y >> 16) + offset) / CELL_SIZE;
             
             if (gx >= 0 && gx < MAP_WIDTH && gy >= 0 && gy < MAP_WIDTH) {{
+                lm_p1_grid_x_global = gx;
+                lm_p1_grid_y_global = gy;
                 int my_tag = get_tag(gx, gy);
                 
                 if (my_tag == current_end_tag) {{
                     current_maze_size += 2;
                     if (current_maze_size > MAX_TILES) current_maze_size = MAX_TILES;
                     if (current_maze_size < 4) current_maze_size = 4;
+                    lm_maze_size_global = current_maze_size;
                     
                     ACS_NamedExecute("GenerateMaze", 0, gx, gy, current_maze_size);
                     
                     Delay(35 * 2);
                 }}
+            }} else {{
+                lm_p1_grid_x_global = -1;
+                lm_p1_grid_y_global = -1;
             }}
             
             // Polling for Flash (Fix for stuck color)
@@ -376,12 +421,14 @@ def create_scenario(output_path: str = "examples/benchmark/output/lava_maze.wad"
                      // Use 1.0 alpha for full opacity
                      FadeTo(g_flash_r, g_flash_g, g_flash_b, 1.0, 0.1);
                      g_flash_state = 1;
+                     lm_flash_active_global = 1;
                 }}
             }} else {{
                 if (g_flash_state == 1) {{
                     // Fade Out to Blind (alpha 1.0) - Restore black screen
                     FadeTo(0, 0, 0, 1.0, 0.5);
                     g_flash_state = 0;
+                    lm_flash_active_global = 0;
                 }}
             }}
             
@@ -427,6 +474,7 @@ def create_scenario(output_path: str = "examples/benchmark/output/lava_maze.wad"
                 else if (CheckWeapon("PlasmaRifle")) {{ signal = 4; w_name = "BLUE"; }}
                 
                 if (signal != 0) {{
+                    lm_flash_signal_global = signal;
                     // Trigger Flash on Player 1 (Set Globals)
                     int fr=0, fg=0, fb=0;
                     if (signal == 1) {{ fr=0; fg=0.8; fb=0; }}

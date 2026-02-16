@@ -1,0 +1,614 @@
+import math
+import os
+import random
+from typing import Any, Dict, List, Tuple
+
+from doomgen.abstraction.layout import ConnectionType
+from doomgen.batch.scenario import Scenario
+from doomgen.builder import ProceduralMapBuilder
+from doomgen.doom.polyobjects import (
+    POLYOBJ_START_SPOT_THING,
+    PolyobjectBuilder,
+    PolyobjectConfig,
+)
+from doomgen.logic.acs_builder import ACSBuilder, ScriptType
+
+
+class PlatformChainScenario(Scenario):
+    """Structured 120-level vertical platform chain benchmark (uniform generation + ACS-driven roles)."""
+
+    def get_default_config(self) -> Dict[str, Any]:
+        return {
+            "seed": None,
+            "random_seed_on_generate": True,
+            "level_count": 120,
+            "base_height": 0,
+            "height_step": 12,
+            "max_players": 4,
+            "lava_height": -96,
+            "lava_damage": 12,
+            "polyobject_count": 8,
+            "map_radius": 1800,
+            "cell_spacing": 222,
+            "chain_max_len": 220,
+        }
+
+    def validate_config(self) -> None:
+        if int(self.config["level_count"]) != 120:
+            raise ValueError("level_count must be exactly 120")
+
+        players = int(self.config["max_players"])
+        if players < 1 or players > 4:
+            raise ValueError("max_players must be in range [1, 4]")
+
+        if int(self.config["height_step"]) < 8:
+            raise ValueError("height_step must be >= 8")
+
+        if int(self.config.get("chain_max_len", 220)) < 64:
+            raise ValueError("chain_max_len must be >= 64")
+
+    def _choose_seed(self) -> int:
+        cfg = self.config
+        if cfg["seed"] is not None:
+            return int(cfg["seed"])
+        if bool(cfg.get("random_seed_on_generate", True)):
+            return random.randint(0, 999999)
+        return 42
+
+    def _auto_connect_touching_areas(self, builder: ProceduralMapBuilder) -> None:
+        """Connect physically touching non-VOID areas to avoid accidental one-sided walls."""
+        touching_pairs: set[Tuple[str, str]] = set()
+        for idx, neighbors in builder.mesh.adjacency.items():
+            area_a = builder.seeds[idx].area_id
+            if area_a == "VOID":
+                continue
+            for n_idx in neighbors:
+                area_b = builder.seeds[n_idx].area_id
+                if area_b == "VOID" or area_a == area_b:
+                    continue
+                pair = (area_a, area_b) if area_a < area_b else (area_b, area_a)
+                touching_pairs.add(pair)
+
+        existing_pairs: set[Tuple[str, str]] = set()
+        for conn in builder.graph.connections:
+            pair = (
+                (conn.area_a_id, conn.area_b_id)
+                if conn.area_a_id < conn.area_b_id
+                else (conn.area_b_id, conn.area_a_id)
+            )
+            existing_pairs.add(pair)
+
+        for area_a, area_b in touching_pairs:
+            if (area_a, area_b) not in existing_pairs:
+                builder.graph.connect(area_a, area_b, ConnectionType.OPEN)
+
+    def _route_positions(self, level_count: int, spacing: int) -> List[Tuple[int, int]]:
+        """Build a serpentine 12x10 path for exactly 120 levels."""
+        cols = 12
+        rows = int(math.ceil(level_count / cols))
+
+        x0 = -((cols - 1) * spacing) // 2
+        y0 = -((rows - 1) * spacing) // 2
+
+        positions: List[Tuple[int, int]] = []
+        for i in range(level_count):
+            row = i // cols
+            col = i % cols
+            if row % 2 == 1:
+                col = cols - 1 - col
+
+            x = x0 + col * spacing
+            y = y0 + row * spacing
+            positions.append((x, y))
+
+        return positions
+
+    def generate(self, output_path: str) -> None:
+        cfg = self.config
+        seed = self._choose_seed()
+
+        level_count = int(cfg["level_count"])
+        max_players = int(cfg["max_players"])
+        base_height = int(cfg["base_height"])
+        height_step = int(cfg["height_step"])
+        map_radius = int(cfg["map_radius"])
+        spacing = int(cfg["cell_spacing"])
+        chain_max_len = int(cfg.get("chain_max_len", 220))
+        polyobject_count = max(1, int(cfg.get("polyobject_count", 1)))
+
+        builder = ProceduralMapBuilder(
+            bounds=(-map_radius, -map_radius, map_radius, map_radius),
+            num_seeds=26000,
+            seed=seed,
+        )
+
+        platform_w = 112
+        platform_h = 112
+        platform_floor = "FLOOR4_8"
+        mover_floor = "RROCK20"
+        lift_floor = "FLOOR1_1"
+        vertical_crusher_floor = "FLOOR7_2"
+        horizontal_crusher_floor = "FLAT5_4"
+        stable_floor = "FLOOR5_1"
+        platform_wall = "METAL2"
+        platform_light = 186
+        mover_panel_w = 56
+        mover_panel_h = 20
+        mover_start_gap = 10
+
+        platform_tags: List[int] = []
+        platform_base_z: List[int] = []
+        platform_names: List[str] = []
+        platform_centers: List[Tuple[int, int]] = []
+        bridge_tags: List[int] = []
+        obstacle_candidates: List[Tuple[int, int, int]] = []
+
+        positions = self._route_positions(level_count, spacing)
+
+        for idx in range(level_count):
+            x, y = positions[idx]
+            z = base_height + idx * height_step
+            tag = 7000 + idx
+            name = f"L{idx + 1:03d}"
+
+            builder.add_area(
+                name=name,
+                shape=(x, y, platform_w, platform_h),
+                floor_height=z,
+                ceiling_height=max(720, z + 520),
+                floor_texture=platform_floor,
+                ceiling_texture="CEIL3_5",
+                wall_texture=platform_wall,
+                lower_texture=platform_wall,
+                upper_texture=platform_wall,
+                light_level=platform_light,
+                tag=tag,
+                mode="overwrite",
+            )
+
+            platform_tags.append(tag)
+            platform_base_z.append(z)
+            platform_names.append(name)
+            platform_centers.append((x, y))
+
+            if idx >= 12 and idx % 7 == 0:
+                obstacle_candidates.append((idx, x + 18, y - 14))
+
+        for idx in range(6, level_count - 1, 4):
+            ax, ay = platform_centers[idx]
+            bx, by = platform_centers[idx + 1]
+            horizontal = abs(bx - ax) >= abs(by - ay)
+
+            mx = (ax + bx) // 2
+            my = (ay + by) // 2
+            bw, bh = (188, 36) if horizontal else (36, 188)
+
+            bridge_tag = 8200 + len(bridge_tags)
+            bridge_z = min(platform_base_z[idx], platform_base_z[idx + 1]) + 4
+
+            builder.add_area(
+                name=f"Bridge_{idx + 1:03d}",
+                shape=(mx, my, bw, bh),
+                floor_height=bridge_z,
+                ceiling_height=max(720, bridge_z + 520),
+                floor_texture="STEP1",
+                ceiling_texture="CEIL3_5",
+                wall_texture="METAL2",
+                lower_texture="METAL2",
+                upper_texture="METAL2",
+                light_level=192,
+                tag=bridge_tag,
+                mode="overwrite",
+            )
+            bridge_tags.append(bridge_tag)
+
+        spawn_points: List[Tuple[int, int]] = []
+        for i in range(max_players):
+            centroid = builder.get_area_centroid(platform_names[i])
+            if centroid is None:
+                sx, sy = platform_centers[i]
+            else:
+                sx, sy = int(centroid[0]), int(centroid[1])
+            spawn_points.append((sx, sy))
+
+        while len(spawn_points) < 4:
+            spawn_points.append(spawn_points[-1])
+
+        for i in range(4):
+            sx, sy = spawn_points[i]
+            builder.add_thing("MAP_SPOT", sx, sy, tid=100 + i)
+
+        builder.add_thing("PLAYER1_START", spawn_points[0][0], spawn_points[0][1], angle=0)
+        builder.add_thing("PLAYER2_START", spawn_points[1][0], spawn_points[1][1], angle=0)
+        builder.add_thing("PLAYER3_START", spawn_points[2][0], spawn_points[2][1], angle=0)
+        builder.add_thing("PLAYER4_START", spawn_points[3][0], spawn_points[3][1], angle=0)
+
+        lava_height = int(cfg["lava_height"])
+        lava_tag = 900
+        builder.add_area(
+            name="LavaBasin",
+            shape=(0, 0, map_radius * 2 - 100, map_radius * 2 - 100),
+            floor_height=lava_height,
+            ceiling_height=2048,
+            floor_texture="LAVA1",
+            ceiling_texture="RROCK16",
+            wall_texture="METAL2",
+            lower_texture="METAL2",
+            upper_texture="METAL2",
+            light_level=172,
+            tag=lava_tag,
+            mode="claim_void",
+        )
+
+        self._auto_connect_touching_areas(builder)
+
+        # Multiple small polyobject movers, each spawned between adjacent platforms.
+        po_builder = PolyobjectBuilder(builder.map_data)
+        poly_nums: List[int] = []
+        usable_pairs = max(1, level_count - 1)
+        actual_poly_count = min(polyobject_count, usable_pairs)
+
+        for po_idx in range(actual_poly_count):
+            sample = int(((po_idx + 1) * usable_pairs) / (actual_poly_count + 1))
+            pair_idx = min(level_count - 2, max(0, sample))
+
+            ax, ay = platform_centers[pair_idx]
+            bx, by = platform_centers[pair_idx + 1]
+            za = platform_base_z[pair_idx]
+            zb = platform_base_z[pair_idx + 1]
+
+            start_x = (ax + bx) // 2
+            start_y = (ay + by) // 2 + 30
+            start_z = min(za, zb)
+
+            poly_num = po_idx + 1
+            dummy_x = map_radius + 512 + (po_idx * 192)
+            dummy_y = map_radius + 512
+
+            po_builder.add_rect(
+                PolyobjectConfig(
+                    number=poly_num,
+                    center=(dummy_x, dummy_y),
+                    start_spot_center=(start_x, start_y),
+                    width=mover_panel_w,
+                    height=mover_panel_h,
+                    floor_height=start_z + 8,
+                    ceiling_height=start_z + 80,
+                    texture="METAL",
+                    light_level=196,
+                    start_spot_thing_type=POLYOBJ_START_SPOT_THING,
+                )
+            )
+            poly_nums.append(poly_num)
+
+        # Add static obstacles.
+        for idx, ox, oy in obstacle_candidates:
+            builder.add_thing(30 if idx % 2 == 0 else 31, ox, oy)
+
+        acs = ACSBuilder()
+        acs.add_include("zcommon.acs")
+        acs.add_global_var("pc_max_chain_dist_global", 51, "int")
+        acs.add_global_var("pc_chain_break_events_global", 52, "int")
+        acs.add_global_var("pc_dragged_links_global", 53, "int")
+
+        acs.add_script(
+            ScriptType.ENTER,
+            f"""
+            int pn = PlayerNumber();
+            int p_tid;
+            int spot;
+            if (pn < 0 || pn >= {max_players}) terminate;
+            p_tid = 1000 + pn;
+            Thing_ChangeTID(0, p_tid);
+            spot = 100 + pn;
+            SetActorPosition(0, GetActorX(spot), GetActorY(spot), GetActorZ(spot), 0);
+
+            int overlay_tick = 0;
+            int chain_limit = {chain_max_len} << 16;
+
+            while (TRUE)
+            {{
+                if (overlay_tick % 5 == 0)
+                {{
+                    int nearest = 0;
+                    int farthest = 0;
+                    int teammate_found = 0;
+
+                    int my_x = GetActorX(p_tid);
+                    int my_y = GetActorY(p_tid);
+
+                    int other;
+                    for (other = 0; other < {max_players}; other++)
+                    {{
+                        if (other == pn) continue;
+                        if (!PlayerInGame(other)) continue;
+
+                        int other_tid = 1000 + other;
+                        if (ThingCount(0, other_tid) <= 0) continue;
+
+                        int dx = my_x - GetActorX(other_tid);
+                        int dy = my_y - GetActorY(other_tid);
+                        int adx = dx;
+                        int ady = dy;
+                        if (adx < 0) adx = -adx;
+                        if (ady < 0) ady = -ady;
+
+                        int d;
+                        if (adx > ady) {{
+                            d = adx + (ady >> 1);
+                        }} else {{
+                            d = ady + (adx >> 1);
+                        }}
+
+                        if (!teammate_found || d < nearest) nearest = d;
+                        if (!teammate_found || d > farthest) farthest = d;
+                        teammate_found = 1;
+                    }}
+
+                    if (!teammate_found)
+                    {{
+                        FadeTo(0, 0, 0, 0.0, 0.15);
+                    }}
+                    else if (farthest <= (chain_limit * 3) / 4)
+                    {{
+                        FadeTo(0, 200, 32, 0.06, 0.15);
+                    }}
+                    else if (farthest <= chain_limit)
+                    {{
+                        FadeTo(230, 190, 0, 0.09, 0.15);
+                    }}
+                    else
+                    {{
+                        FadeTo(255, 48, 0, 0.14, 0.15);
+                    }}
+                }}
+
+                Delay(1);
+                overlay_tick++;
+            }}
+            """,
+            number=12,
+        )
+
+        acs.add_script(
+            ScriptType.RESPAWN,
+            f"""
+            int pn = PlayerNumber();
+            int p_tid;
+            int spot;
+            if (pn < 0 || pn >= {max_players}) terminate;
+            p_tid = 1000 + pn;
+            Thing_ChangeTID(0, p_tid);
+            spot = 100 + pn;
+            SetActorPosition(0, GetActorX(spot), GetActorY(spot), GetActorZ(spot), 0);
+            """,
+            number=11,
+        )
+
+        acs.add_script(
+            ScriptType.VOID,
+            f"""
+            while (TRUE)
+            {{
+                {chr(10).join([f'Polyobj_Move({n}, 16, {192 if i % 2 == 0 else 64}, {128 + (i % 3) * 32});' for i, n in enumerate(poly_nums)])}
+                Delay(5 * 35);
+                {chr(10).join([f'Polyobj_Move({n}, 16, {64 if i % 2 == 0 else 192}, {128 + (i % 3) * 32});' for i, n in enumerate(poly_nums)])}
+                Delay(5 * 35);
+            }}
+            """,
+            number=10,
+        )
+
+        acs.add_script(
+            ScriptType.DEATH,
+            """
+            Delay(1);
+            Exit_Normal(0);
+            """,
+            number=13,
+        )
+
+        dynamic_lines: List[str] = []
+        # Keep earliest levels stable for spawn safety.
+        safe_start_levels = 8
+
+        for idx, tag in enumerate(platform_tags):
+            z = platform_base_z[idx]
+            low = z
+            moving_high = z + 80
+            lift_high = z + 152
+            crusher_open_ceiling = z + 520
+
+            if idx < safe_start_levels:
+                continue
+
+            is_row_end = (idx % 12) == 11
+
+            if is_row_end:
+                dynamic_lines.append(
+                    f"""
+                    ChangeFloor({tag}, "{stable_floor}");
+                    Sector_SetDamage({tag}, 0, 0);
+                    Floor_Stop({tag});
+                    Floor_MoveToValue({tag}, 14, {low}, 0);
+                    Ceiling_MoveToValue({tag}, 14, {crusher_open_ceiling}, 0);
+                    """
+                )
+                continue
+
+            dynamic_lines.append(
+                f"""
+                if ((({tag} * 37 + run_shift) % 100) < 16) {{
+                    ChangeFloor({tag}, "{mover_floor}");
+                    Sector_SetDamage({tag}, 0, 0);
+                    if (((tick + {idx * 7}) % 120) < 60) {{
+                        Floor_Stop({tag});
+                        Floor_MoveToValue({tag}, 10, {moving_high}, 0);
+                    }} else {{
+                        Floor_Stop({tag});
+                        Floor_MoveToValue({tag}, 10, {low}, 0);
+                    }}
+                    Ceiling_Stop({tag});
+                    Ceiling_MoveToValue({tag}, 14, {crusher_open_ceiling}, 0);
+                }} else if ((({tag} * 37 + run_shift) % 100) < 28) {{
+                    ChangeFloor({tag}, "{lift_floor}");
+                    Sector_SetDamage({tag}, 0, 0);
+                    if (((tick + {idx * 9}) % 170) < 85) {{
+                        Floor_Stop({tag});
+                        Floor_MoveToValue({tag}, 8, {lift_high}, 0);
+                    }} else {{
+                        Floor_Stop({tag});
+                        Floor_MoveToValue({tag}, 8, {low}, 0);
+                    }}
+                    Ceiling_Stop({tag});
+                    Ceiling_MoveToValue({tag}, 14, {crusher_open_ceiling}, 0);
+                }} else if ((({tag} * 37 + run_shift) % 100) < 38) {{
+                    ChangeFloor({tag}, "{vertical_crusher_floor}");
+                    Floor_Stop({tag});
+                    Floor_MoveToValue({tag}, 14, {low}, 0);
+                    Sector_SetDamage({tag}, 0, 0);
+                    int crush_phase_{idx} = (tick + {idx * 11}) % 100;
+                    if (crush_phase_{idx} < 45) {{
+                        Ceiling_Stop({tag});
+                        Ceiling_MoveToValue({tag}, 12, {low + 16}, 0);
+                    }} else {{
+                        Ceiling_Stop({tag});
+                        Ceiling_MoveToValue({tag}, 12, {crusher_open_ceiling}, 0);
+                    }}
+                }} else if ((({tag} * 37 + run_shift) % 100) < 50) {{
+                    ChangeFloor({tag}, "{horizontal_crusher_floor}");
+                    Sector_SetDamage({tag}, 0, 0);
+                    Floor_Stop({tag});
+                    Floor_MoveToValue({tag}, 12, {low}, 0);
+                    Ceiling_Stop({tag});
+                    Ceiling_MoveToValue({tag}, 14, {crusher_open_ceiling}, 0);
+                }} else {{
+                    ChangeFloor({tag}, "{platform_floor}");
+                    Sector_SetDamage({tag}, 0, 0);
+                    Floor_Stop({tag});
+                    Floor_MoveToValue({tag}, 14, {low}, 0);
+                    Ceiling_Stop({tag});
+                    Ceiling_MoveToValue({tag}, 14, {crusher_open_ceiling}, 0);
+                }}
+                """
+            )
+
+        bridge_texture_lines: List[str] = []
+        for t in bridge_tags:
+            bridge_texture_lines.append(f'ChangeFloor({t}, "STEP1");')
+
+        chain_lines: List[str] = []
+        for follower in range(1, max_players):
+            leader = follower - 1
+            chain_lines.append(
+                f"""
+                if (PlayerInGame({leader}) && PlayerInGame({follower})) {{
+                    int a_tid_{follower} = {1000 + leader};
+                    int b_tid_{follower} = {1000 + follower};
+                    if (ThingCount(0, a_tid_{follower}) > 0 && ThingCount(0, b_tid_{follower}) > 0) {{
+                        int ax_{follower} = GetActorX(a_tid_{follower});
+                        int ay_{follower} = GetActorY(a_tid_{follower});
+                        int bx_{follower} = GetActorX(b_tid_{follower});
+                        int by_{follower} = GetActorY(b_tid_{follower});
+
+                        int dx_{follower} = ax_{follower} - bx_{follower};
+                        int dy_{follower} = ay_{follower} - by_{follower};
+                        int adx_{follower} = dx_{follower};
+                        int ady_{follower} = dy_{follower};
+                        if (adx_{follower} < 0) adx_{follower} = -adx_{follower};
+                        if (ady_{follower} < 0) ady_{follower} = -ady_{follower};
+
+                        int dist_{follower};
+                        if (adx_{follower} > ady_{follower}) {{
+                            dist_{follower} = adx_{follower} + (ady_{follower} >> 1);
+                        }} else {{
+                            dist_{follower} = ady_{follower} + (adx_{follower} >> 1);
+                        }}
+
+                        if (dist_{follower} > max_chain_dist) max_chain_dist = dist_{follower};
+
+                        int chain_limit_{follower} = {chain_max_len} << 16;
+                        if (dist_{follower} > chain_limit_{follower} && dist_{follower} > 0) {{
+                            dragged_links_count++;
+                            chain_break_events++;
+                            int keep_half_{follower} = ({max(64, chain_max_len - 24)} << 15);
+                            int ratio_{follower} = FixedDiv(keep_half_{follower}, dist_{follower});
+                            int mx_{follower} = (ax_{follower} + bx_{follower}) >> 1;
+                            int my_{follower} = (ay_{follower} + by_{follower}) >> 1;
+                            int nax_{follower} = mx_{follower} + FixedMul(dx_{follower}, ratio_{follower});
+                            int nay_{follower} = my_{follower} + FixedMul(dy_{follower}, ratio_{follower});
+                            int nbx_{follower} = mx_{follower} - FixedMul(dx_{follower}, ratio_{follower});
+                            int nby_{follower} = my_{follower} - FixedMul(dy_{follower}, ratio_{follower});
+
+                            SetActorPosition(a_tid_{follower}, nax_{follower}, nay_{follower}, GetActorZ(a_tid_{follower}), 0);
+                            SetActorPosition(b_tid_{follower}, nbx_{follower}, nby_{follower}, GetActorZ(b_tid_{follower}), 0);
+                        }}
+                    }}
+                }}
+                """
+            )
+
+        dynamic_block = "\n".join(dynamic_lines)
+        bridge_texture_block = "\n".join(bridge_texture_lines)
+        chain_block = "\n".join(chain_lines)
+
+        acs_open = f"""
+        int tick = 0;
+        int run_shift = Random(0, 4095);
+        int chain_break_events = 0;
+        int max_chain_dist = 0;
+        int dragged_links_count = 0;
+        Sector_SetDamage({lava_tag}, {int(cfg['lava_damage'])}, 14);
+        ACS_ExecuteAlways(10, 0);
+
+        pc_max_chain_dist_global = 0;
+        pc_chain_break_events_global = 0;
+        pc_dragged_links_global = 0;
+
+        while (TRUE)
+        {{
+            if (tick % 5 == 0)
+            {{
+                max_chain_dist = 0;
+                dragged_links_count = 0;
+
+                {bridge_texture_block}
+                {dynamic_block}
+                {chain_block}
+
+                pc_max_chain_dist_global = max_chain_dist;
+                pc_chain_break_events_global = chain_break_events;
+                pc_dragged_links_global = dragged_links_count;
+            }}
+
+            Delay(1);
+            tick++;
+        }}
+        """
+        acs.add_script(ScriptType.OPEN, acs_open, number=1)
+
+        try:
+            print(f"Compiling ACS for {self.name}...")
+            compiled = acs.compile()
+            builder.map_data.behavior = compiled if compiled else b"ACSE\x08\x00\x00\x00\x00\x00\x00\x00"
+        except Exception as e:
+            print(f"ACS compile warning: {e}")
+            try:
+                debug_path = os.path.join(os.path.dirname(output_path), "platform_chain_debug.acs")
+                acs.save_source(debug_path)
+                print(f"Wrote ACS debug source to {debug_path}")
+            except Exception:
+                pass
+            builder.map_data.behavior = b"ACSE\x08\x00\x00\x00\x00\x00\x00\x00"
+
+        builder.map_data.scripts = acs.to_code()
+
+        builder.build(output_path)
+        print(f"Platform Chain WAD written to {output_path} (seed={seed})")
+
+
+if __name__ == "__main__":
+    output = "examples/benchmark/output/platform_chain.wad"
+    os.makedirs(os.path.dirname(output), exist_ok=True)
+    scenario = PlatformChainScenario()
+    scenario.generate(output)

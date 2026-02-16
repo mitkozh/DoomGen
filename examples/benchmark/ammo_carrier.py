@@ -109,6 +109,11 @@ class AmmoCarrierScenario(Scenario):
         # --- ACS Logic ---
         acs = ACSBuilder()
         acs.add_include("zcommon.acs")
+        acs.add_global_var("ac_shooter_ammo_global", 41, "int")
+        acs.add_global_var("ac_carrier_deliveries_global", 42, "int")
+        acs.add_global_var("ac_world_ammo_packs_global", 43, "int")
+        acs.add_global_var("ac_alive_enemies_global", 44, "int")
+        acs.add_global_var("ac_low_ammo_alert_global", 45, "int")
         
         # Script 1: Player Setup & Role Assignment
         script_setup = """
@@ -184,6 +189,7 @@ class AmmoCarrierScenario(Scenario):
                     TakeInventory("Clip", clips);
                     // Give to shooter
                     GiveActorInventory(100, "Clip", clips);
+                    ac_carrier_deliveries_global++;
                     AmbientSound("misc/pickup", 127);
                     
                     // Visual feedback
@@ -266,17 +272,38 @@ class AmmoCarrierScenario(Scenario):
                      
                      // Spawn if spot exists
                      if (ThingCount(T_NONE, spot_tid) > 0) {
-                        SpawnSpotFacing(type, spot_tid, 0);
+                        SpawnSpotFacing(type, spot_tid, 700);
                         spawned++;
                      }
                  }
             }
+            ac_alive_enemies_global = ThingCount(T_NONE, 700);
             if (spawned > 0) {
                 // Alert if wave is huge?
             }
         }
         """
         acs.add_script(ScriptType.OPEN, script_spawner, number=4)
+
+        acs.add_script(ScriptType.OPEN, """
+        ac_shooter_ammo_global = 0;
+        ac_carrier_deliveries_global = 0;
+        ac_world_ammo_packs_global = 0;
+        ac_alive_enemies_global = 0;
+        ac_low_ammo_alert_global = 0;
+
+        while (TRUE) {
+            int shooter_ammo = CheckActorInventory(100, "Clip");
+            ac_shooter_ammo_global = shooter_ammo;
+            if (shooter_ammo < 40) {
+                ac_low_ammo_alert_global = 1;
+            } else {
+                ac_low_ammo_alert_global = 0;
+            }
+            ac_alive_enemies_global = ThingCount(T_NONE, 700);
+            Delay(4);
+        }
+        """, number=7)
 
         # Script 5: Force Freeze
         acs.add_script(ScriptType.VOID, "SetActorVelocity(0, 0, 0, 0, FALSE, FALSE); while(TRUE) { SetActorVelocity(0, 0, 0, 0, FALSE, FALSE); Delay(1); }", number=5)
@@ -375,6 +402,7 @@ class AmmoCarrierScenario(Scenario):
         while(TRUE) {{
             // Count current ammo in the world
             int current_ammo = ThingCount(T_NONE, tid_ammo);
+            ac_world_ammo_packs_global = current_ammo;
             
             if (current_ammo < max_ammo) {{
                 // Try to spawn new ammo

@@ -180,6 +180,10 @@ class SmartEnemiesScenario(Scenario):
                 spots_placed += 1
 
         acs = ACSBuilder()
+        acs.add_global_var("se_alive_enemies_global", 31, "int")
+        acs.add_global_var("se_fast_enemies_global", 32, "int")
+        acs.add_global_var("se_fast_activation_events_global", 33, "int")
+        acs.add_global_var("se_spawn_events_global", 34, "int")
         
         # Logic constants
         radius_sq = cfg["proximity_radius"] * cfg["proximity_radius"]
@@ -217,14 +221,26 @@ class SmartEnemiesScenario(Scenario):
             // Set Sector Damage via ACS
             // Tag, Damage Amount, Interval (0=Default), MOD_UNKNOWN(0)
             Sector_SetDamage(ARENA_TAG, 1, 0); 
+            se_alive_enemies_global = 0;
+            se_fast_enemies_global = 0;
+            se_fast_activation_events_global = 0;
+            se_spawn_events_global = 0;
+            int fast_state[MAX_ENEMIES];
+            for (int i = 0; i < MAX_ENEMIES; i++) {{
+                fast_state[i] = 0;
+            }}
             
             while (TRUE) {{
+                int alive_count = 0;
+                int fast_count = 0;
+
                 // Iterate all potential enemies
                 for (int i = 0; i < MAX_ENEMIES; i++) {{
                     int etid = ENEMY_BASE_TID + i;
                     
                     // Only process alive enemies
                     if (GetActorProperty(etid, APROP_Health) > 0) {{
+                        alive_count++;
                         int nearby_players = 0;
                         int ex = GetActorX(etid) >> 16;
                         int ey = GetActorY(etid) >> 16;
@@ -257,15 +273,35 @@ class SmartEnemiesScenario(Scenario):
                         if (closest_pid != 0) {{
                             Thing_Hate(etid, closest_pid, 1);
                         }}
+
+                        int is_fast = 0;
+                        if (nearby_players > 1) {{
+                            is_fast = 1;
+                        }}
+
+                        if (is_fast) {{
+                            fast_count++;
+                            if (fast_state[i] == 0) {{
+                                se_fast_activation_events_global++;
+                                fast_state[i] = 1;
+                            }}
+                        }} else {{
+                            fast_state[i] = 0;
+                        }}
                         
                         // Apply movement behavior only (kept lightweight to reduce ACS overhead)
-                        if (nearby_players > 1) {{
+                        if (is_fast) {{
                             SetActorProperty(etid, APROP_Speed, 70.0);
                         }} else {{
                             SetActorProperty(etid, APROP_Speed, 21.0);
                         }}
+                    }} else {{
+                        fast_state[i] = 0;
                     }}
                 }}
+
+                se_alive_enemies_global = alive_count;
+                se_fast_enemies_global = fast_count;
                 Delay(8);
             }}
         }}
@@ -306,6 +342,7 @@ class SmartEnemiesScenario(Scenario):
                         
                             // Spawn sound effect at spot
                             PlaySound(spot_tid, "misc/teleport", CHAN_BODY, 1.0, FALSE, ATTN_NORM);
+                            se_spawn_events_global++;
                         
                             break; // Only spawn one per interval
                         }}

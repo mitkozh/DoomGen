@@ -101,6 +101,25 @@ class CrusherAction(IntEnum):
     W1_CRUSHER_SILENT = 141
 
 
+class PolyobjAction(IntEnum):
+    """Hexen/ZDoom polyobject actions."""
+    START_LINE = 1
+    ROTATE_LEFT = 2
+    ROTATE_RIGHT = 3
+    MOVE = 4
+    EXPLICIT_LINE = 5
+    MOVE_TIMES8 = 6
+    DOOR_SWING = 7
+    DOOR_SLIDE = 8
+    OR_ROTATE_LEFT = 10
+    OR_ROTATE_RIGHT = 11
+    OR_MOVE = 12
+    OR_MOVE_TIMES8 = 13
+    OR_MOVE_TO = 14
+    OR_MOVE_TO_SPOT = 15
+    STOP = 16
+
+
 class StairAction(IntEnum):
     """Stair building actions."""
     S1_STAIRS_8 = 7                 # Build stairs, 8 unit steps

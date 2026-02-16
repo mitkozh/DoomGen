@@ -63,6 +63,28 @@ builder.build("output/my_map.wad")
 - `omgifol` (for WAD I/O)
 - `acc` (ACS Compiler) - usually included with GZDoom or available separately.
 
+## Benchmark Scenarios
+
+Run the new chained-platform benchmark:
+
+```bash
+python examples/benchmark/platform_chain.py
+```
+
+This generates:
+
+- `examples/benchmark/output/platform_chain.wad`
+
+Batch-generate varied platform-chain configurations:
+
+```bash
+python examples/benchmark/batches/generate_platform_chain_batch.py
+```
+
+Batch output directory:
+
+- `examples/benchmark/output/batch_platform_chain/`
+
 ## License
 
 MIT License
