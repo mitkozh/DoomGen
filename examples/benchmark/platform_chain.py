@@ -30,7 +30,7 @@ class PlatformChainScenario(Scenario):
             "polyobject_count": 8,
             "map_radius": 1800,
             "cell_spacing": 222,
-            "chain_max_len": 220,
+            "chain_max_len": 250,
         }
 
     def validate_config(self) -> None:
@@ -44,7 +44,7 @@ class PlatformChainScenario(Scenario):
         if int(self.config["height_step"]) < 8:
             raise ValueError("height_step must be >= 8")
 
-        if int(self.config.get("chain_max_len", 220)) < 64:
+        if int(self.config.get("chain_max_len", 250)) < 64:
             raise ValueError("chain_max_len must be >= 64")
 
     def _choose_seed(self) -> int:
@@ -113,7 +113,7 @@ class PlatformChainScenario(Scenario):
         height_step = int(cfg["height_step"])
         map_radius = int(cfg["map_radius"])
         spacing = int(cfg["cell_spacing"])
-        chain_max_len = int(cfg.get("chain_max_len", 220))
+        chain_max_len = int(cfg.get("chain_max_len", 250))
         polyobject_count = max(1, int(cfg.get("polyobject_count", 1)))
 
         builder = ProceduralMapBuilder(
