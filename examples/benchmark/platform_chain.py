@@ -124,12 +124,14 @@ class PlatformChainScenario(Scenario):
 
         platform_w = 112
         platform_h = 112
+        # Color Coding:
+        # FLOOR4_8 (Blue-Grey) -> Standard Platform
         platform_floor = "FLOOR4_8"
-        mover_floor = "RROCK20"
-        lift_floor = "FLOOR1_1"
-        vertical_crusher_floor = "FLOOR7_2"
-        horizontal_crusher_floor = "FLAT5_4"
-        stable_floor = "FLOOR5_1"
+        # CEIL3_5 (Grey Tiles) -> Lift
+        lift_floor = "FLAT14"
+        # BLOOD1 (Red Blood) -> Vertical Crusher
+        vertical_crusher_floor = "BLOOD1"
+
         platform_wall = "METAL2"
         platform_light = 186
         mover_panel_w = 56
@@ -155,9 +157,9 @@ class PlatformChainScenario(Scenario):
                 name=name,
                 shape=(x, y, platform_w, platform_h),
                 floor_height=z,
-                ceiling_height=max(720, z + 520),
+                ceiling_height=2048,
                 floor_texture=platform_floor,
-                ceiling_texture="CEIL3_5",
+                ceiling_texture="RROCK16",
                 wall_texture=platform_wall,
                 lower_texture=platform_wall,
                 upper_texture=platform_wall,
@@ -190,9 +192,9 @@ class PlatformChainScenario(Scenario):
                 name=f"Bridge_{idx + 1:03d}",
                 shape=(mx, my, bw, bh),
                 floor_height=bridge_z,
-                ceiling_height=max(720, bridge_z + 520),
+                ceiling_height=2048,
                 floor_texture="STEP1",
-                ceiling_texture="CEIL3_5",
+                ceiling_texture="RROCK16",
                 wall_texture="METAL2",
                 lower_texture="METAL2",
                 upper_texture="METAL2",
@@ -290,6 +292,7 @@ class PlatformChainScenario(Scenario):
         acs.add_global_var("pc_max_chain_dist_global", 51, "int")
         acs.add_global_var("pc_chain_break_events_global", 52, "int")
         acs.add_global_var("pc_dragged_links_global", 53, "int")
+        acs.add_global_var("pc_level_reached_global", 54, "int")
 
         acs.add_script(
             ScriptType.ENTER,
@@ -417,7 +420,7 @@ class PlatformChainScenario(Scenario):
             low = z
             moving_high = z + 80
             lift_high = z + 152
-            crusher_open_ceiling = z + 520
+            crusher_open_ceiling = 2048
 
             if idx < safe_start_levels:
                 continue
@@ -427,7 +430,7 @@ class PlatformChainScenario(Scenario):
             if is_row_end:
                 dynamic_lines.append(
                     f"""
-                    ChangeFloor({tag}, "{stable_floor}");
+                    ChangeFloor({tag}, "{platform_floor}");
                     Sector_SetDamage({tag}, 0, 0);
                     Floor_Stop({tag});
                     Floor_MoveToValue({tag}, 14, {low}, 0);
@@ -438,19 +441,7 @@ class PlatformChainScenario(Scenario):
 
             dynamic_lines.append(
                 f"""
-                if ((({tag} * 37 + run_shift) % 100) < 16) {{
-                    ChangeFloor({tag}, "{mover_floor}");
-                    Sector_SetDamage({tag}, 0, 0);
-                    if (((tick + {idx * 7}) % 120) < 60) {{
-                        Floor_Stop({tag});
-                        Floor_MoveToValue({tag}, 10, {moving_high}, 0);
-                    }} else {{
-                        Floor_Stop({tag});
-                        Floor_MoveToValue({tag}, 10, {low}, 0);
-                    }}
-                    Ceiling_Stop({tag});
-                    Ceiling_MoveToValue({tag}, 14, {crusher_open_ceiling}, 0);
-                }} else if ((({tag} * 37 + run_shift) % 100) < 28) {{
+                if ((({tag} * 37 + run_shift) % 100) < 28) {{
                     ChangeFloor({tag}, "{lift_floor}");
                     Sector_SetDamage({tag}, 0, 0);
                     if (((tick + {idx * 9}) % 170) < 85) {{
@@ -461,34 +452,20 @@ class PlatformChainScenario(Scenario):
                         Floor_MoveToValue({tag}, 8, {low}, 0);
                     }}
                     Ceiling_Stop({tag});
-                    Ceiling_MoveToValue({tag}, 14, {crusher_open_ceiling}, 0);
+                    Ceiling_MoveToValue({tag}, 64, {crusher_open_ceiling}, 0);
                 }} else if ((({tag} * 37 + run_shift) % 100) < 38) {{
                     ChangeFloor({tag}, "{vertical_crusher_floor}");
                     Floor_Stop({tag});
-                    Floor_MoveToValue({tag}, 14, {low}, 0);
-                    Sector_SetDamage({tag}, 0, 0);
-                    int crush_phase_{idx} = (tick + {idx * 11}) % 100;
-                    if (crush_phase_{idx} < 45) {{
-                        Ceiling_Stop({tag});
-                        Ceiling_MoveToValue({tag}, 12, {low + 16}, 0);
-                    }} else {{
-                        Ceiling_Stop({tag});
-                        Ceiling_MoveToValue({tag}, 12, {crusher_open_ceiling}, 0);
-                    }}
-                }} else if ((({tag} * 37 + run_shift) % 100) < 50) {{
-                    ChangeFloor({tag}, "{horizontal_crusher_floor}");
-                    Sector_SetDamage({tag}, 0, 0);
-                    Floor_Stop({tag});
-                    Floor_MoveToValue({tag}, 12, {low}, 0);
-                    Ceiling_Stop({tag});
-                    Ceiling_MoveToValue({tag}, 14, {crusher_open_ceiling}, 0);
+                    Floor_MoveToValue({tag}, 14, {low}, 0); 
+
+                    Ceiling_CrushAndRaise({tag}, 64, 200, 0);
                 }} else {{
                     ChangeFloor({tag}, "{platform_floor}");
                     Sector_SetDamage({tag}, 0, 0);
                     Floor_Stop({tag});
                     Floor_MoveToValue({tag}, 14, {low}, 0);
                     Ceiling_Stop({tag});
-                    Ceiling_MoveToValue({tag}, 14, {crusher_open_ceiling}, 0);
+                    Ceiling_MoveToValue({tag}, 64, {crusher_open_ceiling}, 0);
                 }}
                 """
             )
@@ -564,6 +541,7 @@ class PlatformChainScenario(Scenario):
         pc_max_chain_dist_global = 0;
         pc_chain_break_events_global = 0;
         pc_dragged_links_global = 0;
+        pc_level_reached_global = 0;
 
         while (TRUE)
         {{
@@ -571,6 +549,27 @@ class PlatformChainScenario(Scenario):
             {{
                 max_chain_dist = 0;
                 dragged_links_count = 0;
+
+                int min_lvl = {level_count};
+                int any_active = 0;
+                int p_check;
+                for (p_check = 0; p_check < {max_players}; p_check++) {{
+                     if (PlayerInGame(p_check)) {{
+                        int ct = 1000 + p_check;
+                        int cz = GetActorZ(ct) >> 16;
+                        int clvl = (cz - {base_height}) / {height_step};
+                        if (clvl < 0) clvl = 0;
+                        if (clvl >= {level_count}) clvl = {level_count} - 1;
+                        
+                        if (clvl < min_lvl) min_lvl = clvl;
+                        any_active = 1;
+                     }}
+                }}
+                if (any_active) {{
+                    pc_level_reached_global = min_lvl;
+                }} else {{
+                    pc_level_reached_global = 0;
+                }}
 
                 {bridge_texture_block}
                 {dynamic_block}

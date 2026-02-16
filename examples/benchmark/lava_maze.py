@@ -254,14 +254,15 @@ def create_scenario(output_path: str = "examples/benchmark/output/lava_maze.wad"
     
     script "GenerateMaze" (int sx, int sy, int size) {{
         int start_tag = get_tag(sx, sy);
+        int i;
         reset_map(start_tag);
 
-        for (int i = 0; i < 3; i++) maze_bits_chunk[i] = 0;
+        for (i = 0; i < 3; i++) maze_bits_chunk[i] = 0;
         
         carve(sx, sy);
         Sector_SetColor(start_tag, 0, 255, 0);
         
-        for (int i = 0; i < MAP_WIDTH * MAP_WIDTH; i++) visited[i] = 0;
+        for (i = 0; i < MAP_WIDTH * MAP_WIDTH; i++) visited[i] = 0;
         
         int stack_ptr = 0;
         int cx = sx;

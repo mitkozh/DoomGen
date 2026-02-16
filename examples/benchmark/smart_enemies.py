@@ -182,7 +182,7 @@ class SmartEnemiesScenario(Scenario):
         acs = ACSBuilder()
         acs.add_global_var("se_alive_enemies_global", 31, "int")
         acs.add_global_var("se_fast_enemies_global", 32, "int")
-        acs.add_global_var("se_fast_activation_events_global", 33, "int")
+        acs.add_global_var("se_fast_events_global", 33, "int")
         acs.add_global_var("se_spawn_events_global", 34, "int")
         
         # Logic constants
@@ -223,10 +223,11 @@ class SmartEnemiesScenario(Scenario):
             Sector_SetDamage(ARENA_TAG, 1, 0); 
             se_alive_enemies_global = 0;
             se_fast_enemies_global = 0;
-            se_fast_activation_events_global = 0;
+            se_fast_events_global = 0;
             se_spawn_events_global = 0;
             int fast_state[MAX_ENEMIES];
-            for (int i = 0; i < MAX_ENEMIES; i++) {{
+            int i;
+            for (i = 0; i < MAX_ENEMIES; i++) {{
                 fast_state[i] = 0;
             }}
             
@@ -235,7 +236,7 @@ class SmartEnemiesScenario(Scenario):
                 int fast_count = 0;
 
                 // Iterate all potential enemies
-                for (int i = 0; i < MAX_ENEMIES; i++) {{
+                for (i = 0; i < MAX_ENEMIES; i++) {{
                     int etid = ENEMY_BASE_TID + i;
                     
                     // Only process alive enemies
@@ -248,8 +249,9 @@ class SmartEnemiesScenario(Scenario):
                         // Check distance to all players
                         int closest_dist_sq = 2147483647;
                         int closest_pid = 0;
+                        int p;
                         
-                        for (int p = 0; p < MAX_PLAYERS; p++) {{
+                        for (p = 0; p < MAX_PLAYERS; p++) {{
                             int ptid = PLAYER_BASE_TID + p;
                             if (GetActorProperty(ptid, APROP_Health) > 0) {{
                                 int px = GetActorX(ptid) >> 16;
@@ -282,7 +284,7 @@ class SmartEnemiesScenario(Scenario):
                         if (is_fast) {{
                             fast_count++;
                             if (fast_state[i] == 0) {{
-                                se_fast_activation_events_global++;
+                                se_fast_events_global++;
                                 fast_state[i] = 1;
                             }}
                         }} else {{
@@ -309,8 +311,9 @@ class SmartEnemiesScenario(Scenario):
         // SCRIPT 2: Continuous Spawning (OPEN)
         script 2 OPEN {{
             while (TRUE) {{
+                int i;
                 // Try to spawn ONE enemy per cycle if slot available
-                for (int i = 0; i < MAX_ENEMIES; i++) {{
+                for (i = 0; i < MAX_ENEMIES; i++) {{
                     int etid = ENEMY_BASE_TID + i;
                     
                     // Check if slot is free (Thing Count is 0)
@@ -353,7 +356,8 @@ class SmartEnemiesScenario(Scenario):
         }}
         // SCRIPT 997: Reward all players (VOID)
         script 997 (VOID) {{
-            for (int i = 0; i < MAX_PLAYERS; i++) {{
+            int i;
+            for (i = 0; i < MAX_PLAYERS; i++) {{
                 int ptid = PLAYER_BASE_TID + i;
                 GiveActorInventory(ptid, "HealthBonus", 7);
                 GiveActorInventory(ptid, "Shell", 5);
@@ -374,7 +378,10 @@ class SmartEnemiesScenario(Scenario):
         try:
             builder.map_data.behavior = acs.compile()
         except Exception as e:
-            print(f"ACS Compilation Warning: {e}")
+            if hasattr(e, 'stderr') and e.stderr:
+                print(f"ACS Compilation Warning:\n{e.stderr}")
+            else:
+                print(f"ACS Compilation Warning: {e}")
         
         builder.build(output_path)
 
