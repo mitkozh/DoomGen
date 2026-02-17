@@ -27,3 +27,6 @@ Inspired by the game *Chained Together*, this scenario features a massive serpen
 
 ### Smart Enemies (`smart_enemies.py`)
 Set in a circular arena with damaging toxic floors, this scenario focuses on combat against enemies with adaptive AI behavior. These "hunted" demons change their speed and aggression levels based on the proximity and density of the players, punishing many agents attacking the same enemy at once. Players must manage their health and ammo by looting defeated enemies while avoiding environmental damage and navigating obstacles. It tests dynamic combat adaptation, team spacing, and tactical prioritization.
+
+### Co-op CQB (`coop_cqb.py`)
+This is a tight close-quarters battle scenario for marines operating in narrow interconnected corridors. At spawn, one marine is shotgun-only, one is plasma-only. The team must survive fast rushing shooter specialist while avoiding severe friendly-fire mistakes. Tere are also static civilians mixed into combat space, forcing agents to balance lethality with line-of-fire discipline. The objective is to kill as many enemies as possible. Civilian collateral immediately fails the episode.
