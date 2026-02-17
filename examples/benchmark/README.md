@@ -1,0 +1,26 @@
+# DoomGen Benchmark Scenarios
+
+This directory contains several benchmark scenarios for Multi-Agent Reinforcement Learning (MARL), designed to test different aspects of agent coordination, navigation, and combat.
+
+## Scenario Overviews
+
+### Ammo Carrier (`ammo_carrier.py`)
+This scenario features a cooperative role-based mission where one player acts as a stationary "Defender" while others are "Runners". The Defender is anchored in the center with heavy firepower but limited ammunition, while Runners are fast and unarmed, tasked with fetching ammo from outlying depots. Successful gameplay requires constant communication and efficient delivery cycles to keep the Defender from being overwhelmed by waves of enemies. This benchmark tests role specialization, resource management, and team-based priority shifting.
+
+### Armory Siege (`armory_siege.py`)
+In this defensive scenario, players are tasked with protecting a central "Defense Core" entity from relentless waves of melee-based monsters. The environment includes a central hub connected via corridors to specialized supply rooms for weapons, ammunition, and medical supplies. The doors to the supply rooms are time-gated, so agents have to be careful when making runs not to get stuck leaving the core helpless. Players must balance defending the core with making risky supply runs to upgrade their arsenal and restore health. It primarily tests combat skill, area control, and the strategic management of supply lines. It also test whether agents can swap roles betweeen defending and rushing.
+
+### Co-op Puzzle (`coop_puzzle.py`)
+This benchmark presents a series of linear zones where two players are physically separated but must interact through windows and partitions. Progress is gated by pressure plates that open doors for the partner on the opposite side, requiring synchronized movements and coordinated timing. Some puzzles feature "AND" logic, necessitating both players to occupy specific spots simultaneously to advance. It tests synchronization, communication density, and multi-agent logical coordination.
+
+### Lava Maze (`lava_maze.py`)
+Lava Maze is an asymmetric cooperative mission where one agent navigates a procedural grid of pillars over a lava pit while another agent watches from a high-altitude spectator stand. The navigator has an obstructed view and must rely on the spectator's ability to trigger light signals (color-coded flashes) to determine the safe path. The maze is dynamic, with pillars rising or sinking based on the navigator's position and the spectator's inputs. This tests asymmetric communication, spatial reasoning, and trust between agents.
+
+### Lava Pit (`lavapit.py`)
+A high-stakes platforming scenario that requires players to traverse a vast lava sea using a series of isolated platforms and retractable bridges. Bridges are activated by pressure plates located on nearby platforms, requiring one player to hold a position so their partner can cross. It tests precise spatial navigation, timing-based coordination, and altruistic behavior in multi-agent systems.
+
+### Platform Chain (`platform_chain.py`)
+Inspired by the game *Chained Together*, this scenario features a massive serpentine path of 120 levels where players are physically linked by a virtual chain. Agents must coordinate their movement to stay within a maximum distance or risk being snapped back, with visual feedback (color-coded screen fades) indicating chain tension. The vertical ascent is fraught with diverse hazards, including moving polyobject panels, dynamic lifts, and lethal vertical crushers. It tests long-horizon planning, precision platforming, and tight movement synchronization in a vast, hazardous state space.
+
+### Smart Enemies (`smart_enemies.py`)
+Set in a circular arena with damaging toxic floors, this scenario focuses on combat against enemies with adaptive AI behavior. These "hunted" demons change their speed and aggression levels based on the proximity and density of the players, punishing many agents attacking the same enemy at once. Players must manage their health and ammo by looting defeated enemies while avoiding environmental damage and navigating obstacles. It tests dynamic combat adaptation, team spacing, and tactical prioritization.
