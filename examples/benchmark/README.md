@@ -13,6 +13,9 @@ In this defensive scenario, players are tasked with protecting a central "Defens
 ### Co-op Puzzle (`coop_puzzle.py`)
 This benchmark presents a series of linear zones where two players are physically separated but must interact through windows and partitions. Progress is gated by pressure plates that open doors for the partner on the opposite side, requiring synchronized movements and coordinated timing. Some puzzles feature "AND" logic, necessitating both players to occupy specific spots simultaneously to advance. It tests synchronization, communication density, and multi-agent logical coordination.
 
+### Rhythm Sync (`rhythm_sync.py`)
+This scenario is a progressive rhythm-synchronization benchmark where two agents are separated into parallel rooms and cannot exchange explicit messages. Each stage contains wall switches that must be pressed simultaneously within a strict tolerance window; pressing alone immediately fails the episode. The environment emits a visual tick (red flash) as a shared timing signal, starting with a fixed 4-second rhythm, then moving to a jittered $4s \pm 1s$ rhythm, and finally a silent-partner variant where only Agent A receives the tick while Agent B must infer timing by observing Agent A through a window. It tests implicit coordination, temporal prediction, and adaptation to partial observability.
+
 ### Lava Maze (`lava_maze.py`)
 Lava Maze is an asymmetric cooperative mission where one agent navigates a procedural grid of pillars over a lava pit while another agent watches from a high-altitude spectator stand. The navigator has an obstructed view and must rely on the spectator's ability to trigger light signals (color-coded flashes) to determine the safe path. The maze is dynamic, with pillars rising or sinking based on the navigator's position and the spectator's inputs. This tests asymmetric communication, spatial reasoning, and trust between agents.
 
