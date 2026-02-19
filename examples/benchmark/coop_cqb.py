@@ -1,1027 +1,977 @@
+import sys
 import os
-import random
-from typing import Dict, Any, List, Tuple, Optional
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../src")))
 
+from typing import Dict, Any
+import random
+import math
+from shapely.geometry import Point, box
+from shapely.affinity import rotate, translate
 from doomgen.batch.scenario import Scenario
-from doomgen.abstraction.layout import ConnectionType
 from doomgen.builder import ProceduralMapBuilder
+from doomgen.abstraction.layout import ConnectionType
 from doomgen.logic.acs_builder import ACSBuilder, ScriptType
 from doomgen.doom.things import ThingType
 
 
 class CoopCQBScenario(Scenario):
     """
-    Cooperative Close Quarters Battle (CQB) benchmark.
+    Cooperative Close Quarters Battle benchmark.
+
+    Players must systematically clear a procedural building of hostile
+    combatants while avoiding civilian casualties and friendly fire.
     """
 
     def get_default_config(self) -> Dict[str, Any]:
         return {
+            "num_rooms": 10,
             "seed": None,
-            "num_seeds": 9000,
-            "corridor_width": 3,
-            "enemy_cap": 6,
-            "civilian_cap": 8,
-            "enemy_spawn_interval_tics": 30,
-            "civilian_spawn_interval_tics": 50,
-            "enemy_spots": 36,
-            "civilian_spots": 36,
-            "max_enemy_slots": 28,
-            "max_civilian_slots": 20,
+            "room_min_size": 256,
+            "room_max_size": 384,
+            "corridor_width": 5,
+            "max_enemies": 32,
+            "max_civilians": 12,
+            "ambient_light": 80,
+            "enemy_detect_radius": 1024,
+            "flashlight_detect_radius": 1024,
+            "spawn_interval_tics": 140,
+            "player_count": 2,
+            "cover_objects_per_room": 3,
+            "min_spawn_distance": 512,
         }
 
     def generate(self, output_path: str) -> None:
         cfg = self.config
         seed = cfg["seed"] if cfg["seed"] is not None else random.randint(0, 999999)
-        rng = random.Random(seed)
+        random.seed(seed)
+
+        num_rooms = cfg["num_rooms"]
+        room_min = cfg["room_min_size"]
+        room_max = cfg["room_max_size"]
+        ambient = cfg["ambient_light"]
+
+        grid_cols = max(2, int(math.ceil(math.sqrt(num_rooms))))
+        grid_rows = max(2, int(math.ceil(num_rooms / grid_cols)))
+        spacing = room_max + 500
+        half_x = int((grid_cols + 2) * spacing / 2) + 1200
+        half_y = int((grid_rows + 3) * spacing / 2) + 800
 
         builder = ProceduralMapBuilder(
-            bounds=(-1900, -1400, 1900, 1400),
-            num_seeds=int(cfg["num_seeds"]),
-            seed=seed,
+            bounds=(-half_x, -half_y, half_x, half_y),
+            num_seeds=120000,
+            seed=seed
         )
 
-        corridor_width = int(cfg["corridor_width"])
-
-        builder.add_area("SpawnHub", shape=(0, 0, 320, 240), floor_height=0, ceiling_height=160, floor_texture="FLAT5_4", ceiling_texture="CEIL5_2", wall_texture="STARTAN3", light_level=224)
-        builder.add_area("Extraction", shape=(0, -250, 260, 180), floor_height=0, ceiling_height=156, floor_texture="FLAT5_4", wall_texture="STARTAN3", light_level=210)
-        builder.add_area("SpineA", shape=(0, 250, 120, 280), floor_height=0, ceiling_height=148, floor_texture="FLOOR7_1", wall_texture="GRAY7", light_level=168)
-        builder.add_area("SpineB", shape=(0, 520, 120, 260), floor_height=0, ceiling_height=152, floor_texture="FLOOR7_1", wall_texture="GRAY7", light_level=164)
-        builder.add_area("SpineC", shape=(0, 790, 120, 260), floor_height=0, ceiling_height=164, floor_texture="FLOOR7_1", wall_texture="GRAY7", light_level=160)
-        builder.add_area("Breach", shape=(0, 1060, 260, 220), floor_height=0, ceiling_height=168, floor_texture="RROCK19", wall_texture="STARTAN2", light_level=152)
-
-        builder.add_area("WestBypassA", shape=(-250, 390, 320, 110), floor_height=0, ceiling_height=146, floor_texture="FLAT5_4", wall_texture="STONE2", light_level=158)
-        builder.add_area("WestBypassB", shape=(-520, 680, 320, 110), floor_height=0, ceiling_height=150, floor_texture="FLAT5_4", wall_texture="STONE2", light_level=154)
-        builder.add_area("WestFlank", shape=(-760, 920, 240, 200), floor_height=0, ceiling_height=156, floor_texture="RROCK19", wall_texture="BROWN1", light_level=148)
-        builder.add_area("WestReadyRoom", shape=(-940, 620, 460, 320), floor_height=0, ceiling_height=160, floor_texture="FLAT5_4", wall_texture="STARTAN2", light_level=162)
-        builder.add_area("WestObservation", shape=(-1020, 900, 320, 220), floor_height=0, ceiling_height=164, floor_texture="RROCK19", wall_texture="GRAY5", light_level=150)
-
-        builder.add_area("EastBypassA", shape=(250, 390, 320, 110), floor_height=0, ceiling_height=146, floor_texture="FLAT5_4", wall_texture="STONE2", light_level=158)
-        builder.add_area("EastBypassB", shape=(520, 680, 320, 110), floor_height=0, ceiling_height=150, floor_texture="FLAT5_4", wall_texture="STONE2", light_level=154)
-        builder.add_area("EastFlank", shape=(760, 920, 240, 200), floor_height=0, ceiling_height=156, floor_texture="RROCK19", wall_texture="BROWN1", light_level=148)
-        builder.add_area("EastReadyRoom", shape=(940, 620, 460, 320), floor_height=0, ceiling_height=160, floor_texture="FLAT5_4", wall_texture="STARTAN2", light_level=162)
-        builder.add_area("EastObservation", shape=(1020, 900, 320, 220), floor_height=0, ceiling_height=164, floor_texture="RROCK19", wall_texture="GRAY5", light_level=150)
-        builder.add_area("BreachHall", shape=(0, 1260, 620, 360), floor_height=0, ceiling_height=180, floor_texture="RROCK19", wall_texture="STARTAN2", light_level=148)
-
-        # Tactical low-ground pits (exposure), passable but disadvantageous.
-        builder.add_area("PitWestRoom", shape=(-930, 620, 120, 90), mode="overwrite", floor_height=-24, ceiling_height=160, floor_texture="RROCK19", wall_texture="BROWN1")
-        builder.add_area("PitEastRoom", shape=(930, 620, 120, 90), mode="overwrite", floor_height=-24, ceiling_height=160, floor_texture="RROCK19", wall_texture="BROWN1")
-        builder.add_area("PitBreachHall", shape=(0, 1260, 140, 100), mode="overwrite", floor_height=-16, ceiling_height=180, floor_texture="RROCK19", wall_texture="BROWN1")
-
-        builder.add_corridor("Extraction", "SpawnHub", width=corridor_width, floor_texture="FLOOR7_1")
-        builder.add_corridor("SpawnHub", "SpineA", width=corridor_width, floor_texture="FLOOR7_1")
-        builder.add_corridor("SpineA", "SpineB", width=corridor_width, floor_texture="FLOOR7_1")
-        builder.add_corridor("SpineB", "SpineC", width=corridor_width, floor_texture="FLOOR7_1")
-        builder.add_corridor("SpineC", "Breach", width=corridor_width, floor_texture="FLOOR7_1")
-
-        builder.add_corridor("SpineA", "WestBypassA", width=corridor_width, floor_texture="FLOOR7_1")
-        builder.add_corridor("WestBypassA", "WestBypassB", width=corridor_width, floor_texture="FLOOR7_1")
-        builder.add_corridor("WestBypassB", "WestFlank", width=corridor_width, floor_texture="FLOOR7_1")
-        builder.add_corridor("WestFlank", "Breach", width=corridor_width, floor_texture="FLOOR7_1")
-        builder.add_corridor("WestBypassB", "WestReadyRoom", width=corridor_width, floor_texture="FLOOR7_1")
-        builder.add_corridor("WestFlank", "WestObservation", width=corridor_width, floor_texture="FLOOR7_1")
-
-        builder.add_corridor("SpineA", "EastBypassA", width=corridor_width, floor_texture="FLOOR7_1")
-        builder.add_corridor("EastBypassA", "EastBypassB", width=corridor_width, floor_texture="FLOOR7_1")
-        builder.add_corridor("EastBypassB", "EastFlank", width=corridor_width, floor_texture="FLOOR7_1")
-        builder.add_corridor("EastFlank", "Breach", width=corridor_width, floor_texture="FLOOR7_1")
-        builder.add_corridor("EastBypassB", "EastReadyRoom", width=corridor_width, floor_texture="FLOOR7_1")
-        builder.add_corridor("EastFlank", "EastObservation", width=corridor_width, floor_texture="FLOOR7_1")
-
-        builder.add_corridor("WestBypassB", "SpineC", width=corridor_width, floor_texture="FLOOR7_1")
-        builder.add_corridor("EastBypassB", "SpineC", width=corridor_width, floor_texture="FLOOR7_1")
-        builder.add_corridor("Breach", "BreachHall", width=corridor_width, floor_texture="FLOOR7_1")
-
-        tactical_areas = [
-            "Extraction",
-            "SpawnHub",
-            "SpineA",
-            "SpineB",
-            "SpineC",
-            "Breach",
-            "WestBypassA",
-            "WestBypassB",
-            "WestFlank",
-            "WestReadyRoom",
-            "WestObservation",
-            "EastBypassA",
-            "EastBypassB",
-            "EastFlank",
-            "EastReadyRoom",
-            "EastObservation",
-            "BreachHall",
-        ]
-        for area_a in tactical_areas:
-            for area_b in tactical_areas:
-                if area_a != area_b:
-                    builder.connect_adjacent(area_a, area_b, ConnectionType.OPEN, silent=True)
-
-        # Center-room cover only (no corridor cover clutter).
-
-        player_spawns = self._pick_safe_points(builder, "SpawnHub", count=3, min_dist=86, attempts=260)
-        while len(player_spawns) < 3:
-            fallback = builder.get_random_point_in_area("SpawnHub", safe=False)
-            if fallback is None:
-                raise RuntimeError("Failed to place all player starts in SpawnHub")
-            player_spawns.append(fallback)
-
-        player_starts = [ThingType.PLAYER1_START, ThingType.PLAYER2_START, ThingType.PLAYER3_START]
-        player_angles = [0, 32, 352]
-        for i, (x, y) in enumerate(player_spawns):
-            builder.add_thing(player_starts[i], x, y, angle=player_angles[i])
-
-        enemy_area_cycle = ["BreachHall", "Breach", "SpineC", "WestFlank", "EastFlank", "WestObservation", "EastObservation", "WestBypassB", "EastBypassB", "SpineB"]
-        civilian_area_cycle = [
-            "WestReadyRoom",
-            "EastReadyRoom",
-            "WestObservation",
-            "EastObservation",
-            "BreachHall",
-            "Breach",
-            "SpawnHub",
-            "Extraction",
-        ]
-
-        enemy_spot_count = self._place_map_spots(
-            builder,
-            base_tid=6000,
-            count=int(cfg["enemy_spots"]),
-            area_cycle=enemy_area_cycle,
-            rng=rng,
-            avoid_points=player_spawns,
-            min_distance=760.0,
+        keyconf_str = (
+            'alias ToggleFlashlight "pukename ToggleFlashlight"\n'
+            'addmenukey "Toggle Flashlight" ToggleFlashlight\n'
+            'defaultbind f ToggleFlashlight\n'
         )
-        civilian_spot_count = self._place_map_spots(
-            builder,
-            base_tid=7000,
-            count=int(cfg["civilian_spots"]),
-            area_cycle=civilian_area_cycle,
-            rng=rng,
+        builder.wad_writer.add_lump("KEYCONF", keyconf_str.encode('utf-8'))
+        
+        mapinfo_str = (
+            'gameinfo {\n'
+            '   playerclasses = "CQBPlayer"\n'
+            '}\n'
+            '\n'
+            'defaultmap {\n'
+            '   teamdamage = 1.0\n'
+            '}\n'
+            '\n'
+            'map MAP01 "CQB OPERATION"\n'
+            '{\n'
+            '   next = "MAP01"\n'
+            '   sky1 = "SKY1"\n'
+            '}\n'
         )
+        builder.wad_writer.add_lump("MAPINFO", mapinfo_str.encode('utf-8'))
 
-        civ_goal_areas = ["Breach", "SpineC", "SpineB", "WestReadyRoom", "EastReadyRoom", "SpineA", "SpawnHub", "Extraction"]
-        civ_goal_count = self._place_map_spots(
-            builder,
-            base_tid=8500,
-            count=14,
-            area_cycle=civ_goal_areas,
-            rng=rng,
-        )
-        extract_point = builder.get_random_point_in_area("Extraction", safe=True) or builder.get_random_point_in_area("Extraction", safe=False)
-        if extract_point is None:
-            raise RuntimeError("Failed to place civilian extraction point")
-        builder.add_thing(ThingType.MAP_SPOT, extract_point[0], extract_point[1], tid=8599, angle=0)
-
-        if enemy_spot_count < 8:
-            raise RuntimeError("Not enough safe enemy MapSpots were placed for CQB spawns")
-        if civilian_spot_count < 6:
-            raise RuntimeError("Not enough safe civilian MapSpots were placed for CQB spawns")
-        if civ_goal_count < 6:
-            raise RuntimeError("Not enough civilian navigation MapSpots were placed")
-
-        self._place_supply_in_cover(builder, rng)
-        self._add_center_room_cover(builder)
-
-        decorate_str = """
-ACTOR CQBCivilian : DoomImp 16000
+        decorate_str = r"""
+ACTOR FlashlightTarget : PointLight
 {
-    Health 55
-  Radius 16
-  Height 56
-    Speed 14
-    ReactionTime 6
-        Translation "112:127=200:215"
-  +SOLID
-  +SHOOTABLE
-  +NOBLOOD
-    +LOOKALLAROUND
-        +FRIGHTENED
-  DamageFactor "Explosion", 0.15
-
-  States
-  {
-  Spawn:
-      TROO A 4 A_Look
-      TROO B 4
-    Loop
-  See:
-      TROO AABBCCDD 2 A_Chase
-        Loop
-    Missile:
-        Goto See
-    Melee:
-        Goto See
-  Pain:
-                TROO E 4
-        Goto See
-    Death.EnemyFire:
-                                TROO I 0 ACS_ExecuteAlways(953, 0)
-                                TROO I 6
-                                TROO J 6 A_Scream
-                                TROO K 6 A_NoBlocking
-                                TROO L -1
-        Stop
-  Death:
-                TROO I 0 ACS_ExecuteAlways(952, 0)
-                TROO I 6
-                TROO J 6 A_Scream
-                TROO K 6 A_NoBlocking
-                TROO L -1
-    Stop
-  }
+        +NOGRAVITY
+        +NOBLOCKMAP
+        +NOCLIP
+        Args 255, 255, 230, 200
 }
 
-ACTOR CQBEnemyShot 16003
+ACTOR FlashlightToken : Inventory { Inventory.MaxAmount 1 }
+ACTOR PlayerInLight : Inventory { Inventory.MaxAmount 1 }
+
+ACTOR CQBPlayer : DoomPlayer
 {
-    Radius 2
-    Height 2
-    Speed 140
-    Damage 2
-    DamageType "EnemyFire"
+    Player.DisplayName "CQB Operative"
+    States
+    {
+    Pain:
+        PLAY G 4
+        PLAY G 4 A_Pain
+        PLAY G 0 ACS_NamedExecuteAlways("TeammateDamageHandler", 0)
+        Goto See
+    }
+}
+
+ACTOR CQBEnemyShot
+{
+    Radius 4
+    Height 4
+    Speed 200
+    Damage 5
     Projectile
-    +NOGRAVITY
-    +RIPPER
+    RenderStyle Add
+    Alpha 1.0
+    Scale 0.4
+    +BRIGHT
     States
     {
     Spawn:
-        MISL A 1 Bright
+        PUFF A 2 BRIGHT
         Loop
     Death:
-        BAL1 BCD 2 Bright
+        PUFF CD 2 BRIGHT
         Stop
     }
 }
 
-ACTOR CQBMarksman : Zombieman 16001
+ACTOR CQBHostile : Zombieman 15001
 {
-    Speed 11
-    ReactionTime 6
-    PainChance 22
-    Translation "112:127=176:191"
-    +AMBUSH
+    Health 30
+    Speed 12
+    ReactionTime 0
+    PainChance 10
     +LOOKALLAROUND
-        DropItem "Cell"
-        DropItem "Shell"
-  States
-  {
-        Spawn:
-                POSS AB 4 A_Look
-                Loop
-        See:
-                POSS AABBCCDD 2 A_Chase
-                Loop
+    +MISSILEMORE
+    SeeSound "grunt/sight"
+    DropItem "Clip" 64
+    DropItem "Shell" 4
+    States
+    {
+    Spawn:
+        POSS A 10
+        Loop
+    See:
+        POSS AABBCCDD 2 A_Chase
+        Loop
     Missile:
-                POSS E 1 A_FaceTarget
-            POSS F 0 A_CustomMissile("CQBEnemyShot", 32, 0, 0, 0, 0)
-            POSS F 0 A_CustomMissile("CQBEnemyShot", 32, 0, 0, 0, 0)
-                POSS F 1
+        POSS E 4 A_FaceTarget
+        POSS E 0 A_JumpIfInventory("PlayerInLight", 1, "MissileAccurate", AAPTR_TARGET)
+        POSS E 8 A_FaceTarget
         Goto See
-  Death:
-                POSS H 6
-                POSS I 6 A_Scream
-                POSS J 6 A_NoBlocking
-                                                                POSS K -1
-    Stop
-  }
+    MissileAccurate:
+        POSS F 0 A_CustomMissile("CQBEnemyShot", 32, 0, 0)
+        POSS F 4 A_CustomMissile("CQBEnemyShot", 32, 0, 0)
+        POSS E 4
+        Goto See
+    Pain:
+        POSS G 2
+        POSS G 2 A_Pain
+        Goto See
+    Death:
+        POSS H 0 A_NoBlocking
+        POSS H 0 A_UnsetShootable
+        POSS H 0 Thing_ChangeTID(0, 0)
+        POSS H 0 ACS_ExecuteAlways(997, 0)
+        POSS H 5 A_Scream
+        POSS IJK 5
+        POSS L -1
+        Stop
+    }
 }
-"""
-        builder.wad_writer.add_lump("DECORATE", decorate_str.encode("utf-8"))
 
-        mapinfo_str = """
-GameInfo
+ACTOR CQBHostileElite : Shotgunguy 15002
 {
-    teamdamage = 1.0
+    Health 120
+    Speed 13
+    ReactionTime 0
+    PainChance 5
+    +LOOKALLAROUND
+    +MISSILEMORE
+    SeeSound "shotguy/sight"
+    DropItem "Shell" 6
+    States
+    {
+    Spawn:
+        SPOS A 10
+        Loop
+    See:
+        SPOS AABBCCDD 2 A_Chase
+        Loop
+    Missile:
+        SPOS E 4 A_FaceTarget
+        SPOS E 0 A_JumpIfInventory("PlayerInLight", 1, "MissileAccurate", AAPTR_TARGET)
+        SPOS E 8 A_FaceTarget
+        Goto See
+    MissileAccurate:
+        SPOS F 0 A_CustomMissile("CQBEnemyShot", 32, 0, -2)
+        SPOS F 0 A_CustomMissile("CQBEnemyShot", 32, 0, 0)
+        SPOS F 4 A_CustomMissile("CQBEnemyShot", 32, 0, 2)
+        SPOS E 4
+        Goto See
+    Pain:
+        SPOS G 2
+        SPOS G 2 A_Pain
+        Goto See
+    Death:
+        SPOS H 0 A_NoBlocking
+        SPOS H 0 A_UnsetShootable
+        SPOS H 0 Thing_ChangeTID(0, 0)
+        SPOS H 0 ACS_ExecuteAlways(997, 0)
+        SPOS H 5 A_Scream
+        SPOS IJK 5
+        SPOS L -1
+        Stop
+    }
 }
 
-map MAP01 "Coop CQB"
+ACTOR CQBCivilian : MarineFist 15003
 {
-  allowmonstertelefrags
+    Health 20
+    Speed 4
+    Radius 16
+    Height 56
+    +FRIENDLY
+    +LOOKALLAROUND
+    Translation "112:127=176:191"
+    States
+    {
+    Spawn:
+        PLAY A 10
+        Loop
+    See:
+        PLAY AABBCCDD 4 A_Wander
+        Loop
+    Pain:
+        PLAY G 4
+        PLAY G 4 A_Pain
+        Goto See
+    Death:
+        PLAY H 0 A_SetScale(1.0)
+        PLAY H 5
+        PLAY I 5 A_Scream
+        PLAY J 5 A_NoBlocking
+        PLAY K 5 ACS_ExecuteAlways(998, 0)
+        PLAY L -1
+        Stop
+    }
 }
 """
-        builder.wad_writer.add_lump("MAPINFO", mapinfo_str.encode("utf-8"))
+        builder.wad_writer.add_lump("DECORATE", decorate_str.encode('utf-8'))
 
-        acs = ACSBuilder()
-        acs.add_global_code(
-            f"""
-#include "zcommon.acs"
+        
+        rooms = []
+        room_names = []
+        room_tags = []
+        corridor_tags = []
 
-#define MAX_PLAYERS 3
-#define PLAYER_BASE_TID 1000
-#define CIV_SLOT_BASE 3000
-#define CIV_TMP_TID 9600
-#define ENEMY_TID_BASE 2000
-#define ENEMY_TID_LIMIT 9000
-
-#define ENEMY_SPOT_BASE 6000
-#define CIV_SPOT_BASE 7000
-#define CIV_GOAL_BASE 8500
-
-#define NUM_ENEMY_SPOTS {enemy_spot_count}
-#define NUM_CIV_SPOTS {civilian_spot_count}
-#define NUM_CIV_GOALS {civ_goal_count}
-#define CIV_EXTRACT_TID 8599
-
-#define MAX_ENEMY_SLOTS {int(cfg['max_enemy_slots'])}
-#define MAX_CIV_SLOTS {int(cfg['max_civilian_slots'])}
-
-#define ENEMY_CAP {int(cfg['enemy_cap'])}
-#define CIV_CAP {int(cfg['civilian_cap'])}
-#define ENEMY_SPAWN_INTERVAL {int(cfg['enemy_spawn_interval_tics'])}
-#define CIV_SPAWN_INTERVAL {int(cfg['civilian_spawn_interval_tics'])}
-#define DESPAWN_TICS 1050
-#define MIN_ENEMY_SPAWN_DIST 640
-
-global int 40:g_civ_kia;
-global int 41:g_civ_kia_e;
-
-int failed = 0;
-int finished = 0;
-int civilians_escaped = 0;
-int civilians_killed_total = 0;
-int civilians_killed_with_enemies = 0;
-int next_enemy_spawn_time = 0;
-int next_civ_spawn_time = 0;
-int next_enemy_tid = ENEMY_TID_BASE;
-int enemy_track_tid[MAX_ENEMY_SLOTS];
-int enemy_birth[MAX_ENEMY_SLOTS];
-int civ_birth[MAX_CIV_SLOTS];
-int enemy_alert[MAX_ENEMY_SLOTS];
-int civ_goal_tid[MAX_CIV_SLOTS];
-
-function int LivingPlayers(void)
-{{
-    int alive = 0;
-    int i;
-    for (i = 0; i < MAX_PLAYERS; i++) {{
-        int ptid = PLAYER_BASE_TID + i;
-        if (GetActorProperty(ptid, APROP_Health) > 0) {{
-            alive++;
-        }}
-    }}
-    return alive;
-}}
-
-function void EquipPlayer(int player_tid, int player_num)
-{{
-    ClearActorInventory(player_tid);
-
-    if (player_num == 0) {{
-        GiveActorInventory(player_tid, "Shotgun", 1);
-        GiveActorInventory(player_tid, "Shell", 40);
-        SetActivator(player_tid);
-        SetWeapon("Shotgun");
-        SetActivator(0);
-        return;
-    }}
-
-    if (player_num == 1) {{
-        GiveActorInventory(player_tid, "PlasmaRifle", 1);
-        GiveActorInventory(player_tid, "Cell", 120);
-        SetActivator(player_tid);
-        SetWeapon("PlasmaRifle");
-        SetActivator(0);
-        return;
-    }}
-
-    GiveActorInventory(player_tid, "Shotgun", 1);
-    GiveActorInventory(player_tid, "PlasmaRifle", 1);
-    GiveActorInventory(player_tid, "Shell", 24);
-    GiveActorInventory(player_tid, "Cell", 80);
-    SetActivator(player_tid);
-    SetWeapon("Shotgun");
-    SetActivator(0);
-}}
-
-function int ActiveEnemies(void)
-{{
-    int alive = 0;
-    int i;
-    for (i = 0; i < MAX_ENEMY_SLOTS; i++) {{
-        int etid = enemy_track_tid[i];
-        if (etid > 0 && ThingCount(T_NONE, etid) > 0 && GetActorProperty(etid, APROP_Health) > 0) alive++;
-    }}
-    return alive;
-}}
-
-function int AbsInt(int value)
-{{
-    if (value < 0) return -value;
-    return value;
-}}
-
-function int ActiveCivilians(void)
-{{
-    int alive = 0;
-    int i;
-    for (i = 0; i < MAX_CIV_SLOTS; i++) {{
-        int ctid = CIV_SLOT_BASE + i;
-        if (ThingCount(T_NONE, ctid) > 0 && GetActorProperty(ctid, APROP_Health) > 0) alive++;
-    }}
-    return alive;
-}}
-
-function int RandomAliveCivilianTID(void)
-{{
-    int tries = 0;
-    while (tries < 8) {{
-        int idx = Random(0, MAX_CIV_SLOTS - 1);
-        int ctid = CIV_SLOT_BASE + idx;
-        if (ThingCount(T_NONE, ctid) > 0 && GetActorProperty(ctid, APROP_Health) > 0) return ctid;
-        tries++;
-    }}
-    return 0;
-}}
-
-function int RandomAliveEnemyTID(void)
-{{
-    int tries = 0;
-    while (tries < 10) {{
-        int idx = Random(0, MAX_ENEMY_SLOTS - 1);
-        int etid = enemy_track_tid[idx];
-        if (etid > 0 && ThingCount(T_NONE, etid) > 0 && GetActorProperty(etid, APROP_Health) > 0) return etid;
-        tries++;
-    }}
-    return 0;
-}}
-
-function int AllocateEnemyTID(void)
-{{
-    int tries = 0;
-    while (tries < (ENEMY_TID_LIMIT - ENEMY_TID_BASE)) {{
-        if (next_enemy_tid >= ENEMY_TID_LIMIT) {{
-            next_enemy_tid = ENEMY_TID_BASE;
-        }}
-        int candidate = next_enemy_tid;
-        next_enemy_tid++;
-        if (ThingCount(T_NONE, candidate) == 0) {{
-            return candidate;
-        }}
-        tries++;
-    }}
-    return 0;
-}}
-
-function int RandomAlivePlayerTID(void)
-{{
-    int tries = 0;
-    while (tries < 8) {{
-        int pid = Random(0, MAX_PLAYERS - 1);
-        int ptid = PLAYER_BASE_TID + pid;
-        if (GetActorProperty(ptid, APROP_Health) > 0) return ptid;
-        tries++;
-    }}
-    return 0;
-}}
-
-function int GoalForCivilian(int ctid)
-{{
-    int idx = ctid - CIV_SLOT_BASE;
-    if (idx < 0 || idx >= MAX_CIV_SLOTS) return CIV_EXTRACT_TID;
-    if (civ_goal_tid[idx] <= 0) {{
-        civ_goal_tid[idx] = CIV_GOAL_BASE + Random(0, NUM_CIV_GOALS - 1);
-    }}
-    return civ_goal_tid[idx];
-}}
-
-function void MoveCivilianToward(int ctid, int goal_tid)
-{{
-    int cx = GetActorX(ctid) >> 16;
-    int cy = GetActorY(ctid) >> 16;
-    int gx = GetActorX(goal_tid) >> 16;
-    int gy = GetActorY(goal_tid) >> 16;
-    int dx = gx - cx;
-    int dy = gy - cy;
-    int vx = 0;
-    int vy = 0;
-    if (dx > 16) vx = 7;
-    if (dx < -16) vx = -7;
-    if (dy > 16) vy = 7;
-    if (dy < -16) vy = -7;
-    SetActorVelocity(ctid, vx, vy, 0.0, 0, 0);
-}}
-
-function int VisiblePlayerForEnemy(int enemy_tid)
-{{
-    int p;
-    for (p = 0; p < MAX_PLAYERS; p++) {{
-        int ptid = PLAYER_BASE_TID + p;
-        if (GetActorProperty(ptid, APROP_Health) > 0) {{
-            if (CheckSight(enemy_tid, ptid, 0)) {{
-                return ptid;
-            }}
-        }}
-    }}
-    return 0;
-}}
-
-function int IsSpotSafeFromPlayers(int spot_tid)
-{{
-    int sx = GetActorX(spot_tid) >> 16;
-    int sy = GetActorY(spot_tid) >> 16;
-    int p;
-    for (p = 0; p < MAX_PLAYERS; p++) {{
-        int ptid = PLAYER_BASE_TID + p;
-        if (GetActorProperty(ptid, APROP_Health) <= 0) {{
-            continue;
-        }}
-        int px = GetActorX(ptid) >> 16;
-        int py = GetActorY(ptid) >> 16;
-        if (AbsInt(px - sx) < MIN_ENEMY_SPAWN_DIST && AbsInt(py - sy) < MIN_ENEMY_SPAWN_DIST) {{
-            return 0;
-        }}
-    }}
-    return 1;
-}}
-
-function int PlayerLikelyCausedCivilianDeath(void)
-{{
-    int cx = GetActorX(0) >> 16;
-    int cy = GetActorY(0) >> 16;
-    int p;
-    for (p = 0; p < MAX_PLAYERS; p++) {{
-        int ptid = PLAYER_BASE_TID + p;
-        if (GetActorProperty(ptid, APROP_Health) <= 0) {{
-            continue;
-        }}
-        int px = GetActorX(ptid) >> 16;
-        int py = GetActorY(ptid) >> 16;
-        if (AbsInt(px - cx) < 224 && AbsInt(py - cy) < 224) {{
-            return 1;
-        }}
-    }}
-    return 0;
-}}
-
-function void TriggerFail(str msg)
-{{
-    if (failed || finished) return;
-    failed = 1;
-    HudMessage(s:msg; HUDMSG_FADEOUT, 900, CR_RED, 0.5, 0.42, 2.0, 1.2);
-    FadeTo(1.0, 0.0, 0.0, 0.6, 0.0);
-    Exit_Normal(0);
-}}
-
-function void AssignEnemyTarget(int enemy_tid)
-{{
-    int civ_target = RandomAliveCivilianTID();
-    if (civ_target > 0) {{
-        Thing_Hate(enemy_tid, civ_target, 6);
-        Thing_SetGoal(enemy_tid, civ_target, 0);
-        Thing_Activate(enemy_tid);
-        SetActorState(enemy_tid, "See");
-        return;
-    }}
-
-    int ptid = RandomAlivePlayerTID();
-    if (ptid > 0) {{
-        Thing_Hate(enemy_tid, ptid, 6);
-        Thing_SetGoal(enemy_tid, ptid, 0);
-        Thing_Activate(enemy_tid);
-        SetActorState(enemy_tid, "See");
-    }}
-}}
-
-function int SpawnEnemyAtRandomSpot(int slot_idx)
-{{
-    int attempts = 0;
-    while (attempts < 18) {{
-        int spot_tid = ENEMY_SPOT_BASE + Random(0, NUM_ENEMY_SPOTS - 1);
-        if (!IsSpotSafeFromPlayers(spot_tid)) {{
-            attempts++;
-            continue;
-        }}
-        int etid = AllocateEnemyTID();
-        if (etid <= 0) {{
-            return 0;
-        }}
-        if (SpawnSpotFacing("CQBMarksman", spot_tid, etid)) {{
-            if (ThingCount(T_NONE, etid) == 0) {{
-                attempts++;
-                continue;
-            }}
-            SetActorProperty(etid, APROP_Invulnerable, 0);
-            TakeActorInventory(etid, "PowerInvulnerable", 255);
-            enemy_track_tid[slot_idx] = etid;
-            enemy_birth[slot_idx] = Timer();
-            enemy_alert[slot_idx] = 0;
-            AssignEnemyTarget(etid);
-            Thing_Activate(etid);
-            SetActorState(etid, "See");
-            return 1;
-        }}
-        attempts++;
-    }}
-    return 0;
-}}
-
-function void SpawnEnemies(int amount)
-{{
-    int spawned = 0;
-    int i;
-    for (i = 0; i < MAX_ENEMY_SLOTS && spawned < amount; i++) {{
-        int etid = enemy_track_tid[i];
-        if (etid <= 0 || ThingCount(T_NONE, etid) == 0 || GetActorProperty(etid, APROP_Health) <= 0) {{
-            enemy_track_tid[i] = 0;
-            enemy_birth[i] = 0;
-            enemy_alert[i] = 0;
-            if (SpawnEnemyAtRandomSpot(i)) {{
-                spawned++;
-            }}
-        }}
-    }}
-}}
-
-function void SpawnCivilians(int amount)
-{{
-    int spawned = 0;
-    int i;
-    for (i = 0; i < MAX_CIV_SLOTS && spawned < amount; i++) {{
-        int ctid = CIV_SLOT_BASE + i;
-        if (ThingCount(T_NONE, ctid) > 0) {{
-            continue;
-        }}
-        int spot_tid = CIV_SPOT_BASE + Random(0, NUM_CIV_SPOTS - 1);
-        if (SpawnSpotFacing("CQBCivilian", spot_tid, CIV_TMP_TID)) {{
-            Thing_ChangeTID(CIV_TMP_TID, ctid);
-            SetActorProperty(ctid, APROP_Speed, Random(12, 17));
-            civ_goal_tid[i] = CIV_GOAL_BASE + Random(0, NUM_CIV_GOALS - 1);
-            Thing_SetGoal(ctid, civ_goal_tid[i], 0);
-            Thing_Activate(ctid);
-            SetActorState(ctid, "See");
-            civ_birth[i] = Timer();
-            spawned++;
-        }}
-    }}
-}}
-
-function void CivilianBehaviorTick(void)
-{{
-    int gx = GetActorX(CIV_EXTRACT_TID) >> 16;
-    int gy = GetActorY(CIV_EXTRACT_TID) >> 16;
-    int i;
-
-    for (i = 0; i < MAX_CIV_SLOTS; i++) {{
-        int ctid = CIV_SLOT_BASE + i;
-        if (ThingCount(T_NONE, ctid) == 0) {{
-            continue;
-        }}
-        if (GetActorProperty(ctid, APROP_Health) <= 0) {{
-            Thing_Remove(ctid);
-            civ_birth[i] = 0;
-            civ_goal_tid[i] = 0;
-            continue;
-        }}
-
-        int cx = GetActorX(ctid) >> 16;
-        int cy = GetActorY(ctid) >> 16;
-        int near_extract = (AbsInt(cx - gx) < 72) && (AbsInt(cy - gy) < 72);
-        if (near_extract) {{
-            Thing_Remove(ctid);
-            civ_birth[i] = 0;
-            civilians_escaped++;
-            continue;
-        }}
-
-        int goal_tid = GoalForCivilian(ctid);
-        if (Random(0, 99) < 20) {{
-            goal_tid = CIV_GOAL_BASE + Random(0, NUM_CIV_GOALS - 1);
-            civ_goal_tid[i] = goal_tid;
-        }}
-        if (Random(0, 99) < 15) {{
-            goal_tid = CIV_EXTRACT_TID;
-        }}
-        Thing_SetGoal(ctid, goal_tid, 0);
-        Thing_Activate(ctid);
-        SetActorState(ctid, "See");
-        MoveCivilianToward(ctid, goal_tid);
-
-        if (civ_birth[i] > 0 && (Timer() - civ_birth[i]) > DESPAWN_TICS) {{
-            Thing_Remove(ctid);
-            civ_birth[i] = 0;
-            civilians_killed_total++;
-            if (ActiveEnemies() > 0) {{
-                civilians_killed_with_enemies++;
-                g_civ_kia_e = civilians_killed_with_enemies;
-            }}
-            g_civ_kia = civilians_killed_total;
-        }}
-    }}
-}}
-
-function void EnemyMaintenanceTick(void)
-{{
-    int i;
-    for (i = 0; i < MAX_ENEMY_SLOTS; i++) {{
-        int etid = enemy_track_tid[i];
-        if (etid <= 0) {{
-            enemy_birth[i] = 0;
-            enemy_alert[i] = 0;
-            continue;
-        }}
-
-        if (ThingCount(T_NONE, etid) == 0) {{
-            enemy_track_tid[i] = 0;
-            enemy_birth[i] = 0;
-            enemy_alert[i] = 0;
-            continue;
-        }}
-
-        SetActorProperty(etid, APROP_Invulnerable, 0);
-        TakeActorInventory(etid, "PowerInvulnerable", 255);
-
-        if (GetActorProperty(etid, APROP_Health) <= 0) {{
-            enemy_track_tid[i] = 0;
-            enemy_birth[i] = 0;
-            enemy_alert[i] = 0;
-            continue;
-        }}
-
-        if (enemy_birth[i] > 0 && (Timer() - enemy_birth[i]) > DESPAWN_TICS) {{
-            Thing_Remove(etid);
-            enemy_track_tid[i] = 0;
-            enemy_birth[i] = 0;
-            enemy_alert[i] = 0;
-            continue;
-        }}
-
-        int vis_player = VisiblePlayerForEnemy(etid);
-        if (vis_player > 0) {{
-            enemy_alert[i] = 1;
-            Thing_Hate(etid, vis_player, 6);
-            continue;
-        }}
-
-        if (!enemy_alert[i]) {{
-            int civ_target = RandomAliveCivilianTID();
-            if (civ_target > 0) {{
-                Thing_Hate(etid, civ_target, 6);
-                Thing_SetGoal(etid, civ_target, 0);
-                Thing_Activate(etid);
-                SetActorState(etid, "See");
-            }} else if (Random(0, 99) < 20) {{
-                Thing_SetGoal(etid, ENEMY_SPOT_BASE + Random(0, NUM_ENEMY_SPOTS - 1), 0);
-            }}
-        }} else if (Random(0, 99) < 35) {{
-            int civ_target_alt = RandomAliveCivilianTID();
-            if (civ_target_alt > 0) {{
-                Thing_Hate(etid, civ_target_alt, 6);
-                Thing_SetGoal(etid, civ_target_alt, 0);
-                Thing_Activate(etid);
-                SetActorState(etid, "See");
-            }} else if (Random(0, 99) < 25) {{
-                AssignEnemyTarget(etid);
-            }}
-        }}
-    }}
-
-}}
-"""
+        entry_w, entry_h = 512, 384
+        builder.add_area(
+            "Entry",
+            shape=(0, 0, entry_w, entry_h),
+            floor_height=0,
+            ceiling_height=160,
+            floor_texture="FLAT19",
+            ceiling_texture="CEIL3_5",
+            wall_texture="METAL1",
+            light_level=ambient + 40,
+            tag=500
         )
 
-        acs.add_script(
-            ScriptType.ENTER,
-            """
-int pn = PlayerNumber();
-int ptid = PLAYER_BASE_TID + pn;
-Thing_ChangeTID(0, ptid);
-EquipPlayer(ptid, pn);
+        room_idx = 0
+        for row in range(grid_rows):
+            for col in range(grid_cols):
+                if room_idx >= num_rooms:
+                    break
 
-""",
-            number=100,
-        )
+                rw = random.randint(room_min, room_max)
+                rh = random.randint(room_min, room_max)
 
-        acs.add_script(
-            ScriptType.RESPAWN,
-            """
-int pn = PlayerNumber();
-int ptid = PLAYER_BASE_TID + pn;
-Thing_ChangeTID(0, ptid);
-EquipPlayer(ptid, pn);
-""",
-            number=101,
-        )
+                cx = int((col - grid_cols / 2) * spacing + random.randint(-40, 40))
+                cy = int((row + 1) * spacing + random.randint(-40, 40))
 
-        acs.add_script(
-            ScriptType.OPEN,
-            """
-Delay(20);
-next_enemy_spawn_time = Timer() + 20;
-while (!failed && !finished) {
-    EnemyMaintenanceTick();
+                room_name = f"Room_{room_idx}"
+                room_tag = 100 + room_idx
 
-    if (LivingPlayers() == 0) {
-        TriggerFail("All marines down.");
-        terminate;
-    }
-
-    if (Timer() >= next_enemy_spawn_time) {
-        if (ActiveEnemies() < ENEMY_CAP) {
-            SpawnEnemies(1);
-        }
-        next_enemy_spawn_time = Timer() + ENEMY_SPAWN_INTERVAL + Random(0, ENEMY_SPAWN_INTERVAL);
-    }
-
-    Delay(6);
-}
-""",
-            number=1,
-        )
-
-        acs.add_script(
-            ScriptType.OPEN,
-            """
-Delay(20);
-next_civ_spawn_time = Timer() + 15;
-
-while (!failed && !finished) {
-    CivilianBehaviorTick();
-
-    if (Timer() >= next_civ_spawn_time) {
-        if (ActiveCivilians() < CIV_CAP) {
-            SpawnCivilians(1);
-        }
-        next_civ_spawn_time = Timer() + CIV_SPAWN_INTERVAL + Random(0, CIV_SPAWN_INTERVAL);
-    }
-
-    Delay(8);
-}
-""",
-            number=2,
-        )
-
-        acs.add_script(
-            ScriptType.VOID,
-            """
-TriggerFail("Mission failed: civilian collateral.");
-""",
-            number=951,
-        )
-
-        acs.add_script(
-            ScriptType.VOID,
-            """
-civilians_killed_total++;
-g_civ_kia = civilians_killed_total;
-TriggerFail("Mission failed: civilian collateral.");
-""",
-            number=952,
-        )
-
-        acs.add_script(
-            ScriptType.VOID,
-            """
-civilians_killed_total++;
-civilians_killed_with_enemies++;
-g_civ_kia = civilians_killed_total;
-g_civ_kia_e = civilians_killed_with_enemies;
-""",
-            number=953,
-        )
-
-        acs.add_script(
-            ScriptType.VOID,
-            """
-// no-op (legacy hook kept for backward compatibility)
-""",
-            number=954,
-        )
-
-        builder.map_data.scripts = acs.to_code()
-
-        try:
-            builder.map_data.behavior = acs.compile()
-        except Exception as exc:
-            print(f"ACS compile warning: {exc}")
-            if hasattr(exc, "stderr") and exc.stderr:
-                print(f"ACC stderr: {exc.stderr}")
-            builder.map_data.behavior = b"ACSE\x08\x00\x00\x00\x00\x00\x00\x00"
-
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        builder.build(output_path)
-
-    def _pick_safe_points(
-        self,
-        builder: ProceduralMapBuilder,
-        area_name: str,
-        count: int,
-        min_dist: float,
-        attempts: int,
-    ) -> List[Tuple[float, float]]:
-        points: List[Tuple[float, float]] = []
-        tries = 0
-        while len(points) < count and tries < attempts:
-            tries += 1
-            point = builder.get_random_point_in_area(area_name, safe=True)
-            if point is None:
-                continue
-
-            px, py = point
-            if all((px - ox) ** 2 + (py - oy) ** 2 >= min_dist * min_dist for ox, oy in points):
-                points.append(point)
-
-        return points
-
-    def _place_map_spots(
-        self,
-        builder: ProceduralMapBuilder,
-        base_tid: int,
-        count: int,
-        area_cycle: List[str],
-        rng: random.Random,
-        avoid_points: Optional[List[Tuple[float, float]]] = None,
-        min_distance: float = 0.0,
-    ) -> int:
-        placed = 0
-        attempts = 0
-        max_attempts = max(count * 20, 100)
-
-        while placed < count and attempts < max_attempts:
-            attempts += 1
-            area_name = area_cycle[(placed + attempts) % len(area_cycle)]
-            safe_first = attempts % 3 != 0
-            point = builder.get_random_point_in_area(area_name, safe=safe_first)
-            if point is None:
-                area_name = rng.choice(area_cycle)
-                point = builder.get_random_point_in_area(area_name, safe=False)
-            if point is None:
-                continue
-
-            if avoid_points:
-                px, py = point
-                too_close = False
-                for ox, oy in avoid_points:
-                    if (px - ox) ** 2 + (py - oy) ** 2 < (min_distance * min_distance):
-                        too_close = True
-                        break
-                if too_close:
-                    continue
-
-            x, y = point
-            builder.add_thing(ThingType.MAP_SPOT, x, y, tid=base_tid + placed, angle=rng.randint(0, 359))
-            placed += 1
-
-        return placed
-
-    def _place_supply_in_cover(self, builder: ProceduralMapBuilder, rng: random.Random) -> None:
-        supply_plan = [
-            ("WestReadyRoom", ThingType.BOX_OF_SHELLS, 2),
-            ("WestReadyRoom", ThingType.ENERGY_CELL_PACK, 1),
-            ("EastReadyRoom", ThingType.BOX_OF_SHELLS, 1),
-            ("EastReadyRoom", ThingType.ENERGY_CELL_PACK, 2),
-            ("BreachHall", ThingType.CELL, 3),
-            ("SpineB", ThingType.SHELLS, 2),
-            ("SpineC", ThingType.SHELLS, 2),
-            ("SpineA", ThingType.MEDIKIT, 1),
-            ("WestObservation", ThingType.STIMPACK, 1),
-            ("EastObservation", ThingType.STIMPACK, 1),
-            ("Breach", ThingType.ARMOR_BONUS, 3),
-        ]
-
-        for area_name, thing_type, count in supply_plan:
-            for _ in range(count):
-                pt = builder.get_random_point_in_area(area_name, safe=True)
-                if pt is None:
-                    pt = builder.get_random_point_in_area(area_name, safe=False)
-                if pt is None:
-                    continue
-                builder.add_thing(thing_type, pt[0], pt[1], angle=rng.randint(0, 359))
-
-    def _add_center_room_cover(self, builder: ProceduralMapBuilder) -> None:
-        room_specs = {
-            "WestReadyRoom": [("hard", 56, 56), ("waist", 92, 48)],
-            "EastReadyRoom": [("hard", 56, 56), ("waist", 92, 48)],
-            "BreachHall": [("hard", 76, 76), ("waist", 108, 50)],
-        }
-
-        cover_idx = 0
-        for area_name, shapes in room_specs.items():
-            center = builder.get_area_centroid(area_name)
-            if center is None:
-                continue
-            cx, cy = center
-
-            for cover_kind, w, h in shapes:
-                if cover_kind == "hard":
-                    floor_h, ceil_h = 136, 136
-                    ox, oy = 0.0, 0.0
-                elif cover_kind == "waist":
-                    floor_h, ceil_h = 40, 180
-                    ox, oy = float(w), 0.0
-                else:
-                    floor_h, ceil_h = 16, 180
-                    ox, oy = float(-w), 0.0
+                shape_type = random.choice(["rect", "L", "T"])
+                
+                if shape_type == "rect":
+                    poly = box(cx - rw/2, cy - rh/2, cx + rw/2, cy + rh/2)
+                elif shape_type == "L":
+                    base = box(cx - rw/2, cy - rh/2, cx + rw/2, cy + rh/2)
+                    cut_w, cut_h = rw // 2, rh // 2
+                    qx = random.choice([-1, 1])
+                    qy = random.choice([-1, 1])
+                    cut_x = cx + (qx * cut_w / 2)
+                    cut_y = cy + (qy * cut_h / 2)
+                    cutout = box(cut_x - cut_w/2, cut_y - cut_h/2, cut_x + cut_w/2, cut_y + cut_h/2)
+                    poly = base.difference(cutout)
+                else: # T-Shape
+                    bar_w = rw
+                    bar_h = rh // 3
+                    h_rect = box(cx - bar_w/2, cy - bar_h/2, cx + bar_w/2, cy + bar_h/2)
+                    
+                    stem_w = rw // 3
+                    stem_h = rh
+                    v_rect = box(cx - stem_w/2, cy - stem_h/2, cx + stem_w/2, cy + stem_h/2)
+                    poly = h_rect.union(v_rect)
 
                 builder.add_area(
-                    f"CenterCover_{cover_idx}",
-                    shape=(cx + ox, cy + oy, w, h),
-                    mode="overwrite",
-                    floor_height=floor_h,
-                    ceiling_height=ceil_h,
-                    wall_texture="BIGBRIK1",
+                    room_name,
+                    shape=poly,
+                    floor_height=0,
+                    ceiling_height=random.choice([128, 144, 160, 192]),
+                    floor_texture=random.choice(["FLAT19", "FLOOR4_8", "FLAT5_4", "FLOOR4_1"]),
+                    ceiling_texture=random.choice(["CEIL3_5", "CEIL3_3", "FLAT5_4"]),
+                    wall_texture=random.choice(["METAL1", "STONE2", "STARG3", "BROWN1"]),
+                    light_level=ambient,
+                    tag=room_tag
                 )
-                cover_idx += 1
+
+                rooms.append((room_name, cx, cy, rw, rh))
+                room_names.append(room_name)
+                room_tags.append(room_tag)
+
+                
+                for ci in range(cfg["cover_objects_per_room"]):
+                    inset = 96
+                    cover_x = cx + random.randint(-rw // 2 + inset, rw // 2 - inset)
+                    cover_y = cy + random.randint(-rh // 2 + inset, rh // 2 - inset)
+                    cover_w = random.randint(32, 48)
+                    cover_h = random.randint(32, 48)
+
+                    builder.add_area(
+                        f"Cover_{room_idx}_{ci}",
+                        shape=(cover_x, cover_y, cover_w, cover_h),
+                        floor_height=64,
+                        ceiling_height=160,
+                        wall_texture=random.choice(["CRATE1", "CRATE2", "CRATWIDE"]),
+                        mode="overwrite"
+                    )
+
+                room_idx += 1
+
+        
+        cw = cfg["corridor_width"]
+        corridor_tag_counter = 600
+
+        
+        def add_curved_corridor(src_name, dst_name, wall_tex="METAL1", use_waypoint=False):
+            nonlocal corridor_tag_counter
+            ctag = corridor_tag_counter
+            corridor_tag_counter += 1
+
+            if use_waypoint:
+                
+                src_data = next((r for r in rooms if r[0] == src_name), None)
+                dst_data = next((r for r in rooms if r[0] == dst_name), None)
+                
+                if src_name == "Entry":
+                    sx, sy = entry_w // 2, entry_h // 2
+                elif src_data:
+                    sx, sy = src_data[1], src_data[2]
+                else:
+                    sx, sy = 0, 0
+                if dst_data:
+                    dx, dy = dst_data[1], dst_data[2]
+                else:
+                    dx, dy = 0, 0
+
+                mid_x = (sx + dx) // 2
+                mid_y = (sy + dy) // 2
+                
+                dir_x = dx - sx
+                dir_y = dy - sy
+                length = max(1, int(math.sqrt(dir_x * dir_x + dir_y * dir_y)))
+                
+                offset_mag = random.choice([-1, 1]) * random.randint(80, 160)
+                perp_x = -dir_y * offset_mag // length
+                perp_y = dir_x * offset_mag // length
+
+                wp_x = mid_x + perp_x
+                wp_y = mid_y + perp_y
+                wp_name = f"WP_{src_name}_{dst_name}"
+
+                builder.add_area(
+                    wp_name,
+                    shape=(wp_x, wp_y, 128, 128),
+                    floor_height=0,
+                    ceiling_height=160,
+                    floor_texture="FLAT19",
+                    ceiling_texture="CEIL3_5",
+                    wall_texture=wall_tex,
+                    light_level=ambient - 20,
+                    tag=ctag
+                )
+                
+                
+                ox = random.choice([-24, 24])
+                oy = random.choice([-24, 24])
+                builder.add_area(
+                    f"Cover_{wp_name}",
+                    shape=(wp_x + ox, wp_y + oy, 40, 40),
+                    floor_height=64,
+                    ceiling_height=160,
+                    wall_texture=random.choice(["CRATE1", "CRATE2"]),
+                    mode="overwrite"
+                )
+                corridor_tags.append(ctag)
+
+                
+                ctag2 = corridor_tag_counter
+                corridor_tag_counter += 1
+                builder.add_corridor(
+                    src_name, wp_name,
+                    width=cw,
+                    floor_texture="FLAT19",
+                    wall_texture=wall_tex,
+                    light_level=ambient - 20,
+                    tag=ctag2
+                )
+                corridor_tags.append(ctag2)
+
+                
+                ctag3 = corridor_tag_counter
+                corridor_tag_counter += 1
+                builder.add_corridor(
+                    wp_name, dst_name,
+                    width=cw,
+                    floor_texture="FLAT19",
+                    wall_texture=wall_tex,
+                    light_level=ambient - 20,
+                    tag=ctag3
+                )
+                corridor_tags.append(ctag3)
+
+            else:
+                builder.add_corridor(
+                    src_name, dst_name,
+                    width=cw,
+                    floor_texture="FLAT19",
+                    wall_texture=wall_tex,
+                    light_level=ambient - 20,
+                    tag=ctag
+                )
+                corridor_tags.append(ctag)
+
+        
+        connect_count = min(3, len(room_names))
+        for i in range(connect_count):
+            add_curved_corridor("Entry", room_names[i], "METAL1", use_waypoint=(i % 2 == 0))
+
+        
+        for i in range(len(room_names) - 1):
+            add_curved_corridor(
+                room_names[i], room_names[i + 1], "STONE2",
+                use_waypoint=(i % 3 != 0)
+            )
+
+        
+        if len(room_names) > 4:
+            cross_pairs = random.sample(
+                [(i, j) for i in range(len(room_names))
+                 for j in range(i + 2, min(i + 5, len(room_names)))],
+                k=min(3, len(room_names) // 3)
+            )
+            for i, j in cross_pairs:
+                try:
+                    add_curved_corridor(
+                        room_names[i], room_names[j], "BROWN1",
+                        use_waypoint=True
+                    )
+                except Exception:
+                    pass
+
+        
+        builder.add_thing(ThingType.PLAYER1_START, -64, -32, angle=90)
+        builder.add_thing(ThingType.PLAYER2_START, 64, -32, angle=90)
+        builder.add_thing(ThingType.PLAYER3_START, -64, 32, angle=90)
+        builder.add_thing(ThingType.PLAYER4_START, 64, 32, angle=90)
+
+        
+        enemy_spot_base = 2000
+        total_enemy_spots = 0
+        enemy_spot_positions = []
+        for i, rname in enumerate(room_names):
+            spots_per_room = random.randint(6, 10)
+            for s in range(spots_per_room):
+                pt = builder.get_random_point_in_area(rname, safe=True)
+                if pt:
+                    builder.add_thing(
+                        ThingType.MAP_SPOT, pt[0], pt[1],
+                        tid=enemy_spot_base + total_enemy_spots
+                    )
+                    enemy_spot_positions.append((int(pt[0]), int(pt[1])))
+                    total_enemy_spots += 1
+
+        
+        civilian_spot_base = 3000
+        total_civilian_spots = 0
+        civilian_spot_positions = []
+        civilian_rooms = random.sample(
+            room_names,
+            k=max(3, int(len(room_names) * 0.8))
+        )
+        for rname in civilian_rooms:
+            
+            for _ in range(3):
+                pt = builder.get_random_point_in_area(rname, safe=True)
+                if pt:
+                    builder.add_thing(
+                        ThingType.MAP_SPOT, pt[0], pt[1],
+                        tid=civilian_spot_base + total_civilian_spots
+                    )
+                    civilian_spot_positions.append((int(pt[0]), int(pt[1])))
+                    total_civilian_spots += 1
+
+        
+        acs = ACSBuilder()
+        acs.add_include("zcommon.acs")
+        
+        acs.add_global_var("cqb_score_global", 50, "int")
+        acs.add_global_var("cqb_rooms_cleared_global", 51, "int")
+        acs.add_global_var("cqb_alive_enemies_global", 52, "int")
+        acs.add_global_var("cqb_alive_civilians_global", 53, "int")
+        acs.add_global_var("cqb_flashlight_p0_global", 54, "int")
+        acs.add_global_var("cqb_flashlight_p1_global", 55, "int")
+        acs.add_global_var("cqb_wave_global", 56, "int")
+
+        room_tags_str = ", ".join(str(t) for t in room_tags)
+
+        enemy_spot_x_str = ", ".join(str(p[0]) for p in enemy_spot_positions) if enemy_spot_positions else "0"
+        enemy_spot_y_str = ", ".join(str(p[1]) for p in enemy_spot_positions) if enemy_spot_positions else "0"
+        civ_spot_x_str = ", ".join(str(p[0]) for p in civilian_spot_positions) if civilian_spot_positions else "0"
+        civ_spot_y_str = ", ".join(str(p[1]) for p in civilian_spot_positions) if civilian_spot_positions else "0"
+
+        acs_code = f"""
+#define MAX_ENEMIES {cfg['max_enemies']}
+#define MAX_CIVILIANS {cfg['max_civilians']}
+#define NUM_ROOMS {len(room_names)}
+#define PLAYER_COUNT {cfg['player_count']}
+#define AMBIENT_LIGHT {ambient}
+#define ENEMY_DETECT_RADIUS {cfg['enemy_detect_radius']}
+#define FLASH_DETECT_RADIUS {cfg['flashlight_detect_radius']}
+#define ENEMY_SPOT_BASE {enemy_spot_base}
+#define TOTAL_ENEMY_SPOTS {total_enemy_spots}
+#define CIV_SPOT_BASE {civilian_spot_base}
+#define TOTAL_CIV_SPOTS {total_civilian_spots}
+#define ENEMY_TID_BASE 800
+#define CIV_TID_BASE 700
+#define PLAYER_TID_BASE 400
+#define SPAWN_INTERVAL {cfg['spawn_interval_tics']}
+#define ENTRY_TAG 500
+#define MIN_SPAWN_DIST {cfg['min_spawn_distance']}
+
+int room_tags[{len(room_names)}] = {{ {room_tags_str} }};
+int enemy_aware[MAX_ENEMIES];
+int cover_timer[MAX_ENEMIES];
+int slot_dead_timer[MAX_ENEMIES];
+
+int espawn_x[{max(1, total_enemy_spots)}] = {{ {enemy_spot_x_str} }};
+int espawn_y[{max(1, total_enemy_spots)}] = {{ {enemy_spot_y_str} }};
+int cspawn_x[{max(1, total_civilian_spots)}] = {{ {civ_spot_x_str} }};
+int cspawn_y[{max(1, total_civilian_spots)}] = {{ {civ_spot_y_str} }};
+
+script "ToggleFlashlight" (void) NET {{
+    int pNum = PlayerNumber();
+    int tid = 1000 + pNum;
+
+    if (CheckInventory("FlashlightToken") == 0) {{
+        GiveInventory("FlashlightToken", 1);
+        SpawnForced("FlashlightTarget", GetActorX(0), GetActorY(0), GetActorZ(0) + 40.0, tid, 0);
+        ACS_NamedExecuteAlways("FlashlightTicker", 0, pNum);
+        LocalAmbientSound("switches/normbutn", 80);
+    }} else {{
+        TakeInventory("FlashlightToken", 1);
+        Thing_Remove(tid);
+        LocalAmbientSound("switches/normbutn", 50);
+    }}
+
+    if (pNum == 0) cqb_flashlight_p0_global = CheckInventory("FlashlightToken");
+    if (pNum == 1) cqb_flashlight_p1_global = CheckInventory("FlashlightToken");
+}}
+
+script 10 OPEN {{
+    while (TRUE) {{
+        int p;
+        for (p = 0; p < PLAYER_COUNT; p++) {{
+            int ptid = PLAYER_TID_BASE + p;
+            if (GetActorProperty(ptid, APROP_Health) <= 0) continue;
+
+            int light = GetActorLightLevel(ptid);
+            int in_flux = 0;
+
+            if (CheckActorInventory(ptid, "FlashlightToken") > 0) in_flux = 1;
+            if (light > 95) in_flux = 1;
+
+            if (in_flux) {{
+                GiveActorInventory(ptid, "PlayerInLight", 1);
+            }} else {{
+                TakeActorInventory(ptid, "PlayerInLight", 1);
+            }}
+        }}
+        Delay(5);
+    }}
+}}
+
+script "FlashlightTicker" (int pNum) {{
+    int tid = 1000 + pNum;
+    while (CheckInventory("FlashlightToken") > 0) {{
+        SetActorPosition(tid, GetActorX(0), GetActorY(0), GetActorZ(0) + 40.0, FALSE);
+        Delay(1);
+    }}
+}}
+
+script 50 (void) NET {{
+    ACS_NamedExecuteAlways("ToggleFlashlight", 0);
+}}
+
+script 100 ENTER {{
+    int pid = PlayerNumber();
+    Thing_ChangeTID(0, PLAYER_TID_BASE + pid);
+
+    ClearInventory();
+
+    if (pid == 0) {{
+        GiveInventory("SuperShotgun", 1);
+        GiveInventory("Shell", 20);
+        SetWeapon("SuperShotgun");
+    }} else {{
+        GiveInventory("PlasmaRifle", 1);
+        GiveInventory("Cell", 40);
+        SetWeapon("PlasmaRifle");
+    }}
+
+    GiveInventory("GreenArmor", 1);
+
+    HudMessage(s:"\\cGCQB OPERATION ACTIVE";
+        HUDMSG_FADEOUT, 10, CR_GREEN, 0.5, 0.3, 3.0, 1.0);
+    HudMessage(s:"\\cDFriendly fire: ENABLED | Civilians: DO NOT ENGAGE | Press F: Flashlight";
+        HUDMSG_FADEOUT, 11, CR_GOLD, 0.5, 0.35, 5.0, 1.0);
+}}
+
+script 1 OPEN {{
+    cqb_score_global = 0;
+    cqb_rooms_cleared_global = 0;
+    cqb_alive_enemies_global = 0;
+    cqb_alive_civilians_global = 0;
+    cqb_wave_global = 0;
+
+    int i;
+    for (i = 0; i < MAX_ENEMIES; i++) {{
+        enemy_aware[i] = 0;
+        cover_timer[i] = 0;
+    }}
+
+    while (TRUE) {{
+        int alive_e = 0;
+        int alive_c = 0;
+        for (i = 0; i < MAX_ENEMIES; i++) {{
+            if (ThingCount(T_NONE, ENEMY_TID_BASE + i) > 0) alive_e++;
+        }}
+        for (i = 0; i < MAX_CIVILIANS; i++) {{
+            if (ThingCount(T_NONE, CIV_TID_BASE + i) > 0) alive_c++;
+        }}
+        cqb_alive_enemies_global = alive_e;
+        cqb_alive_civilians_global = alive_c;
+
+        SetFont("SMALLFONT");
+        HudMessage(s:"\\cDHOSTILES: ", d:alive_e,
+                   s:"  \\cCCIVILIANS: ", d:alive_c,
+                   s:"  \\cGSCORE: ", d:cqb_score_global,
+                   s:"  \\cNWAVE: ", d:cqb_wave_global;
+            HUDMSG_PLAIN, 1, CR_WHITE, 0.5, 0.05, 0.1);
+
+        Delay(4);
+    }}
+}}
+
+function int NearestPlayerDistSq(int sx, int sy) {{
+    int best = 2147483647;
+    int p;
+    for (p = 0; p < PLAYER_COUNT; p++) {{
+        int ptid = PLAYER_TID_BASE + p;
+        if (GetActorProperty(ptid, APROP_Health) <= 0) continue;
+        int px = GetActorX(ptid) >> 16;
+        int py = GetActorY(ptid) >> 16;
+        int dx = sx - px;
+        int dy = sy - py;
+        int dsq = dx * dx + dy * dy;
+        if (dsq < best) best = dsq;
+    }}
+    return best;
+}}
+
+script 2 OPEN {{
+    Delay(35 * 4);
+
+    int wave = 0;
+    int min_dist_sq = MIN_SPAWN_DIST * MIN_SPAWN_DIST;
+    int last_spot_used = -1;
+
+    while (TRUE) {{
+        wave++;
+        cqb_wave_global = wave;
+
+        int needed = 0;
+        int slot_free[MAX_ENEMIES];
+        int i;
+        for (i = 0; i < MAX_ENEMIES; i++) {{
+            if (slot_dead_timer[i] > 0) {{
+                slot_dead_timer[i]--;
+                slot_free[i] = 0;
+            }} else if (ThingCount(T_NONE, ENEMY_TID_BASE + i) == 0) {{
+                slot_free[i] = 1;
+                needed++;
+            }} else {{
+                slot_free[i] = 0;
+            }}
+        }}
+
+        int to_spawn = needed;
+        if (to_spawn > 5) to_spawn = 5;
+
+        int valid_spots[TOTAL_ENEMY_SPOTS];
+        int num_valid = 0;
+        int s;
+        for (s = 0; s < TOTAL_ENEMY_SPOTS; s++) {{
+            int dsq = NearestPlayerDistSq(espawn_x[s], espawn_y[s]);
+            if (dsq >= min_dist_sq) {{
+                valid_spots[num_valid] = s;
+                num_valid++;
+            }}
+        }}
+
+        int spawned = 0;
+        if (num_valid > 0) {{
+            for (i = 0; i < MAX_ENEMIES && spawned < to_spawn; i++) {{
+                if (slot_free[i] == 0) continue;
+
+                int rand_idx = Random(0, num_valid - 1);
+                int real_spot = valid_spots[rand_idx];
+                int spot_tid = ENEMY_SPOT_BASE + real_spot;
+
+                str etype = "CQBHostile";
+                if (wave > 2 && Random(0, 3) == 0) etype = "CQBHostileElite";
+                if (wave > 5 && Random(0, 4) == 0) etype = "CQBHostileElite";
+
+                int tmp_tid = 9900;
+                if (SpawnSpotFacing(etype, spot_tid, tmp_tid)) {{
+                    enemy_aware[i] = 0;
+                    cover_timer[i] = Random(105, 245);
+                    Thing_ChangeTID(tmp_tid, ENEMY_TID_BASE + i);
+                    spawned++;
+                }}
+            }}
+        }}
+
+        Delay(SPAWN_INTERVAL);
+    }}
+}}
+
+script 3 OPEN {{
+    Delay(35 * 2);
+
+    int min_dist_sq = MIN_SPAWN_DIST * MIN_SPAWN_DIST;
+    int last_civ_spot = -1;
+
+    while (TRUE) {{
+        int i;
+        int s;
+
+        int needed = 0;
+        for (i = 0; i < MAX_CIVILIANS; i++) {{
+            if (ThingCount(T_NONE, CIV_TID_BASE + i) == 0) needed++;
+        }}
+        if (needed > 2) needed = 2;
+
+        int valid_spots[TOTAL_CIV_SPOTS];
+        int num_valid = 0;
+        for (s = 0; s < TOTAL_CIV_SPOTS; s++) {{
+            int dsq = NearestPlayerDistSq(cspawn_x[s], cspawn_y[s]);
+            if (dsq >= min_dist_sq) {{
+                valid_spots[num_valid] = s;
+                num_valid++;
+            }}
+        }}
+
+        int spawned = 0;
+        if (num_valid > 0) {{
+            int spot_idx = (last_civ_spot + 1) % num_valid;
+            for (i = 0; i < MAX_CIVILIANS && spawned < needed; i++) {{
+                if (ThingCount(T_NONE, CIV_TID_BASE + i) > 0) continue;
+
+                int real_spot = valid_spots[spot_idx % num_valid];
+                int spot_tid = CIV_SPOT_BASE + real_spot;
+
+                int tmp_tid = 9901;
+                if (SpawnSpotFacing("CQBCivilian", spot_tid, tmp_tid)) {{
+                    Thing_ChangeTID(tmp_tid, CIV_TID_BASE + i);
+                    spawned++;
+                    last_civ_spot = spot_idx;
+                    spot_idx = (spot_idx + 2) % num_valid;
+                }} else {{
+                    spot_idx = (spot_idx + 1) % num_valid;
+                }}
+            }}
+        }}
+
+        Delay(35 * 8);
+    }}
+}}
+
+script 4 OPEN {{
+    while (TRUE) {{
+        int i;
+        int p;
+
+        for (i = 0; i < MAX_ENEMIES; i++) {{
+            int etid = ENEMY_TID_BASE + i;
+
+            if (ThingCount(T_NONE, etid) == 0) continue;
+            if (GetActorProperty(etid, APROP_Health) <= 0) continue;
+
+            int ex = GetActorX(etid) >> 16;
+            int ey = GetActorY(etid) >> 16;
+
+            int should_wake = 0;
+            int closest_ptid = 0;
+            int closest_dist = 2147483647;
+
+            for (p = 0; p < PLAYER_COUNT; p++) {{
+                int ptid = PLAYER_TID_BASE + p;
+                if (GetActorProperty(ptid, APROP_Health) <= 0) continue;
+
+                int px = GetActorX(ptid) >> 16;
+                int py = GetActorY(ptid) >> 16;
+                int dx = ex - px;
+                int dy = ey - py;
+                int dist_sq = dx * dx + dy * dy;
+
+                if (dist_sq < closest_dist) {{
+                    closest_dist = dist_sq;
+                    closest_ptid = ptid;
+                }}
+
+                int close_prox = 192 * 192;
+                
+                if (dist_sq < close_prox) {{
+                    should_wake = 1;
+                }}
+
+                if (CheckSight(etid, ptid, 0)) {{
+                    if (CheckActorInventory(ptid, "FlashlightToken") > 0) {{
+                        if (dist_sq < 2048 * 2048) {{
+                            should_wake = 1;
+                        }}
+                    }} else if (CheckActorInventory(ptid, "PlayerInLight") > 0) {{
+                        if (dist_sq < 1024 * 1024) {{
+                            should_wake = 1;
+                        }}
+                    }} else {{
+                        if (dist_sq < 256 * 256) {{
+                            should_wake = 1;
+                        }}
+                    }}
+                }}
+            }}
+
+            if (should_wake && enemy_aware[i] == 0) {{
+                enemy_aware[i] = 1;
+                SetActorState(etid, "See");
+                if (closest_ptid > 0) {{
+                    Thing_Hate(etid, closest_ptid, 1);
+                }}
+            }}
+        }}
+
+        Delay(15);
+    }}
+}}
+
+script 997 (void) {{
+    int tid = ActivatorTID();
+    int slot = tid - ENEMY_TID_BASE;
+
+    if (slot >= 0 && slot < MAX_ENEMIES) {{
+        enemy_aware[slot] = 0;
+        slot_dead_timer[slot] = 5; 
+    }}
+
+    cqb_score_global++;
+
+    int p;
+    for (p = 0; p < PLAYER_COUNT; p++) {{
+        int ptid = PLAYER_TID_BASE + p;
+        GiveActorInventory(ptid, "Shell", 2);
+        GiveActorInventory(ptid, "Cell", 2);
+    }}
+
+    Delay(35 * 4);
+    Thing_Remove(0);
+}}
+
+script 998 (void) {{
+    SetActivatorToTarget(0);
+    
+    if (PlayerNumber() != -1) {{
+        hudmessage(s:"CIVILIAN CASUALTY! MISSION FAILED."; HUDMSG_PLAIN, 1, CR_RED, 0.5, 0.4, 5.0);
+        DamageThing(0);
+    }} else {{
+        hudmessage(s:"Civilian killed by hostile forces."; HUDMSG_PLAIN, 2, CR_ORANGE, 0.5, 0.45, 3.0);
+    }}
+}}
+
+script "TeammateDamageHandler" (void) {{
+    int victim_num = PlayerNumber();
+    
+    if (SetActivatorToTarget(0)) {{
+        int attacker_num = PlayerNumber();
+        
+        if (attacker_num != -1 && attacker_num != victim_num) {{
+            SetFont("BIGFONT");
+            HudMessage(s:"\\cRFRIENDLY FIRE - MISSION FAILED";
+                HUDMSG_PLAIN, 1, CR_RED, 0.5, 0.4, 5.0);
+            
+            Log(s:"Friendly Fire: Player ", d:attacker_num, s:" hit Player ", d:victim_num);
+            
+            Delay(35);
+            DamageThing(0, 0);
+        }}
+    }}
+}}
+
+script 999 DEATH {{
+    if (PlayerNumber() != -1) {{
+        SetFont("BIGFONT");
+        HudMessage(s:"\\cRMISSION FAILED\\c- - OPERATIVE DOWN";
+            HUDMSG_PLAIN, 99, CR_RED, 0.5, 0.5, 3.0);
+
+        Delay(35 * 2);
+        Exit_Normal(0);
+    }}
+}}
+"""
+
+        acs.add_global_code(acs_code)
+
+        builder.map_data.scripts = acs.to_code()
+        try:
+            compiled = acs.compile()
+            if compiled:
+                builder.map_data.behavior = compiled
+            else:
+                print("ACS: No bytecode generated, scripts will compile at load time.")
+                builder.map_data.behavior = b'ACSE\x08\x00\x00\x00\x00\x00\x00\x00'
+        except Exception as e:
+            print(f"ACS Compilation Warning: {e}")
+            if hasattr(e, 'stderr') and e.stderr:
+                print(f"ACC Stderr: {e.stderr}")
+            builder.map_data.behavior = b'ACSE\x08\x00\x00\x00\x00\x00\x00\x00'
+
+        builder.build(output_path)
+        print(f"CQB Benchmark WAD written to {output_path}")
 
 
 if __name__ == "__main__":
-    output = "examples/benchmark/output/coop_cqb.wad"
-    scenario = CoopCQBScenario(config={"seed": random.randint(0, 999999)})
-    scenario.generate(output)
+    os.makedirs("examples/benchmark/output", exist_ok=True)
+    scenario = CoopCQBScenario(config={"seed": random.randint(0, 99999)})
+    scenario.generate("examples/benchmark/output/coop_cqb.wad")
