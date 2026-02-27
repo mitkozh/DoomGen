@@ -114,3 +114,6 @@ Desktop.ini
 # ACS compilation artifacts
 *.o
 *.acs.bak
+
+# MacOS
+.DS_Store
