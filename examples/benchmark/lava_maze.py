@@ -201,7 +201,6 @@ def create_scenario(output_path: str = "examples/benchmark/output/lava_maze.wad"
         for (int i = 0; i < MAP_WIDTH * MAP_WIDTH; i++) {{
             t = BASE_TAG + i;
             if (t != keep_tag) {{
-                Floor_Stop(t);
                 Floor_MoveToValue(t, 2048, -64, 0);
                 ChangeFloor(t, "LAVA1");
                 Sector_SetDamage(t, 10, 14);
@@ -213,7 +212,6 @@ def create_scenario(output_path: str = "examples/benchmark/output/lava_maze.wad"
     // Carve: Raise to Safe Height (0)
     function void carve(int x, int y) {{
         int tag = get_tag(x, y);
-        Floor_Stop(tag); // Override any conflicting movement
         Floor_MoveToValue(tag, 2048, 0, 0); 
         ChangeFloor(tag, "FLOOR4_8"); 
         Sector_SetDamage(tag, 0, 0); 
@@ -256,6 +254,7 @@ def create_scenario(output_path: str = "examples/benchmark/output/lava_maze.wad"
         int start_tag = get_tag(sx, sy);
         int i;
         reset_map(start_tag);
+        Delay(1);
 
         for (i = 0; i < 3; i++) maze_bits_chunk[i] = 0;
         

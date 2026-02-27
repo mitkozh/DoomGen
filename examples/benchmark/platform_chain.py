@@ -432,7 +432,7 @@ class PlatformChainScenario(Scenario):
                     f"""
                     ChangeFloor({tag}, "{platform_floor}");
                     Sector_SetDamage({tag}, 0, 0);
-                    Floor_Stop({tag});
+                    Floor_CrushStop({tag});
                     Floor_MoveToValue({tag}, 14, {low}, 0);
                     Ceiling_MoveToValue({tag}, 14, {crusher_open_ceiling}, 0);
                     """
@@ -445,26 +445,26 @@ class PlatformChainScenario(Scenario):
                     ChangeFloor({tag}, "{lift_floor}");
                     Sector_SetDamage({tag}, 0, 0);
                     if (((tick + {idx * 9}) % 170) < 85) {{
-                        Floor_Stop({tag});
+                        Floor_CrushStop({tag});
                         Floor_MoveToValue({tag}, 8, {lift_high}, 0);
                     }} else {{
-                        Floor_Stop({tag});
+                        Floor_CrushStop({tag});
                         Floor_MoveToValue({tag}, 8, {low}, 0);
                     }}
-                    Ceiling_Stop({tag});
+                    Ceiling_CrushStop({tag});
                     Ceiling_MoveToValue({tag}, 64, {crusher_open_ceiling}, 0);
                 }} else if ((({tag} * 37 + run_shift) % 100) < 38) {{
                     ChangeFloor({tag}, "{vertical_crusher_floor}");
-                    Floor_Stop({tag});
+                    Floor_CrushStop({tag});
                     Floor_MoveToValue({tag}, 14, {low}, 0); 
 
                     Ceiling_CrushAndRaise({tag}, 64, 200, 0);
                 }} else {{
                     ChangeFloor({tag}, "{platform_floor}");
                     Sector_SetDamage({tag}, 0, 0);
-                    Floor_Stop({tag});
+                    Floor_CrushStop({tag});
                     Floor_MoveToValue({tag}, 14, {low}, 0);
-                    Ceiling_Stop({tag});
+                    Ceiling_CrushStop({tag});
                     Ceiling_MoveToValue({tag}, 64, {crusher_open_ceiling}, 0);
                 }}
                 """

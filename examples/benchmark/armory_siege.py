@@ -63,11 +63,13 @@ ACTOR DefenseCore 15000
 {{
   //$Category "Objectives"
   Health {int(cfg['core_health'])}
+  Mass 100000
   Radius 16
   Height 50
   Speed 0
   +SOLID
   +SHOOTABLE
+  +DONTTHRUST
   +NOBLOOD
   +FRIENDLY
   +ISMONSTER

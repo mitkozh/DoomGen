@@ -391,7 +391,6 @@ class LavaPitScenario(Scenario):
                 if (bridge_state[{i}] != 1) {{
                     bridge_state[{i}] = 1;
                     int speed_up_{i} = 24 + Random(0, 10);
-                    Floor_Stop({bridge_tag});
                     Floor_MoveToValue({bridge_tag}, speed_up_{i}, {platform_floor_height}, 0);
                     ChangeFloor({bridge_tag}, "{platform_floor_texture}");
                     Sector_SetDamage({bridge_tag}, 0, 0);
@@ -401,7 +400,6 @@ class LavaPitScenario(Scenario):
                 if (bridge_state[{i}] != 0) {{
                     bridge_state[{i}] = 0;
                     int speed_down_{i} = 52 + Random(0, 20);
-                    Floor_Stop({bridge_tag});
                     Floor_MoveToValue({bridge_tag}, speed_down_{i}, {lava_height}, 0);
                     ChangeFloor({bridge_tag}, "LAVA1");
                     Sector_SetDamage({bridge_tag}, {lava_damage}, 14);
