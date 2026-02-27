@@ -1,5 +1,7 @@
 # Copilot Instructions for DoomGen
 
+This will be used with vizdoom, so generated map must work with vizdoom/zdoom 2.8.1+ (not gzdoom)
+
 ## Project Overview
 
 A Python library for procedurally generating Doom WAD files, targeting Multi-Agent Reinforcement Learning (MARL) benchmarks. 
