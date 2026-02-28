@@ -322,12 +322,39 @@ ACTOR SiegeLostSoul : LostSoul 15007
         
         # Dynamic Script Variables
         open_dur = int(cfg['door_timer'])
-        cycle_len = open_dur * 6 
+        # Door schedule: 3 doors open in a staggered rotating pattern across
+        # a repeating cycle. The cycle length is derived from the door open
+        # duration so that the schedule scales with the config parameter.
+        # Window offsets are spaced at cycle/6 increments, preserving the
+        # overlap pattern of the original hardcoded schedule (1200 tics with
+        # 200-tic spacing when open_dur = 300).
+        cycle_len = open_dur * 4
+        # Stagger between different doors: cycle / 6.
+        stagger = cycle_len // 6
+        # Repeat gap between windows of the same door: 5 * cycle / 12.
+        repeat_gap = 5 * cycle_len // 12
+        # Pre-compute door window offsets for injection into ACS.
+        # Door A: 3 windows (dominant/armory door), B and C: 2 windows each.
+        # With defaults (open_dur=300, cycle_len=1200, stagger=200, repeat=500)
+        # this reproduces: A@0,500,1000  B@200,700  C@400,900.
+        off_a1 = 0
+        off_a2 = repeat_gap                # 500 with defaults
+        off_a3 = repeat_gap * 2            # 1000 with defaults
+        off_b1 = stagger                   # 200 with defaults
+        off_b2 = stagger + repeat_gap      # 700 with defaults
+        off_c1 = stagger * 2               # 400 with defaults
+        off_c2 = stagger * 2 + repeat_gap  # 900 with defaults
 
         # Calculate health multiplier
         diff = float(cfg['enemy_difficulty'])
         health_mult = diff if diff < 1.0 else 1.0
         health_mult_fixed = int(health_mult * 65536)
+
+        # Pre-compute enemy difficulty as integer percentage for ACS.
+        # ACS uses 16.16 fixed-point: a float literal like 0.5 compiles to
+        # 32768, breaking integer arithmetic. Using integer division avoids
+        # the fixed-point trap entirely.
+        enemy_diff_pct = max(5, int(diff * 100))
         
         # Generate ACS Health Bar Switch
         bar_cases = []
@@ -371,8 +398,8 @@ ACTOR SiegeLostSoul : LostSoul 15007
         int door_c_open = 0;
         
         while (TRUE) {{
-            cycle = tick % 1200;
-            wave = tick / 1050; // Difficulty scaling
+            cycle = tick % {cycle_len};
+            wave = tick / {cycle_len} - 150; // Difficulty scaling
             
             core_health_global = GetActorProperty(TID_CORE, APROP_HEALTH);
 
@@ -393,9 +420,9 @@ ACTOR SiegeLostSoul : LostSoul 15007
             // Durations are relative to open_dur.
             
             int dur = {open_dur};
-            int should_open_a = (cycle >= 0 && cycle < dur) || (cycle >= 500 && cycle < (500+dur)) || (cycle >= 1000 && cycle < (1000+dur));
-            int should_open_b = (cycle >= 200 && cycle < (200+dur)) || (cycle >= 700 && cycle < (700+dur));
-            int should_open_c = (cycle >= 400 && cycle < (400+dur)) || (cycle >= 900 && cycle < (900+dur));
+            int should_open_a = (cycle >= {off_a1} && cycle < ({off_a1}+dur)) || (cycle >= {off_a2} && cycle < ({off_a2}+dur)) || (cycle >= {off_a3} && cycle < ({off_a3}+dur));
+            int should_open_b = (cycle >= {off_b1} && cycle < ({off_b1}+dur)) || (cycle >= {off_b2} && cycle < ({off_b2}+dur));
+            int should_open_c = (cycle >= {off_c1} && cycle < ({off_c1}+dur)) || (cycle >= {off_c2} && cycle < ({off_c2}+dur));
             
             if (should_open_a) {{
                 if (!door_a_open) {{
@@ -464,7 +491,7 @@ ACTOR SiegeLostSoul : LostSoul 15007
             }}
             
             // Wave System
-            int max_enemies = (20 + wave * 5) * {cfg['enemy_difficulty']};
+            int max_enemies = (20 + wave * 5) * {enemy_diff_pct} / 100;
             int spawn_interval = 200 - (wave * 20);
             if (spawn_interval < 40) spawn_interval = 40;
             
