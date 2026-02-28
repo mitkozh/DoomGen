@@ -7,7 +7,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-wads=("benchmark/output"/*.wad)
+wads=("examples/benchmark/output"/*.wad)
 for i in "${!wads[@]}"; do
     printf "%d %s\n" "$((i+1))" "${wads[$i]}"
 done
@@ -24,10 +24,10 @@ while true; do
     fi
 done
 
-./play/vizdoom -windowed 1 -iwad ./play/freedoom2.wad -file "$wad" -host 2 &
+./examples/play/vizdoom -windowed 1 -iwad ./examples/play/freedoom2.wad -file "$wad" -host 2 &
 hpid=$!
 sleep 0.5
-./play/vizdoom -windowed 1 -iwad ./play/freedoom2.wad -file "$wad" -join 127.0.0.1 &
+./examples/play/vizdoom -windowed 1 -iwad ./examples/play/freedoom2.wad -file "$wad" -join 127.0.0.1 &
 jpid=$!
 echo $hpid
 echo $jpid

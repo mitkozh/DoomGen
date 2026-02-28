@@ -303,6 +303,8 @@ ACTOR SiegeLostSoul : LostSoul 15007
         acs = ACSBuilder()
         acs.add_include("zcommon.acs")
         acs.add_global_var("core_health_global", 1, "int")
+        acs.add_global_var("core_x_global", 2, "int")
+        acs.add_global_var("core_y_global", 3, "int")
         
         acs.add_script(ScriptType.ENTER, """
             int p_tid = 1000 + PlayerNumber();
@@ -378,7 +380,9 @@ ACTOR SiegeLostSoul : LostSoul 15007
         int TID_TEMP_SPAWN = 900;
         
         SpawnSpot("DefenseCore", 50 + Random(0, 4), TID_CORE, 0);
-        
+        core_x_global = GetActorX(TID_CORE) >> 16;
+        core_y_global = GetActorY(TID_CORE) >> 16;
+
         // Initial Items (Scaled maybe? For now static)
         SpawnSpot("PlaceablePistol", 300 + Random(0, 4), 0, 0);
         SpawnSpot("Clip", 310 + Random(0, 4), 0, 0);
