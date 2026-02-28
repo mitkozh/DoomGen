@@ -51,9 +51,10 @@ class MapTranslator:
             back_area = ridge["back_area"]
             rtype = ridge["type"]
             
-            # Get coordinates (snapped to int)
-            x1, y1 = int(line_geom.coords[0][0]), int(line_geom.coords[0][1])
-            x2, y2 = int(line_geom.coords[1][0]), int(line_geom.coords[1][1])
+            # Get coordinates (rounded to int before snapping)
+            # This should be round instead of floor
+            x1, y1 = int(round(line_geom.coords[0][0])), int(round(line_geom.coords[0][1]))
+            x2, y2 = int(round(line_geom.coords[1][0])), int(round(line_geom.coords[1][1]))
             
             # Skip zero-length lines
             if x1 == x2 and y1 == y2: continue
