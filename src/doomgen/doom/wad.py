@@ -223,7 +223,19 @@ class WADWriter:
                     flags=t.get('flags', 7)
                 ))
         
-        # Build nodes (BSP) and save to WAD
+        # This is docs from omgifol MapEditor:
+        #   Currently present but unused:
+        #       segs          List containing Seg objects
+        #       ssectors      List containing SubSector objects
+        #       nodes         List containing Node objects
+        #       blockmap      Lump object containing blockmap data
+        #       reject        Lump object containing reject table data
+        #       (These five lumps are not updated when saving; you will need to use
+        #       an external node builder utility)
+
+        # This doesnt build BSP nodes, ZDoom's internal ZDBSP rebuilds them at load time
+        # SLADE also ignores many of these https://github.com/sirjuddington/SLADE/blob/030cab09eb2108c65b47c088d1ce97d27e671b9a/src/MapEditor/MapBackupManager.cpp#L55
+
         map_lumps = editor.to_lumps()
         
         # Add BEHAVIOR lump if we have compiled ACS
