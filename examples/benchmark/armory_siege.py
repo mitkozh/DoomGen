@@ -399,7 +399,7 @@ ACTOR SiegeLostSoul : LostSoul 15007
         
         while (TRUE) {{
             cycle = tick % {cycle_len};
-            wave = tick / {cycle_len} - 150; // Difficulty scaling
+            wave = tick / ({cycle_len} - 50); // Difficulty scaling
             
             core_health_global = GetActorProperty(TID_CORE, APROP_HEALTH);
 

@@ -7,7 +7,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-wads=("output"/*.wad)
+wads=("benchmark/output"/*.wad)
 for i in "${!wads[@]}"; do
     printf "%d %s\n" "$((i+1))" "${wads[$i]}"
 done
