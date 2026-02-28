@@ -111,9 +111,15 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 
+# vizdoom
+_vizdoom.ini
+
 # ACS compilation artifacts
 *.o
 *.acs.bak
 
 # MacOS
 .DS_Store
+asdfff
+
+
