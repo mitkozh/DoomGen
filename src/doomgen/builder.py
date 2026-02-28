@@ -32,6 +32,7 @@ class ProceduralMapBuilder:
         self.map_data = self.wad_writer.create_map("MAP01")
         self.things_to_add: List[Dict[str, Any]] = []
         self.name_to_id: Dict[str, str] = {}
+        self._used_cells: set[int] = set()  # Tracks cells returned by get_random_point_in_area
         
         # Generate Global Seed Field
         self.seeds = generate_relaxed_seeds(bounds, num_seeds, seed=seed)
@@ -442,15 +443,18 @@ class ProceduralMapBuilder:
         """
         Returns the (x, y) coordinates of a random cell in the specified area.
         If safe=True, prefers cells that are not adjacent to other areas (internal cells).
+
+        Note: MAP_SPOT is duplicated, corridors with width=3 create very few (sometimes only 1-2) "safe" internal cells, so get_random_point_in_area(safe=True) picks the same cell repeatedly -> enemies spawn stacking on each other
+        This avoids returning the same cell repeatedly by tracking previously used indices: when all eligible cells have been used, the tracker resets so cells can be reused.
         """
         area_id = self.name_to_id.get(area_name_or_id, area_name_or_id)
-        
+
         # Get all indices for this area
         candidate_indices = [i for i, s in enumerate(self.seeds) if s.area_id == area_id]
-        
+
         if not candidate_indices:
             return None
-            
+
         if safe:
             # Filter for internal cells (all neighbors are in the same area)
             safe_indices = []
@@ -463,14 +467,25 @@ class ProceduralMapBuilder:
                         break
                 if is_internal:
                     safe_indices.append(idx)
-            
+
             if safe_indices:
-                idx = self.rng.choice(safe_indices)
+                unused = [i for i in safe_indices if i not in self._used_cells]
+                if not unused:
+                    # All safe cells used, reset for this area and retry
+                    self._used_cells -= set(safe_indices)
+                    unused = safe_indices
+                idx = self.rng.choice(unused)
+                self._used_cells.add(idx)
                 s = self.seeds[idx]
                 return (s.x, s.y)
-                
+
         # Fallback or if safe=False
-        idx = self.rng.choice(candidate_indices)
+        unused = [i for i in candidate_indices if i not in self._used_cells]
+        if not unused:
+            self._used_cells -= set(candidate_indices)
+            unused = candidate_indices
+        idx = self.rng.choice(unused)
+        self._used_cells.add(idx)
         s = self.seeds[idx]
         return (s.x, s.y)
 
@@ -484,7 +499,7 @@ class ProceduralMapBuilder:
         avg_y = sum(s.y for s in seeds) / len(seeds)
         return (avg_x, avg_y)
 
-    def build(self, output_path: str):
+    def build(self, output_path: str, zdbsp_path: Optional[str] = None):
         """
         Generates the WAD file.
         """
@@ -494,7 +509,8 @@ class ProceduralMapBuilder:
             self.mesh.point_idx_to_area_id[i] = seed.area_id
             
         # 2. Translate to Doom Data
-        translator = MapTranslator(self.map_data)
+        use_hexen = self.map_data.behavior is not None
+        translator = MapTranslator(self.map_data, use_hexen_format=use_hexen)
         translator.translate(self.mesh, self.graph)
         
         # 3. Add Things
