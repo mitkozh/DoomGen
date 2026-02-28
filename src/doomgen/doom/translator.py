@@ -15,8 +15,9 @@ class MapTranslator:
     """
     Translates the topological VoronoiMesh into Doom sectors and linedefs.
     """
-    def __init__(self, map_data: DoomMapData):
+    def __init__(self, map_data: DoomMapData, use_hexen_format: bool = False):
         self.map_data = map_data
+        self.use_hexen_format = use_hexen_format
         self.area_to_sector_idx: Dict[str, int] = {} # Maps Area ID to Doom Sector Index
 
     def translate(self, mesh: VoronoiMesh, graph: LayoutGraph):
@@ -192,10 +193,9 @@ class MapTranslator:
             tag = 0
             
             connection = ridge.get("connection")
-            
-            if rtype == "solid":
-                flags |= LinedefFlags.BLOCKING | LinedefFlags.TWO_SIDED
-            elif rtype == "portal":
+
+            # Removed check rtype == solid, solid block upper uses continue so this is unreachable anw
+            if rtype == "portal":
                 flags |= LinedefFlags.TWO_SIDED
                 
                 # Check for Window/Fence
@@ -249,18 +249,31 @@ class MapTranslator:
                         v1_idx, v2_idx = v2_idx, v1_idx
                         side_front, side_back = side_back, side_front
                         # Now door is on Back.
-                        special = 1 # DR Door Open Wait Close
-                        # REMOVED: flags |= LinedefFlags.BLOCKING 
-                        # Doors should be passable (Two Sided). The sector height blocks movement.
-                        
+                        if self.use_hexen_format:
+                            # Translator sets special=1 for door linedefs, but we use ACS scripts which force hexen
+                            # In hexen action 1 = Polyobj_StartLine, so instead should use door_raise(12) or special=0 + ACS
+                            # In armory siege door is controlled through ACS, so linedef special is pointless, so here set to 0 (no action)
+                            # Also door linedefs are Polyobj_StartLine(0) during map initialization, which it cant without matching spawn spot or anchor
+                            special = 0
+                        else:
+                            special = 1 # DR Door Open Wait Close
+                            # REMOVED: flags |= LinedefFlags.BLOCKING 
+                            # Doors should be passable (Two Sided). The sector height blocks movement.
+
                     elif is_back_door and not is_front_door:
                         # Door is on Back. Good.
-                        special = 1
+                        if self.use_hexen_format:
+                            special = 0
+                        else:
+                            special = 1
                         
                     # If both or neither, we can't decide easily.
                     # Maybe check textures?
                     elif "DOOR" in config_front.wall_texture or "DOOR" in config_back.wall_texture:
-                         special = 1
+                         if self.use_hexen_format:
+                             special = 0
+                         else:
+                             special = 1
                     
                     # Check for custom linedef special in the Door Area config
                     # The door area is the one that is the "door" (is_front_door or is_back_door)
