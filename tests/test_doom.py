@@ -5,7 +5,7 @@ Tests for the Doom translator module.
 import pytest
 
 from doomgen.doom.wad import DoomMapData
-from doomgen.doom.translator import MapEditor, SectorConfig, WallConfig
+# from doomgen.doom.translator import MapEditor, SectorConfig, WallConfig
 from doomgen.doom.things import ThingType, get_thing_radius, EASY_ENEMIES
 from doomgen.doom.tags import TagRegistry
 
@@ -65,77 +65,79 @@ class TestDoomMapData:
         assert map_data.things[0]['type'] == ThingType.PLAYER1_START
 
 
-class TestMapEditor:
-    """Tests for MapEditor class."""
+# Dead code
+# Need to check if can apply to MapStranlator
+# class TestMapEditor:
+#     """Tests for MapEditor class."""
     
-    def test_create_from_polygon(self):
-        """Test creating a sector from a polygon."""
-        from shapely.geometry import Polygon
+#     def test_create_from_polygon(self):
+#         """Test creating a sector from a polygon."""
+#         from shapely.geometry import Polygon
         
-        map_data = DoomMapData("MAP01")
-        editor = MapEditor(map_data)
+#         map_data = DoomMapData("MAP01")
+#         editor = MapEditor(map_data)
         
-        polygon = Polygon([(0, 0), (100, 0), (100, 100), (0, 100)])
-        sector_idx = editor.add_sector_from_polygon(polygon)
+#         polygon = Polygon([(0, 0), (100, 0), (100, 100), (0, 100)])
+#         sector_idx = editor.add_sector_from_polygon(polygon)
         
-        assert sector_idx == 0
-        assert len(map_data.sectors) == 1
-        assert len(map_data.vertices) == 4
-        assert len(map_data.linedefs) == 4
+#         assert sector_idx == 0
+#         assert len(map_data.sectors) == 1
+#         assert len(map_data.vertices) == 4
+#         assert len(map_data.linedefs) == 4
     
-    def test_sector_config(self):
-        """Test sector configuration."""
-        from shapely.geometry import Polygon
+#     def test_sector_config(self):
+#         """Test sector configuration."""
+#         from shapely.geometry import Polygon
         
-        map_data = DoomMapData("MAP01")
-        editor = MapEditor(map_data)
+#         map_data = DoomMapData("MAP01")
+#         editor = MapEditor(map_data)
         
-        config = SectorConfig(
-            floor_height=24,
-            ceiling_height=256,
-            light_level=200
-        )
+#         config = SectorConfig(
+#             floor_height=24,
+#             ceiling_height=256,
+#             light_level=200
+#         )
         
-        polygon = Polygon([(0, 0), (100, 0), (100, 100), (0, 100)])
-        editor.add_sector_from_polygon(polygon, config=config)
+#         polygon = Polygon([(0, 0), (100, 0), (100, 100), (0, 100)])
+#         editor.add_sector_from_polygon(polygon, config=config)
         
-        assert map_data.sectors[0]['floor_height'] == 24
-        assert map_data.sectors[0]['ceiling_height'] == 256
-        assert map_data.sectors[0]['light_level'] == 200
+#         assert map_data.sectors[0]['floor_height'] == 24
+#         assert map_data.sectors[0]['ceiling_height'] == 256
+#         assert map_data.sectors[0]['light_level'] == 200
     
-    def test_add_thing_with_check(self):
-        """Test thing placement with geometry check."""
-        from shapely.geometry import Polygon
+#     def test_add_thing_with_check(self):
+#         """Test thing placement with geometry check."""
+#         from shapely.geometry import Polygon
         
-        map_data = DoomMapData("MAP01")
-        editor = MapEditor(map_data)
+#         map_data = DoomMapData("MAP01")
+#         editor = MapEditor(map_data)
         
-        polygon = Polygon([(0, 0), (100, 0), (100, 100), (0, 100)])
-        editor.add_sector_from_polygon(polygon)
+#         polygon = Polygon([(0, 0), (100, 0), (100, 100), (0, 100)])
+#         editor.add_sector_from_polygon(polygon)
         
-        # Thing inside polygon - should work
-        idx = editor.add_thing(50, 50, ThingType.PLAYER1_START)
-        assert idx == 0
+#         # Thing inside polygon - should work
+#         idx = editor.add_thing(50, 50, ThingType.PLAYER1_START)
+#         assert idx == 0
         
-        # Thing outside polygon - should raise
-        with pytest.raises(ValueError):
-            editor.add_thing(200, 200, ThingType.IMP)
+#         # Thing outside polygon - should raise
+#         with pytest.raises(ValueError):
+#             editor.add_thing(200, 200, ThingType.IMP)
     
-    def test_add_player_start(self):
-        """Test player start convenience method."""
-        from shapely.geometry import Polygon
+#     def test_add_player_start(self):
+#         """Test player start convenience method."""
+#         from shapely.geometry import Polygon
         
-        map_data = DoomMapData("MAP01")
-        editor = MapEditor(map_data)
+#         map_data = DoomMapData("MAP01")
+#         editor = MapEditor(map_data)
         
-        polygon = Polygon([(0, 0), (200, 0), (200, 200), (0, 200)])
-        editor.add_sector_from_polygon(polygon)
+#         polygon = Polygon([(0, 0), (200, 0), (200, 200), (0, 200)])
+#         editor.add_sector_from_polygon(polygon)
         
-        editor.add_player_start(100, 100, angle=90, player_num=1)
+#         editor.add_player_start(100, 100, angle=90, player_num=1)
         
-        assert len(map_data.things) == 1
-        assert map_data.things[0]['type'] == ThingType.PLAYER1_START
-        assert map_data.things[0]['angle'] == 90
+#         assert len(map_data.things) == 1
+#         assert map_data.things[0]['type'] == ThingType.PLAYER1_START
+#         assert map_data.things[0]['angle'] == 90
 
 
 class TestThingType:

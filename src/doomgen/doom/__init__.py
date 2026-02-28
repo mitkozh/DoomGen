@@ -58,7 +58,7 @@ __all__ = [
     "WADWriter",
     
     # Translation
-    "MapEditor",
+    "MapTranslator",
     
     # Things
     "ThingType",
