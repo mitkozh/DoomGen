@@ -14,7 +14,7 @@ from shapely.affinity import translate, rotate
 from doomgen.abstraction.layout import LayoutGraph, Area, AreaConfig, Transform, ConnectionType
 from doomgen.geometry.seeds import generate_relaxed_seeds, Seed
 from doomgen.geometry.mesh import VoronoiMesh
-from doomgen.doom.wad import WADWriter, DoomMapData
+from doomgen.doom.wad import WADWriter, DoomMapData, run_zdbsp
 from doomgen.doom.translator import MapTranslator
 from doomgen.doom.things import ThingType
 
@@ -534,4 +534,16 @@ class ProceduralMapBuilder:
         # 4. Write WAD
         self.wad_writer.save(output_path)
         print(f"WAD written to {output_path}")
+
+        # 5. Optionally run ZDBSP to pre-build BSP nodes
+        zdbsp_path = "./zdbsp/zdbsp" # MacOS/Linux, for Win uses .exe file
+        # I kind of "hard-coded" here. This should be passed by .build() instead
+        # Like builder.build("output.wad", zdbsp_path="./zdbsp/zdbsp")
+        if zdbsp_path is not None:
+            found = run_zdbsp(output_path, zdbsp_path=zdbsp_path)
+            if found:
+                print(f"ZDBSP: nodes built successfully for {output_path}")
+            else:
+                print(f"Warning: ZDBSP not found at '{zdbsp_path}'. "
+                      "WAD saved with empty node lumps (ZDoom will rebuild at load time).")
 

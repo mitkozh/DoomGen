@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
 from typing import Optional, Any
 from pathlib import Path
 
@@ -251,6 +253,43 @@ class WADWriter:
             map_lumps['SCRIPTS'] = Lump(scripts_data)
         
         self.wad.maps[name] = map_lumps
+
+
+def run_zdbsp(wad_path: str | Path, zdbsp_path: str = "zdbsp") -> bool:
+    """
+    "ZDBSP is ZDoom's (internal and external) node builder. This node builder was "
+    "written with two design goals in mind: speed and minimization of polyobject "
+    "bleeding." - from zdbsp.c
+
+    Run ZDBSP on a WAD file to build BSP nodes, blockmap, and reject table.
+    This is an optional post-processing step. ZDoom 2.8.1+ will rebuild nodes at load time if the lumps are empty, but pre-building with ZDBSP can catch geometry errors early and avoids runtime nodebuilding overhead.
+
+    :param wad_path: Path to the WAD file to process (modified in-place).
+    :param zdbsp_path: Path to the ZDBSP executable (default: "zdbsp" on PATH).
+    :returns: True if ZDBSP ran successfully, False if ZDBSP was not found.
+    :raises subprocess.CalledProcessError: If ZDBSP exits with a non-zero status (degenerate geometry that cannot be noded)
+    """
+    wad_path = Path(wad_path)
+    resolved = shutil.which(zdbsp_path)
+    if resolved is None: return False
+
+    # ZDBSP overwrites in-place with -o pointing to the same file. Use tmp file
+    tmp_path = wad_path.with_suffix(".zdbsp_tmp.wad")
+    try:
+        subprocess.run(
+            [resolved, "-o", tmp_path, wad_path],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        # Replace original with noded version
+        tmp_path.replace(wad_path) # This removes tmp_path from the filesystem
+        return True
+    finally:
+        # If subprocess fails, tmp_path still exists and gets deleted
+        # If subprocess succeeds, replace() already removed it, so this does nothing
+        if tmp_path.exists():
+            tmp_path.unlink()
 
 
 class DoomMapData:

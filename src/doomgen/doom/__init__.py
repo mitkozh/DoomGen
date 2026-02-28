@@ -16,7 +16,7 @@ from doomgen.doom.config import (
 )
 
 # WAD I/O
-from doomgen.doom.wad import WADWriter
+from doomgen.doom.wad import WADWriter, run_zdbsp
 
 # Map Translation
 from doomgen.doom.translator import MapTranslator
@@ -56,6 +56,7 @@ __all__ = [
     
     # WAD
     "WADWriter",
+    "run_zdbsp",
     
     # Translation
     "MapTranslator",
