@@ -5,6 +5,7 @@ Uses a global relaxed Voronoi field for organic generation.
 
 from __future__ import annotations
 from typing import Optional, Tuple, List, Dict, Any, Union
+import os
 import math
 import random
 import numpy as np
@@ -552,9 +553,9 @@ class ProceduralMapBuilder:
         print(f"WAD written to {output_path}")
 
         # 5. Optionally run ZDBSP to pre-build BSP nodes
-        zdbsp_path = "./zdbsp/zdbsp" # MacOS/Linux, for Win uses .exe file
-        # I kind of "hard-coded" here. This should be passed by .build() instead
-        # Like builder.build("output.wad", zdbsp_path="./zdbsp/zdbsp")
+        if zdbsp_path is None:
+            zdbsp_path = "./zdbsp/zdbsp.exe" if os.name == "nt" else "./zdbsp/zdbsp"
+            
         if zdbsp_path is not None:
             found = run_zdbsp(output_path, zdbsp_path=zdbsp_path)
             if found:
