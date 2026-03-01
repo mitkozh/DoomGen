@@ -156,6 +156,7 @@ def create_scenario(output_path: str = "examples/benchmark/output/lava_maze.wad"
     acs.add_global_var("lm_maze_bits_0_global", 19, "int")
     acs.add_global_var("lm_maze_bits_1_global", 20, "int")
     acs.add_global_var("lm_maze_bits_2_global", 21, "int")
+    acs.add_global_var("lm_levels_completed_global", 22, "int")
     
     acs.scripts = []  
     
@@ -397,6 +398,7 @@ def create_scenario(output_path: str = "examples/benchmark/output/lava_maze.wad"
                 int my_tag = get_tag(gx, gy);
                 
                 if (my_tag == current_end_tag) {{
+                    lm_levels_completed_global++;
                     current_maze_size += 2;
                     if (current_maze_size > MAX_TILES) current_maze_size = MAX_TILES;
                     if (current_maze_size < 4) current_maze_size = 4;
@@ -404,7 +406,7 @@ def create_scenario(output_path: str = "examples/benchmark/output/lava_maze.wad"
                     
                     ACS_NamedExecute("GenerateMaze", 0, gx, gy, current_maze_size);
                     
-                    Delay(35 * 2);
+                    //Delay(35 * 2);
                 }}
             }} else {{
                 lm_p1_grid_x_global = -1;
