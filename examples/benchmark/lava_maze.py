@@ -479,10 +479,10 @@ def create_scenario(output_path: str = "examples/benchmark/output/lava_maze.wad"
                     lm_flash_signal_global = signal;
                     // Trigger Flash on Player 1 (Set Globals)
                     int fr=0, fg=0, fb=0;
-                    if (signal == 1) {{ fr=0; fg=0.8; fb=0; }}
-                    if (signal == 2) {{ fr=0.8; fg=0; fb=0; }}
-                    if (signal == 3) {{ fr=0.8; fg=0.8; fb=0; }}
-                    if (signal == 4) {{ fr=0; fg=0; fb=0.8; }}
+                    if (signal == 1) {{ fr=0; fg=255; fb=0; }}
+                    if (signal == 2) {{ fr=255; fg=0; fb=0; }}
+                    if (signal == 3) {{ fr=255; fg=255; fb=0; }}
+                    if (signal == 4) {{ fr=0; fg=0; fb=255; }}
                     
                     g_flash_r = fr;
                     g_flash_g = fg;
