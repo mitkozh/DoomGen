@@ -199,7 +199,9 @@ def create_scenario(output_path: str = "examples/benchmark/output/lava_maze.wad"
     // Reset Map: Lower all pillars to lava height (-64) and damage
     function void reset_map(int keep_tag) {{
         int t;
-        for (int i = 0; i < MAP_WIDTH * MAP_WIDTH; i++) {{
+        // ACS is based on C99 so `for (int i = 0;...)` shouldnt work in my experience
+        int i;
+        for (i = 0; i < MAP_WIDTH * MAP_WIDTH; i++) {{
             t = BASE_TAG + i;
             if (t != keep_tag) {{
                 Floor_MoveToValue(t, 2048, -64, 0);
