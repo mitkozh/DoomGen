@@ -20,7 +20,7 @@ def get_project_root() -> Path:
 
 def get_bundled_compiler(tool_name: str) -> str:
     project_root = get_project_root()
-    exe_ext = ".exe" if os.name == "nt" else "" # nt is windows
+    exe_ext = ".exe" if os.name == "nt" or os.name == "posix" else "" # nt is windows
     tool_path = project_root / tool_name / f"{tool_name}{exe_ext}"
     return str(tool_path)
 
