@@ -2,6 +2,8 @@
 
 This will be used with vizdoom, so generated map must work with vizdoom/zdoom 2.8.1+ (not gzdoom)
 
+When writing ACS Script, always notice and use correct syntax (the syntax is similar to old C version), like can't declare variable in a for loop `for (int i=0; ...)`,...
+
 ## Project Overview
 
 A Python library for procedurally generating Doom WAD files, targeting Multi-Agent Reinforcement Learning (MARL) benchmarks. 
