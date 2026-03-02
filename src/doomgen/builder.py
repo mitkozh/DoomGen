@@ -4,62 +4,62 @@ Uses a global relaxed Voronoi field for organic generation.
 """
 
 from __future__ import annotations
-from typing import Optional, Tuple, List, Dict, Any, Union
-import os
-import math
-import random
-import numpy as np
-from shapely.geometry import Polygon, Point, box
-from shapely.affinity import translate, rotate
 
-from doomgen.abstraction.layout import LayoutGraph, Area, AreaConfig, Transform, ConnectionType
-from doomgen.geometry.seeds import generate_relaxed_seeds, Seed
-from doomgen.geometry.mesh import VoronoiMesh
-from doomgen.doom.wad import WADWriter, DoomMapData, run_zdbsp
-from doomgen.doom.translator import MapTranslator
+from typing import Any
+
+import numpy as np
+from shapely.geometry import Point, Polygon, box
+
+from doomgen.abstraction.layout import Area, AreaConfig, ConnectionType, LayoutGraph, Transform
 from doomgen.doom.things import ThingType
+from doomgen.doom.translator import MapTranslator
+from doomgen.doom.wad import WADWriter, run_zdbsp
+from doomgen.geometry.mesh import VoronoiMesh
+from doomgen.geometry.seeds import generate_relaxed_seeds
+from doomgen.utils.paths import get_bundled_compiler, validate_executable
+
 
 class ProceduralMapBuilder:
     """
     A builder class that provides a simplified API for generating Doom maps.
     Uses Lloyd's relaxation and cell-based construction.
     """
-    def __init__(self, bounds: Tuple[float, float, float, float] = (-1024, -1024, 1024, 1024), 
+    def __init__(self, bounds: tuple[float, float, float, float] = (-1024, -1024, 1024, 1024),
                  num_seeds: int = 2000, seed: int = 42):
         self.graph = LayoutGraph()
         self.seed = seed
         self.rng = np.random.default_rng(seed)
         self.wad_writer = WADWriter()
         self.map_data = self.wad_writer.create_map("MAP01")
-        self.things_to_add: List[Dict[str, Any]] = []
-        self.name_to_id: Dict[str, str] = {}
+        self.things_to_add: list[dict[str, Any]] = []
+        self.name_to_id: dict[str, str] = {}
         self._used_cells: set[int] = set()  # Tracks cells returned by get_random_point_in_area
-        
+
         # Generate Global Seed Field
         self.seeds = generate_relaxed_seeds(bounds, num_seeds, seed=seed)
-        
+
         # Build Mesh immediately to establish topology
         self.mesh = VoronoiMesh(self.seeds, self.graph)
         self.mesh.build()
-        
+
     def add_area(
         self,
         name: str,
-        shape: Union[Polygon, Tuple[float, float, float, float]], # Polygon or (x, y, w, h)
+        shape: Polygon | tuple[float, float, float, float], # Polygon or (x, y, w, h)
         floor_height: int = 0,
         ceiling_height: int = 128,
         floor_texture: str = "FLOOR4_8",
         ceiling_texture: str = "CEIL3_5",
         wall_texture: str = "STARTAN3",
-        middle_texture: Optional[str] = None,
-        lower_texture: Optional[str] = None,
-        upper_texture: Optional[str] = None,
+        middle_texture: str | None = None,
+        lower_texture: str | None = None,
+        upper_texture: str | None = None,
         light_level: int = 160,
         special: int = 0,
         tag: int = 0,
-        linedef_special: Optional[int] = None,
-        linedef_args: Optional[List[int]] = None,
-        linedef_flags: Optional[int] = None,
+        linedef_special: int | None = None,
+        linedef_args: list[int] | None = None,
+        linedef_flags: int | None = None,
         mode: str = "claim_void", # "claim_void" or "overwrite"
         **kwargs
     ) -> str:
@@ -77,7 +77,7 @@ class ProceduralMapBuilder:
             poly = box(x - w/2, y - h/2, x + w/2, y + h/2)
         else:
             poly = shape
-            
+
         config = AreaConfig(
             floor_height=floor_height,
             ceiling_height=ceiling_height,
@@ -95,17 +95,17 @@ class ProceduralMapBuilder:
             linedef_flags=linedef_flags,
             properties=kwargs
         )
-        
+
         # Create Area (mostly for config storage now)
         area = Area(
             name=name,
             transform=Transform(0, 0), # Not really used in new system
             config=config
         )
-        
+
         area_id = self.graph.add_area(area)
         self.name_to_id[name] = area_id
-        
+
         # Assign seeds
         count = 0
         for s in self.seeds:
@@ -114,15 +114,15 @@ class ProceduralMapBuilder:
                 should_claim = True
             elif mode == "claim_void" and s.area_id == "VOID":
                 should_claim = True
-                
+
             if should_claim:
                 if poly.contains(Point(s.x, s.y)):
                     s.area_id = area_id
                     count += 1
-                    
+
         if count == 0:
             print(f"Warning: Area {name} claimed 0 seeds. Check bounds/density.")
-            
+
         return area_id
 
 
@@ -137,9 +137,9 @@ class ProceduralMapBuilder:
         floor_texture: str = "FLOOR4_8",
         ceiling_texture: str = "CEIL3_5",
         wall_texture: str = "STARTAN3",
-        middle_texture: Optional[str] = None,
-        lower_texture: Optional[str] = None,
-        upper_texture: Optional[str] = None,
+        middle_texture: str | None = None,
+        lower_texture: str | None = None,
+        upper_texture: str | None = None,
         light_level: int = 160,
         special: int = 0,
         tag: int = 0
@@ -149,22 +149,22 @@ class ProceduralMapBuilder:
         """
         id_a = self.name_to_id.get(room_a_name, room_a_name)
         id_b = self.name_to_id.get(room_b_name, room_b_name)
-        
+
         # Find seeds for start and end
         seeds_a = [i for i, s in enumerate(self.seeds) if s.area_id == id_a]
         seeds_b = [i for i, s in enumerate(self.seeds) if s.area_id == id_b]
-        
+
         if not seeds_a or not seeds_b:
             print(f"Warning: Cannot connect {room_a_name} and {room_b_name}, one has no seeds.")
             return ""
-            
+
         # Find path
         path_indices = self.mesh.find_path(seeds_a, seeds_b)
-        
+
         if not path_indices:
             print(f"Warning: No path found between {room_a_name} and {room_b_name}.")
             return ""
-            
+
         # Create Corridor Area
         corridor_name = f"corridor_{room_a_name}_{room_b_name}"
         config = AreaConfig(
@@ -180,13 +180,13 @@ class ProceduralMapBuilder:
             special=special,
             tag=tag
         )
-        
+
         area = Area(name=corridor_name, transform=Transform(0,0), config=config)
         area_id = self.graph.add_area(area)
-        
+
         # Assign seeds along path
         path_set = set(path_indices)
-        
+
         # Dilate path if width > 1
         if width > 1:
             for _ in range(width - 1):
@@ -196,16 +196,16 @@ class ProceduralMapBuilder:
                         if self.seeds[neighbor].area_id == "VOID":
                             new_neighbors.add(neighbor)
                 path_set.update(new_neighbors)
-        
+
         for idx in path_set:
             # Only overwrite VOID (don't eat into rooms)
             if self.seeds[idx].area_id == "VOID":
                 self.seeds[idx].area_id = area_id
-                
+
         # Add logical connections to graph
         self.graph.connect(id_a, area_id, ConnectionType.OPEN)
         self.graph.connect(area_id, id_b, ConnectionType.OPEN)
-        
+
         return area_id
 
     def add_stairs(
@@ -218,29 +218,29 @@ class ProceduralMapBuilder:
         ceiling_texture: str = "CEIL3_5",
         wall_texture: str = "BROWN1",
         riser_texture: str = "STEP1"
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Connects two rooms with a staircase by finding a path and segmenting it into steps.
         Returns the list of IDs for the created step areas.
         """
         id_a = self.name_to_id.get(room_a_name, room_a_name)
         id_b = self.name_to_id.get(room_b_name, room_b_name)
-        
+
         # Get heights
         area_a = self.graph.get_area(id_a)
         area_b = self.graph.get_area(id_b)
-        
+
         h_start = area_a.config.floor_height
         h_end = area_b.config.floor_height
-        
+
         # Find path
         seeds_a = [i for i, s in enumerate(self.seeds) if s.area_id == id_a]
         seeds_b = [i for i, s in enumerate(self.seeds) if s.area_id == id_b]
-        
+
         if not seeds_a or not seeds_b:
             print(f"Warning: Cannot connect {room_a_name} and {room_b_name} with stairs.")
             return []
-            
+
         path_indices = self.mesh.find_path(seeds_a, seeds_b)
         if not path_indices:
             print(f"Warning: No path found for stairs between {room_a_name} and {room_b_name}.")
@@ -250,7 +250,7 @@ class ProceduralMapBuilder:
         if len(path_indices) < num_steps:
             print(f"Warning: Path length ({len(path_indices)}) < requested steps ({num_steps}). Reducing steps.")
             num_steps = max(1, len(path_indices))
-            
+
         # Map cells to step index (0 to num_steps-1)
         # We use the centerline path to define the steps
         cell_to_step = {}
@@ -261,7 +261,7 @@ class ProceduralMapBuilder:
             k = int((i / len(path_indices)) * num_steps)
             k = min(k, num_steps - 1) # Clamp to max index
             cell_to_step[cell_idx] = k
-            
+
         # Dilate
         current_set = set(path_indices)
         if width > 1:
@@ -275,7 +275,7 @@ class ProceduralMapBuilder:
                                 cell_to_step[neighbor] = step_idx # Assign to same step
                                 new_neighbors.add(neighbor)
                 current_set.update(new_neighbors)
-                
+
         # Create Areas for each step
         step_ids = []
         for k in range(num_steps):
@@ -283,12 +283,12 @@ class ProceduralMapBuilder:
             # Linear interpolation
             # k=0 -> h_start + delta * 1/N
             # k=N-1 -> h_start + delta * N/N = h_end
-            
+
             t = (k + 1) / num_steps
             h = int(h_start + (h_end - h_start) * t)
-            
+
             step_name = f"stairs_{room_a_name}_{room_b_name}_step_{k+1}"
-            
+
             config = AreaConfig(
                 floor_height=h,
                 ceiling_height=max(area_a.config.ceiling_height, area_b.config.ceiling_height), # High ceiling
@@ -298,30 +298,30 @@ class ProceduralMapBuilder:
                 lower_texture=riser_texture,
                 upper_texture=riser_texture
             )
-            
+
             area = Area(name=step_name, transform=Transform(0,0), config=config)
             area_id = self.graph.add_area(area)
             step_ids.append(area_id)
-            
+
             # Assign seeds
             for cell_idx, s_k in cell_to_step.items():
                 if s_k == k:
                     self.seeds[cell_idx].area_id = area_id
-                    
+
         # Connect
         # A -> Step 1
         self.graph.connect(id_a, step_ids[0], ConnectionType.OPEN)
-        
+
         # Step i -> Step i+1
         for k in range(num_steps - 1):
             self.graph.connect(step_ids[k], step_ids[k+1], ConnectionType.OPEN)
-            
+
         # Step N -> B
         self.graph.connect(step_ids[-1], id_b, ConnectionType.OPEN)
-        
+
         return step_ids
 
-    def set_void(self, shape: Union[Polygon, Tuple[float, float, float, float]]):
+    def set_void(self, shape: Polygon | tuple[float, float, float, float]):
         """
         Sets cells within the shape to VOID (solid wall/hole).
         """
@@ -330,7 +330,7 @@ class ProceduralMapBuilder:
             poly = box(x - w/2, y - h/2, x + w/2, y + h/2)
         else:
             poly = shape
-            
+
         for s in self.seeds:
             if poly.contains(Point(s.x, s.y)):
                 s.area_id = "VOID"
@@ -340,20 +340,20 @@ class ProceduralMapBuilder:
         room_a_name: str,
         room_b_name: str,
         name: str = "boundary",
-        floor_height: Optional[int] = None,
-        ceiling_height: Optional[int] = None,
+        floor_height: int | None = None,
+        ceiling_height: int | None = None,
         floor_texture: str = "FLOOR4_8",
         ceiling_texture: str = "CEIL3_5",
         wall_texture: str = "BIGDOOR2",
-        lower_texture: Optional[str] = None,
-        upper_texture: Optional[str] = None,
+        lower_texture: str | None = None,
+        upper_texture: str | None = None,
         light_level: int = 160,
         special: int = 0,
         tag: int = 0,
         connection_type: ConnectionType = ConnectionType.OPEN,
-        linedef_special: Optional[int] = None,
-        linedef_args: Optional[List[int]] = None,
-        linedef_flags: Optional[int] = None
+        linedef_special: int | None = None,
+        linedef_args: list[int] | None = None,
+        linedef_flags: int | None = None
     ) -> str:
         """
         Creates a new area from the boundary cells between two existing areas.
@@ -361,24 +361,24 @@ class ProceduralMapBuilder:
         """
         id_a = self.name_to_id.get(room_a_name, room_a_name)
         id_b = self.name_to_id.get(room_b_name, room_b_name)
-        
+
         # Find boundary cells (cells in A that touch B)
         candidates = []
         seeds_a = [i for i, s in enumerate(self.seeds) if s.area_id == id_a]
-        
+
         for idx in seeds_a:
             for neighbor in self.mesh.adjacency.get(idx, []):
                 if self.seeds[neighbor].area_id == id_b:
                     candidates.append(idx)
-                    
+
         if not candidates:
             print(f"Warning: No boundary found between {room_a_name} and {room_b_name}.")
             return ""
-            
+
         # Inherit heights if not specified
         # We need to look up the areas to get their config
         area_a = self.graph.get_area(id_a)
-        
+
         config = AreaConfig(
             floor_height=floor_height if floor_height is not None else area_a.config.floor_height,
             ceiling_height=ceiling_height if ceiling_height is not None else area_a.config.ceiling_height,
@@ -394,19 +394,19 @@ class ProceduralMapBuilder:
             linedef_args=linedef_args or [],
             linedef_flags=linedef_flags
         )
-        
+
         area = Area(name=name, transform=Transform(0,0), config=config)
         area_id = self.graph.add_area(area)
         self.name_to_id[name] = area_id
-        
+
         # Assign candidates
         for idx in candidates:
             self.seeds[idx].area_id = area_id
-            
+
         # Update connections
         self.graph.connect(id_a, area_id, connection_type)
         self.graph.connect(area_id, id_b, connection_type)
-        
+
         return area_id
 
     def connect_adjacent(self, room_a_name: str, room_b_name: str, type: ConnectionType = ConnectionType.OPEN, silent: bool = False, **kwargs):
@@ -415,7 +415,7 @@ class ProceduralMapBuilder:
         """
         id_a = self.name_to_id.get(room_a_name, room_a_name)
         id_b = self.name_to_id.get(room_b_name, room_b_name)
-        
+
         # Check adjacency
         is_adjacent = False
         seeds_a = [i for i, s in enumerate(self.seeds) if s.area_id == id_a]
@@ -425,7 +425,7 @@ class ProceduralMapBuilder:
                     is_adjacent = True
                     break
             if is_adjacent: break
-            
+
         if is_adjacent:
             self.graph.connect(id_a, id_b, type, **kwargs)
         elif not silent:
@@ -440,7 +440,7 @@ class ProceduralMapBuilder:
             **kwargs
         })
 
-    def get_random_point_in_area(self, area_name_or_id: str, safe: bool = True) -> Optional[Tuple[float, float]]:
+    def get_random_point_in_area(self, area_name_or_id: str, safe: bool = True) -> tuple[float, float] | None:
         """
         Returns the (x, y) coordinates of a random cell in the specified area.
         If safe=True, prefers cells that are not adjacent to other areas (internal cells).
@@ -490,7 +490,7 @@ class ProceduralMapBuilder:
         s = self.seeds[idx]
         return (s.x, s.y)
 
-    def get_area_centroid(self, area_name_or_id: str) -> Optional[Tuple[float, float]]:
+    def get_area_centroid(self, area_name_or_id: str) -> tuple[float, float] | None:
         """Returns the centroid (average x, y) of the area."""
         area_id = self.name_to_id.get(area_name_or_id, area_name_or_id)
         seeds = [s for s in self.seeds if s.area_id == area_id]
@@ -500,7 +500,7 @@ class ProceduralMapBuilder:
         avg_y = sum(s.y for s in seeds) / len(seeds)
         return (avg_x, avg_y)
 
-    def build(self, output_path: str, zdbsp_path: Optional[str] = None):
+    def build(self, output_path: str, zdbsp_path: str | None = None):
         """
         Generates the WAD file.
         """
@@ -508,18 +508,18 @@ class ProceduralMapBuilder:
         # The seeds have been modified (area_id assigned), so we need to update the mesh's internal map
         for i, seed in enumerate(self.seeds):
             self.mesh.point_idx_to_area_id[i] = seed.area_id
-            
+
         # 2. Translate to Doom Data
         use_hexen = self.map_data.behavior is not None
         translator = MapTranslator(self.map_data, use_hexen_format=use_hexen)
         translator.translate(self.mesh, self.graph)
-        
+
         # 3. Add Things
         for thing in self.things_to_add:
             # Resolve type name to ID
             t_type = 2001 # Default to Imp
             raw_type = thing["type"]
-            
+
             if isinstance(raw_type, int):
                 t_type = raw_type
             elif isinstance(raw_type, str):
@@ -529,16 +529,16 @@ class ProceduralMapBuilder:
                     t_type = int(raw_type)
                 else:
                     print(f"Warning: Unknown thing type '{raw_type}', defaulting to Imp (2001)")
-            
+
             # Extract known args
             x = thing["x"]
             y = thing["y"]
             angle = thing.get("angle", 0)
             flags = thing.get("flags", 7)
-            
+
             # Pass everything else as kwargs
             extra_args = {k: v for k, v in thing.items() if k not in ["type", "x", "y", "angle", "flags"]}
-            
+
             self.map_data.add_thing(
                 x=x,
                 y=y,
@@ -547,20 +547,22 @@ class ProceduralMapBuilder:
                 flags=flags,
                 **extra_args
             )
-            
+
         # 4. Write WAD
         self.wad_writer.save(output_path)
         print(f"WAD written to {output_path}")
 
         # 5. Optionally run ZDBSP to pre-build BSP nodes
         if zdbsp_path is None:
-            zdbsp_path = "./zdbsp/zdbsp.exe" if os.name == "nt" else "./zdbsp/zdbsp"
-            
-        if zdbsp_path is not None:
+            zdbsp_path = get_bundled_compiler("zdbsp")
+
+        if zdbsp_path is not None and validate_executable(zdbsp_path):
             found = run_zdbsp(output_path, zdbsp_path=zdbsp_path)
             if found:
                 print(f"ZDBSP: nodes built successfully for {output_path}")
             else:
-                print(f"Warning: ZDBSP not found at '{zdbsp_path}'. "
-                      "WAD saved with empty node lumps (ZDoom will rebuild at load time).")
+                print(f"Warning: ZDBSP not found at '{zdbsp_path}'.")
+        elif zdbsp_path is not None:
+            print(f"Warning: ZDBSP not found at '{zdbsp_path}'. "
+                  "WAD saved with empty node lumps (ZDoom will rebuild at load time).")
 
