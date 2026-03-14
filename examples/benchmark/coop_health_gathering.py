@@ -66,7 +66,8 @@ class CoopHealthGatheringScenario(Scenario):
             ceiling_height=384,
             floor_texture="NUKAGE1", 
             ceiling_texture="CEIL1_2",
-            wall_texture="ASHWALL2",
+            wall_texture="BRICK6",
+            light_level=200,
             tag=floor_tag,
             mode="claim_void"
         )
@@ -93,7 +94,8 @@ class CoopHealthGatheringScenario(Scenario):
                 floor_height=0,
                 ceiling_height=0, 
                 floor_texture="NUKAGE1",
-                wall_texture="ASHWALL2", 
+                wall_texture="ASHWALL6",
+                light_level=200,
                 mode="overwrite"
             )
             block_idx += 1
