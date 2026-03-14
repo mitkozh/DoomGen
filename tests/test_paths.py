@@ -43,29 +43,29 @@ class TestGetBundledCompiler(unittest.TestCase):
 
     def test_get_bundled_compiler_acc_unix(self):
         """Test that get_bundled_compiler returns correct path for acc on Unix."""
-        with patch("os.name", "posix"):
+        with patch("sys.platform", "linux"):
             path = get_bundled_compiler("acc")
-            self.assertTrue(path.endswith("acc/acc"))
+            self.assertTrue(path.endswith("acc/acc") or path.endswith("acc\\acc"))
             self.assertNotIn(".exe", path)
 
     def test_get_bundled_compiler_acc_windows(self):
         """Test that get_bundled_compiler returns correct path for acc on Windows."""
-        with patch("os.name", "nt"):
+        with patch("sys.platform", "win32"):
             path = get_bundled_compiler("acc")
-            self.assertTrue(path.endswith("acc/acc.exe"))
+            self.assertTrue(path.endswith("acc/acc.exe") or path.endswith("acc\\acc.exe"))
 
     def test_get_bundled_compiler_zdbsp_unix(self):
         """Test that get_bundled_compiler returns correct path for zdbsp on Unix."""
-        with patch("os.name", "posix"):
+        with patch("sys.platform", "darwin"):
             path = get_bundled_compiler("zdbsp")
-            self.assertTrue(path.endswith("zdbsp/zdbsp"))
+            self.assertTrue(path.endswith("zdbsp/zdbsp") or path.endswith("zdbsp\\zdbsp"))
             self.assertNotIn(".exe", path)
 
     def test_get_bundled_compiler_zdbsp_windows(self):
         """Test that get_bundled_compiler returns correct path for zdbsp on Windows."""
-        with patch("os.name", "nt"):
+        with patch("sys.platform", "win32"):
             path = get_bundled_compiler("zdbsp")
-            self.assertTrue(path.endswith("zdbsp/zdbsp.exe"))
+            self.assertTrue(path.endswith("zdbsp/zdbsp.exe") or path.endswith("zdbsp\\zdbsp.exe"))
 
     def test_get_bundled_compiler_returns_string(self):
         """Test that get_bundled_compiler returns a string."""

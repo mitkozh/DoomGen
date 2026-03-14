@@ -1,5 +1,6 @@
 import os
 import shutil
+import sys
 from pathlib import Path
 from functools import lru_cache
 
@@ -19,10 +20,15 @@ def get_project_root() -> Path:
 
 
 def get_bundled_compiler(tool_name: str) -> str:
+    if tool_name not in ["acc", "zdbsp"]:
+        raise ValueError(f"Unknown tool: {tool_name}")
+
     project_root = get_project_root()
-    exe_ext = ".exe" if os.name == "nt" else ""
+    is_windows = sys.platform == "win32" or sys.platform == "cygwin"
+    exe_ext = ".exe" if is_windows else ""
+    
     tool_path = project_root / tool_name / f"{tool_name}{exe_ext}"
-    return str(tool_path)
+    return str(tool_path.resolve())
 
 
 def validate_executable(executable_path: str) -> bool:
