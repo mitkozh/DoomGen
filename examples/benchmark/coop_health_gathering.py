@@ -147,10 +147,9 @@ class CoopHealthGatheringScenario(Scenario):
         acs = ACSBuilder()
         acs.add_include("zcommon.acs")
         
-        # Add informative global variables for MARL
-        acs.add_global_var("chg_active_health_kits_global", 61, "int")
-        acs.add_global_var("chg_total_spawned_kits_global", 62, "int")
-        acs.add_global_var("chg_chain_stretches_global", 63, "int")
+        acs.add_global_var("chg_active_health_kits_global", 1, "int")
+        acs.add_global_var("chg_total_spawned_kits_global", 2, "int")
+        acs.add_global_var("chg_chain_stretches_global", 3, "int")
         
         script_setup = f"""
         int pn = PlayerNumber();
