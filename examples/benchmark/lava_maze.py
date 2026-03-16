@@ -1,5 +1,7 @@
 import random
 from typing import Any, Dict
+import io
+from PIL import Image
 
 from doomgen.abstraction.layout import ConnectionType
 from doomgen.batch.scenario import Scenario
@@ -43,6 +45,24 @@ class LavaMazeScenario(Scenario):
             num_seeds=12000,
             seed=seed,
         )
+
+
+        # Generate signal image lumps using PIL
+        def create_color_lump(name: str, color_rgb: tuple[int, int, int]):
+            img = Image.new('RGB', (1920, 1080), color=color_rgb)
+            buf = io.BytesIO()
+            img.save(buf, format='PNG')
+            builder.wad_writer.add_lump(name, buf.getvalue())
+
+        lump_files = {
+            "S_GREEN": (0, 255, 0),
+            "S_RED":   (255, 0, 0),
+            "S_YELLOW":(255, 255, 0),
+            "S_BLUE":  (0, 0, 255),
+            "S_BLACK": (0, 0, 0),
+        }
+        for lump_name, color in lump_files.items():
+            create_color_lump(lump_name, color)
 
         builder.add_area(
             "LavaPit",
@@ -124,10 +144,8 @@ class LavaMazeScenario(Scenario):
         acs.add_include("zcommon.acs")
 
         acs.add_map_var("g_flash_timer", initial=0)
-        acs.add_map_var("g_flash_r",     initial=0)
-        acs.add_map_var("g_flash_g",     initial=0)
-        acs.add_map_var("g_flash_b",     initial=0)
         acs.add_map_var("g_flash_state", initial=0)
+        acs.add_map_var("g_flash_lump", var_type="str", initial='"S_BLACK"')
         acs.add_global_var("lm_maze_size_global",        11, "int")
         acs.add_global_var("lm_goal_grid_x_global",      13, "int")
         acs.add_global_var("lm_p1_grid_x_global",        14, "int")
@@ -328,7 +346,9 @@ class LavaMazeScenario(Scenario):
         SetActorProperty(0, APROP_Mass, 0x7FFFFFFF);
         SetActorProperty(0, 21, 0);
 
-        FadeTo(0, 0, 0, 1.0, 0.0);
+        SetHudSize(320, 200, 1);
+        SetFont("S_BLACK");
+        HudMessage(s:"A"; HUDMSG_PLAIN, 1, CR_UNTRANSLATED, 160.0, 100.0, 0.0);
         ClearInventory();
 
         while (TRUE) {{
@@ -366,13 +386,17 @@ class LavaMazeScenario(Scenario):
             if (g_flash_timer > 0) {{
                 g_flash_timer--;
                 if (g_flash_state == 0 || g_flash_timer > 18) {{
-                     FadeTo(g_flash_r, g_flash_g, g_flash_b, 1.0, 0.1);
+                     SetHudSize(320, 200, 1);
+                     SetFont(g_flash_lump);
+                     HudMessage(s:"A"; HUDMSG_PLAIN, 1, CR_UNTRANSLATED, 160.0, 100.0, 0.0);
                      g_flash_state = 1;
                      lm_flash_active_global = 1;
                 }}
             }} else {{
                 if (g_flash_state == 1) {{
-                    FadeTo(0, 0, 0, 1.0, 0.5);
+                    SetHudSize(320, 200, 1);
+                    SetFont("S_BLACK");
+                    HudMessage(s:"A"; HUDMSG_PLAIN, 1, CR_UNTRANSLATED, 160.0, 100.0, 0.0);
                     g_flash_state = 0;
                     lm_flash_active_global = 0;
                 }}
@@ -419,16 +443,12 @@ class LavaMazeScenario(Scenario):
 
                 if (signal != 0) {{
                     lm_flash_signal_global = signal;
-                    int fr=0, fg=0, fb=0;
-                    if (signal == 1) {{ fr=0;   fg=255; fb=0;   }}
-                    if (signal == 2) {{ fr=255; fg=0;   fb=0;   }}
-                    if (signal == 3) {{ fr=255; fg=255; fb=0;   }}
-                    if (signal == 4) {{ fr=0;   fg=0;   fb=255; }}
+                    if (signal == 1) {{ g_flash_lump = "S_GREEN";  }}
+                    if (signal == 2) {{ g_flash_lump = "S_RED";    }}
+                    if (signal == 3) {{ g_flash_lump = "S_YELLOW"; }}
+                    if (signal == 4) {{ g_flash_lump = "S_BLUE";   }}
 
-                    g_flash_r = fr;
-                    g_flash_g = fg;
-                    g_flash_b = fb;
-                    g_flash_timer = 20;
+                    g_flash_timer = 25;
 
                     HudMessage(s:"Signaling: ", s:w_name; HUDMSG_FADEOUT, 2, CR_WHITE, 0.5, 0.8, 1.0, 0.5);
                 }}
