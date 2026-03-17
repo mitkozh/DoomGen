@@ -31,7 +31,7 @@ Set in a circular arena with damaging toxic floors, this scenario focuses on com
 ### Co-op CQB (`coop_cqb.py`)
 This is a tight close-quarters battle scenario for marines operating in narrow interconnected corridors. At spawn, one marine is shotgun-only, one is plasma-only. The team must survive fast rushing shooter specialist while avoiding severe friendly-fire mistakes. Tere are also static civilians mixed into combat space, forcing agents to balance lethality with line-of-fire discipline. The objective is to kill as many enemies as possible. Civilian collateral immediately fails the episode.
 
-### Common Harvest Doom (`common_harvest.py`)
+### Resource Greed (`resource_greed.py`)
 Inspired by MeltingPot 2.0's "Common Harvest" scenario - the social dilemma benchmark. Two agents share an ammo pool in a central combat arena connected to four separate ammo rooms. Enemies spawn continuously in the arena, and defeating them yields rewards. However, ammo only spawns inside the outlying rooms when a player is physically present, and pickups benefit both agents equally. To collect ammo, an agent must leave the arena, traverse a corridor that blocks line-of-sight to enemies, and sacrifice their own combat time to restock. If both agents selfishly remain in the arena to score kills, the shared ammo pool depletes and all progress halts. At least one agent must routinely act altruistically by restocking—analogous to cleaning the river in the original MeltingPot scenario. The environment provides global RL observations for cumulative kills, shared ammo, world ammo items, and live enemy counts. It tests social dilemma resolution, altruistic behavior, and shared resource management.
 
 ### Stealth Labyrinth (`stealth_labyrinth.py`)

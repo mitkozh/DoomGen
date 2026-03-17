@@ -37,7 +37,7 @@ from doomgen.doom.things import ThingType
 from doomgen.logic.acs_builder import ACSBuilder, ScriptType
 
 
-class CommonHarvestDoomScenario(Scenario):
+class ResourceGreedScenario(Scenario):
 
     def get_default_config(self) -> Dict[str, Any]:
         return {
@@ -391,5 +391,5 @@ if __name__ == "__main__":
     os.makedirs(out_dir, exist_ok=True)
     path = os.path.join(out_dir, "common_harvest_doom.wad")
     print(f"Generating {path}...")
-    CommonHarvestDoomScenario().generate(path)
+    ResourceGreedScenario().generate(path)
     print("Done.")
