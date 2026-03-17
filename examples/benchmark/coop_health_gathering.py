@@ -233,9 +233,10 @@ class CoopHealthGatheringScenario(Scenario):
         while (TRUE) {{
             {chain_block}
             
+            active_health_kits = ThingCount(T_NONE, health_kit_tid);
+            chg_active_health_kits_global = active_health_kits;
+            
             if (tick % 35 == 0) {{
-                active_health_kits = ThingCount(T_NONE, health_kit_tid);
-                chg_active_health_kits_global = active_health_kits;
                 if (active_health_kits < {max_health_kits}) {{
                     int spawns = 0;
                     for (spawns = 0; spawns < 3; spawns++) {{
@@ -250,6 +251,7 @@ class CoopHealthGatheringScenario(Scenario):
                         SpawnSpot(type, target_spot_tid, health_kit_tid, 0);
                         chg_total_spawned_kits_global++;
                     }}
+                    chg_active_health_kits_global = ThingCount(T_NONE, health_kit_tid);
                 }}
             }}
             
