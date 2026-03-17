@@ -180,6 +180,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
         acs.add_global_var("lm_maze_bits_1_global",      20, "int")
         acs.add_global_var("lm_maze_bits_2_global",      21, "int")
         acs.add_global_var("lm_levels_completed_global", 22, "int")
+        acs.add_global_var("lm_can_see_global",          23, "int")
 
         acs.scripts = []
 
@@ -262,6 +263,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
         ACS_NamedExecute("GenerateMaze", 0, g_start_x, g_start_y, current_maze_size);
 
         while (TRUE) {{
+            lm_can_see_global = CheckSight(1001, 1000, 0);
             Delay(5);
         }}
     }}
