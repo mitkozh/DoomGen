@@ -242,6 +242,61 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
         }}
     }}
 
+    function int IsInFOV(int observer, int target) {{
+        // Ubobstructed Line of Sight Check
+        if (!CheckSight(observer, target, 0)) {{
+            return FALSE;
+        }}
+
+        // Get 3D Coordinates (Adjusting for camera eye level and target center)
+        int dx = GetActorX(target) - GetActorX(observer);
+        int dy = GetActorY(target) - GetActorY(observer);
+        
+        int obsZ = GetActorZ(observer) + GetActorViewHeight(observer);
+        int targZ = GetActorZ(target) + (GetActorProperty(target, APROP_Height) / 2);
+        int dz = targZ - obsZ;
+
+        // Horizontal Angle Check
+        int angToTarget = VectorAngle(dx, dy);
+        int observerAng = GetActorAngle(observer);
+        int yawDiff = angToTarget - observerAng;
+
+        while (yawDiff <= -0.5) yawDiff += 1.0;
+        while (yawDiff > 0.5) yawDiff -= 1.0;
+        if (yawDiff < 0) yawDiff = -yawDiff;
+
+        // 0.125 fixed point = 45 degrees (90-degree horizontal FOV total)
+        if (yawDiff > 0.125) {{
+            return FALSE; 
+        }}
+
+        // Vertical Pitch Check
+        int xy_dist = VectorLength(dx, dy);
+        int pitchToTarget = VectorAngle(xy_dist, dz);
+
+        // VectorAngle returns standard math angles. We must invert it to match 
+        // ZDoom's pitch system where looking down is positive.
+        if (pitchToTarget > 0.5) {{
+            pitchToTarget -= 1.0;
+        }}
+        pitchToTarget = -pitchToTarget;
+
+        int observerPitch = GetActorPitch(observer);
+        int pitchDiff = pitchToTarget - observerPitch;
+
+        while (pitchDiff <= -0.5) pitchDiff += 1.0;
+        while (pitchDiff > 0.5) pitchDiff -= 1.0;
+        if (pitchDiff < 0) pitchDiff = -pitchDiff;
+
+        // Vertical FOV cone check. (0.10 roughly equals ~72 degrees vertical FOV, 
+        // which matches standard 4:3 displays with 90 horizontal FOV).
+        if (pitchDiff > 0.10) {{
+            return FALSE;
+        }}
+
+        return TRUE;
+    }}
+
     script 1 OPEN {{
         Sector_SetDamage(99, {LAVA_DAMAGE}, 14);
 
@@ -263,7 +318,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
         ACS_NamedExecute("GenerateMaze", 0, g_start_x, g_start_y, current_maze_size);
 
         while (TRUE) {{
-            lm_can_see_global = CheckSight(1001, 1000, 0);
+            lm_can_see_global = IsInFOV(1001, 1000);
             Delay(5);
         }}
     }}
