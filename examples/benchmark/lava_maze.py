@@ -64,6 +64,29 @@ class LavaMazeScenario(Scenario):
         for lump_name, color in lump_files.items():
             create_color_lump(lump_name, color)
 
+        decorate_str = """
+ACTOR LMPistol : Pistol replaces Pistol
+{
+  Weapon.SlotNumber 1
+}
+
+ACTOR LMShotgun : Shotgun replaces Shotgun
+{
+  Weapon.SlotNumber 2
+}
+
+ACTOR LMChaingun : Chaingun replaces Chaingun
+{
+  Weapon.SlotNumber 3
+}
+
+ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
+{
+  Weapon.SlotNumber 4
+}
+"""
+        builder.wad_writer.add_lump("DECORATE", decorate_str.encode('utf-8'))
+
         builder.add_area(
             "LavaPit",
             shape=(0, 0, 2400, 2400),
@@ -415,14 +438,14 @@ class LavaMazeScenario(Scenario):
         Thing_ChangeTID(0, 1001);
 
         ClearInventory();
-        GiveInventory("Pistol",      1);
-        GiveInventory("Shotgun",     1);
-        GiveInventory("Chaingun",    1);
-        GiveInventory("PlasmaRifle", 1);
+        GiveInventory("LMPistol",      1);
+        GiveInventory("LMShotgun",     1);
+        GiveInventory("LMChaingun",    1);
+        GiveInventory("LMPlasmaRifle", 1);
         GiveInventory("Clip",   200);
         GiveInventory("Shell",   50);
         GiveInventory("Cell",   200);
-        SetWeapon("Pistol");
+        SetWeapon("LMPistol");
 
         int btns, old_btns;
 
@@ -436,10 +459,10 @@ class LavaMazeScenario(Scenario):
             if (btns & BT_ATTACK) {{
                 int signal = 0;
                 str w_name = "";
-                if      (CheckWeapon("Pistol"))      {{ signal = 1; w_name = "GREEN";  }}
-                else if (CheckWeapon("Shotgun"))     {{ signal = 2; w_name = "RED";    }}
-                else if (CheckWeapon("Chaingun"))    {{ signal = 3; w_name = "YELLOW"; }}
-                else if (CheckWeapon("PlasmaRifle")) {{ signal = 4; w_name = "BLUE";   }}
+                if      (CheckWeapon("LMPistol"))      {{ signal = 1; w_name = "GREEN";  }}
+                else if (CheckWeapon("LMShotgun"))     {{ signal = 2; w_name = "RED";    }}
+                else if (CheckWeapon("LMChaingun"))    {{ signal = 3; w_name = "YELLOW"; }}
+                else if (CheckWeapon("LMPlasmaRifle")) {{ signal = 4; w_name = "BLUE";   }}
 
                 if (signal != 0) {{
                     lm_flash_signal_global = signal;
