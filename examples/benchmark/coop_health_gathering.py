@@ -157,9 +157,8 @@ class CoopHealthGatheringScenario(Scenario):
         int pn = PlayerNumber();
         if (pn >= 0 && pn < {max_players}) {{
             Thing_ChangeTID(0, 1000 + pn);
-            ClearInventory();
-            int _f = CheckInventory("Fist");
-            if (_f > 0) TakeInventory("Fist", _f);
+            SetActorProperty(0, APROP_Health, 100);
+            TakeInventory("Fist", 999);
         }}
         """
         acs.add_script(ScriptType.ENTER, script_setup, number=1)
