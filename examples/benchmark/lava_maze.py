@@ -98,7 +98,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
         )
 
         STANDS_HEIGHT = 224
-        STANDS_THICKNESS = 256
+        STANDS_THICKNESS = 100
         STANDS_INNER = (MAZE_WIDTH_UNITS // 2) + 64
 
         pos_y = STANDS_INNER + STANDS_THICKNESS / 2
@@ -130,6 +130,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
                     mode="overwrite",
                     floor_texture=f_tex,
                     wall_texture="ASHWALL2",
+                    # light_level=255,
                 )
 
         print("Building Connectivity Graph...")
@@ -160,7 +161,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
         p1_y = OFFSET_Y + (1 * CELL_SIZE) + (CELL_SIZE // 2)
         builder.add_thing(ThingType.PLAYER1_START, x=p1_x, y=p1_y, angle=0)
 
-        p2_y = -(STANDS_INNER + 64)
+        p2_y = -(STANDS_INNER + (STANDS_THICKNESS // 2))
         builder.add_thing(ThingType.PLAYER2_START, x=0, y=p2_y, angle=90)
 
         acs = ACSBuilder()
@@ -233,7 +234,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
         Floor_MoveToValue(tag, 2048, 0, 0);
         ChangeFloor(tag, "FLOOR4_8");
         Sector_SetDamage(tag, 0, 0);
-        Light_ChangeToValue(tag, 160);
+        Light_ChangeToValue(tag, 255);
         if (x >= 0 && x < MAP_WIDTH && y >= 0 && y < MAP_WIDTH) {{
             int bit_idx = y * MAP_WIDTH + x;
             int chunk = bit_idx / 27;
@@ -510,6 +511,23 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
             GiveInventory("Clip",  1);
             GiveInventory("Shell", 1);
             GiveInventory("Cell",  1);
+            
+            // Always look at Player 1 (TID 1000)
+            int dx = GetActorX(1000) - GetActorX(0);
+            int dy = GetActorY(1000) - GetActorY(0);
+            int dz = (GetActorZ(1000) + (GetActorProperty(1000, APROP_Height) / 2)) - (GetActorZ(0) + GetActorViewHeight(0));
+            
+            int target_angle = VectorAngle(dx, dy);
+            int xy_dist = VectorLength(dx, dy);
+            int target_pitch = VectorAngle(xy_dist, dz);
+            
+            if (target_pitch > 0.5) {{
+                target_pitch -= 1.0;
+            }}
+            target_pitch = -target_pitch;
+            
+            SetActorAngle(0, target_angle);
+            SetActorPitch(0, target_pitch);
 
             btns = GetPlayerInput(-1, INPUT_BUTTONS);
 

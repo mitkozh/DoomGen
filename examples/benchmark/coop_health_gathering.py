@@ -24,7 +24,7 @@ class CoopHealthGatheringScenario(Scenario):
             "map_radius": 2000,
             "chain_max_len": 400,
             "toxic_damage": 5,      
-            "max_health_kits": 25,
+            "max_health_kits": 80,
             "maze_density": 0.6,
         }
 
@@ -64,7 +64,7 @@ class CoopHealthGatheringScenario(Scenario):
             shape=base_shape,
             floor_height=0,
             ceiling_height=384,
-            floor_texture="NUKAGE1", 
+            floor_texture="FLAT1", 
             ceiling_texture="CEIL1_2",
             wall_texture="BRICK6",
             light_level=200,
@@ -93,7 +93,7 @@ class CoopHealthGatheringScenario(Scenario):
                 shape=(x, y, w, h),
                 floor_height=0,
                 ceiling_height=0, 
-                floor_texture="NUKAGE1",
+                floor_texture="FLAT1",
                 wall_texture="ASHWALL6",
                 light_level=200,
                 mode="overwrite"
@@ -138,13 +138,37 @@ class CoopHealthGatheringScenario(Scenario):
             if i < len(player_types):
                 builder.add_thing(player_types[i], spawn_points[i][0], spawn_points[i][1], angle=random.randint(0, 359))
         
-        num_spawn_spots = 200
+        num_spawn_spots = 300
         spot_tid_base = 3000
         
-        for i in range(num_spawn_spots):
+        spawned_spots = []
+        attempts = 0
+        min_distance_sq = (map_radius * 0.15) ** 2  # Keep spots reasonably apart
+
+        while len(spawned_spots) < num_spawn_spots and attempts < num_spawn_spots * 10:
+            attempts += 1
+            pt = builder.get_random_point_in_area("BaseArena", safe=True)
+            if not pt:
+                continue
+                
+            # Check distance against already placed spots for more even distribution
+            too_close = False
+            for spt in spawned_spots:
+                dist_sq = (pt[0] - spt[0])**2 + (pt[1] - spt[1])**2
+                if dist_sq < min_distance_sq:
+                    too_close = True
+                    break
+                    
+            if not too_close:
+                builder.add_thing("MAP_SPOT", pt[0], pt[1], z=0, tid=spot_tid_base + len(spawned_spots))
+                spawned_spots.append(pt)
+                
+        # If we failed to place enough because of the strict distance, fallback to random
+        while len(spawned_spots) < num_spawn_spots:
             pt = builder.get_random_point_in_area("BaseArena", safe=True)
             if pt:
-                builder.add_thing("MAP_SPOT", pt[0], pt[1], z=0, tid=spot_tid_base + i)
+                builder.add_thing("MAP_SPOT", pt[0], pt[1], z=0, tid=spot_tid_base + len(spawned_spots))
+                spawned_spots.append(pt)
         
         acs = ACSBuilder()
         acs.add_include("zcommon.acs")
@@ -159,6 +183,7 @@ class CoopHealthGatheringScenario(Scenario):
             Thing_ChangeTID(0, 1000 + pn);
             SetActorProperty(0, APROP_Health, 100);
             TakeInventory("Fist", 999);
+            TakeInventory("Pistol", 999);
         }}
         """
         acs.add_script(ScriptType.ENTER, script_setup, number=1)
