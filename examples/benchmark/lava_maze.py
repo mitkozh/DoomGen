@@ -21,9 +21,10 @@ class LavaMazeScenario(Scenario):
 
     def get_default_config(self) -> Dict[str, Any]:
         return {
-            "physical_size": 9,
+            "physical_size": 5,
             "cell_size": 128,
             "initial_maze_size": 4,
+            "max_maze_size": 10,
             "lava_damage": 10,
             "seed": None,
         }
@@ -33,6 +34,7 @@ class LavaMazeScenario(Scenario):
         PHYSICAL_SIZE = int(cfg["physical_size"])
         CELL_SIZE = int(cfg["cell_size"])
         INITIAL_MAZE_SIZE = int(cfg["initial_maze_size"])
+        MAX_MAZE_SIZE = int(cfg.get("max_maze_size", 10))
         LAVA_DAMAGE = int(cfg["lava_damage"])
         seed = cfg["seed"] if cfg["seed"] is not None else random.randint(0, 999999)
 
@@ -94,6 +96,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
             ceiling_height=512,
             floor_texture="LAVA1",
             mode="overwrite",
+            # light_level=255,
             tag=99,
         )
 
@@ -130,7 +133,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
                     mode="overwrite",
                     floor_texture=f_tex,
                     wall_texture="ASHWALL2",
-                    # light_level=255,
+                    light_level=255,
                 )
 
         print("Building Connectivity Graph...")
@@ -189,7 +192,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
     #define MAP_WIDTH {PHYSICAL_SIZE}
     #define CELL_SIZE {CELL_SIZE}
     #define BASE_TAG {base_tag}
-    #define MAX_TILES 20
+    #define MAX_TILES {MAX_MAZE_SIZE}
     #define APROP_PainChance 21
 
     int current_maze_size = {INITIAL_MAZE_SIZE};
