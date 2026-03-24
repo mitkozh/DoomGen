@@ -379,9 +379,26 @@ ACTOR SiegeLostSoul : LostSoul 15007
         int TID_CORE = 90;
         int TID_TEMP_SPAWN = 900;
         
-        SpawnSpot("DefenseCore", 50 + Random(0, 4), TID_CORE, 0);
-        core_x_global = GetActorX(TID_CORE) >> 16;
-        core_y_global = GetActorY(TID_CORE) >> 16;
+        // retry spawn DefenseCore if fail 
+        int core_spawned = 0;
+        int core_spawn_attempts = 0;
+        while (!core_spawned && core_spawn_attempts < 5) {{
+            int spot_idx = 50 + core_spawn_attempts;  // Try different spawn spots
+            Thing_Remove(TID_CORE);  // Clear any stale TID
+            int spawn_result = SpawnSpot("DefenseCore", spot_idx, TID_CORE, 0);
+            if (spawn_result && ThingCount(T_NONE, TID_CORE) > 0) {{
+                core_spawned = 1;
+            }}
+            core_spawn_attempts++;
+        }}
+        if (core_spawned) {{
+            core_x_global = GetActorX(TID_CORE) >> 16;
+            core_y_global = GetActorY(TID_CORE) >> 16;
+        }} else {{
+            // Fallback: use map center if spawn fails
+            core_x_global = 0;
+            core_y_global = 0;
+        }}
 
         // Initial Items (Scaled maybe? For now static)
         SpawnSpot("PlaceablePistol", 300 + Random(0, 4), 0, 0);
@@ -405,7 +422,12 @@ ACTOR SiegeLostSoul : LostSoul 15007
             cycle = tick % {cycle_len};
             wave = tick / ({cycle_len} - 50); // Difficulty scaling
             
-            core_health_global = GetActorProperty(TID_CORE, APROP_HEALTH);
+            // Check against core being destroyed/missing
+            if (ThingCount(T_NONE, TID_CORE) > 0) {{
+                core_health_global = GetActorProperty(TID_CORE, APROP_HEALTH);
+            }} else {{
+                core_health_global = 0;  // Core destroyed or spawn failed
+            }}
 
             // Health Bar
             int hp_idx = (core_health_global * 20) / max_core_health;
@@ -522,11 +544,16 @@ ACTOR SiegeLostSoul : LostSoul 15007
                     else spawn_class = "SiegeLostSoul";
                 }}
 
-                SpawnSpot(spawn_class, spawn_tid, TID_TEMP_SPAWN, 0);
-                int cur_h = GetActorProperty(TID_TEMP_SPAWN, APROP_HEALTH);
-                SetActorProperty(TID_TEMP_SPAWN, APROP_HEALTH, FixedMul(cur_h, {health_mult_fixed}));
-                Thing_Hate(TID_TEMP_SPAWN, TID_CORE, 0);
-                Thing_ChangeTID(TID_TEMP_SPAWN, TID_ENEMY_UNIT);
+                // Check spawn failures (blocked location, invalid spot TID)
+                // Clear any stale actors with this TID to prevent hash chain corruption
+                Thing_Remove(TID_TEMP_SPAWN);
+                int spawn_success = SpawnSpot(spawn_class, spawn_tid, TID_TEMP_SPAWN, 0);
+                if (spawn_success && ThingCount(T_NONE, TID_TEMP_SPAWN) > 0) {{
+                    int cur_h = GetActorProperty(TID_TEMP_SPAWN, APROP_HEALTH);
+                    SetActorProperty(TID_TEMP_SPAWN, APROP_HEALTH, FixedMul(cur_h, {health_mult_fixed}));
+                    Thing_Hate(TID_TEMP_SPAWN, TID_CORE, 0);
+                    Thing_ChangeTID(TID_TEMP_SPAWN, TID_ENEMY_UNIT);
+                }}
             }}
             
             Delay(1);
