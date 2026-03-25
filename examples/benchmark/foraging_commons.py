@@ -339,9 +339,9 @@ ACTOR ForageBonus : CustomInventory 15040 {
         int sr;
         int idx;
         str bar_gfx;
-        str sr_color;
 
         while (TRUE) {{
+            SetHudSize(320, 240, 1);
             SetFont("SMALLFONT");
 
             sr = fc_spawn_rate;
@@ -354,15 +354,7 @@ ACTOR ForageBonus : CustomInventory 15040 {
                 {bar_switch_str}
             }}
 
-            sr_color = "\\cA";
-            if (sr > 60) sr_color = "\\cD";
-            else if (sr > 30) sr_color = "\\cF";
-
-            HudMessage(s:"SPAWN RATE: ", s:bar_gfx, s:" ", s:sr_color, d:sr, s:"%";
-                HUDMSG_PLAIN, 1, CR_WHITE, 0.5, 0.78, 2.0);
-            HudMessage(s:"HARVEST: ", d:fc_total_harvest,
-                s:"   CLEANUPS: ", d:fc_total_cleanups;
-                HUDMSG_PLAIN, 2, CR_WHITE, 0.5, 0.82, 2.0);
+            HudMessage(s:bar_gfx, s:" ", d:sr, s:"%"; HUDMSG_PLAIN, 1, CR_WHITE, 160.0, 4.0, 0.0);
 
             Delay(4);
         }}
