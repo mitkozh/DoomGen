@@ -13,14 +13,14 @@ class ForagingCommonsScenario(Scenario):
     def get_default_config(self) -> Dict[str, Any]:
         return {
             "seed": None,
-            "field_size": 1200,
+            "field_size": 2400,
             "cleanup_size": 384,
-            "cleanup_distance": 1000,
+            "cleanup_distance": 1600,
             "corridor_width": 3,
             "num_agents": 2,
             "initial_spawn_rate": 80,
-            "harvest_degrade": 1,
-            "natural_decay_rate": 1,
+            "harvest_degrade": 2,
+            "natural_decay_rate": 2,
             "cleanup_boost": 15,
             "cleanup_time": 72,
             "hp_drain": 2,
