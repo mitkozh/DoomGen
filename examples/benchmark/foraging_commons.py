@@ -354,7 +354,8 @@ ACTOR ForageBonus : CustomInventory 15040 {
                 {bar_switch_str}
             }}
 
-            HudMessage(s:bar_gfx, s:" ", d:sr, s:"%"; HUDMSG_PLAIN, 1, CR_WHITE, 160.0, 4.0, 0.0);
+            // HudMessage(s:bar_gfx, s:" ", d:sr, s:"%"; HUDMSG_PLAIN, 1, CR_WHITE, 160.0, 4.0, 0.0);
+            HudMessage(s:bar_gfx; HUDMSG_PLAIN, 1, CR_WHITE, 160.0, 4.0, 0.0);
 
             Delay(4);
         }}
