@@ -8,7 +8,7 @@ from doomgen.doom.things import ThingType
 from doomgen.logic.acs_builder import ACSBuilder, ScriptType
 
 
-class UncommonHarvestScenario(Scenario):
+class ForagingCommonsScenario(Scenario):
 
     def get_default_config(self) -> Dict[str, Any]:
         return {
@@ -22,7 +22,7 @@ class UncommonHarvestScenario(Scenario):
             "harvest_degrade": 1,
             "natural_decay_rate": 1,
             "cleanup_boost": 15,
-            "cleanup_time": 70,
+            "cleanup_time": 72,
             "hp_drain": 2,
             "spots_per_room": 16,
         }
@@ -43,6 +43,10 @@ class UncommonHarvestScenario(Scenario):
         cleanup_boost    = cfg["cleanup_boost"]
         cleanup_time     = cfg["cleanup_time"]
         hp_drain         = cfg["hp_drain"]
+        num_agents       = cfg["num_agents"]
+
+        if num_agents < 2 or num_agents > 4:
+            raise ValueError(f"ForagingCommonsScenario supports 2-4 agents, got {num_agents}")
 
         cleanup_half = cleanup_size // 2
 
@@ -79,11 +83,16 @@ ACTOR ForageBonus : CustomInventory 15040 {
 
         acs = ACSBuilder()
         acs.add_include("zcommon.acs")
-        acs.add_global_var("fc_spawn_rate",     51, "int")
-        acs.add_global_var("fc_total_harvest",  52, "int")
-        acs.add_global_var("fc_total_cleanups", 53, "int")
-        acs.add_global_var("fc_p1_health",      54, "int")
-        acs.add_global_var("fc_p2_health",      55, "int")
+        acs.add_global_var("fc_spawn_rate",     1, "int")
+        acs.add_global_var("fc_total_harvest",  2, "int")
+        acs.add_global_var("fc_total_cleanups", 3, "int")
+
+        for i, slot in enumerate(range(4, 8), start=1):
+            acs.add_global_var(f"fc_p{i}_harvests", slot, "int")
+        for i, slot in enumerate(range(8, 12), start=1):
+            acs.add_global_var(f"fc_p{i}_cleanups", slot, "int")
+        for i, slot in enumerate(range(12, 16), start=1):
+            acs.add_global_var(f"fc_p{i}_cleanup_progress", slot, "int")
 
         # Harvest Field — large open area
         builder.add_area(
@@ -121,8 +130,21 @@ ACTOR ForageBonus : CustomInventory 15040 {
         )
 
         # Player starts (field center)
-        builder.add_thing(ThingType.PLAYER1_START, -48, 0, angle=0)
-        builder.add_thing(ThingType.PLAYER2_START,  48, 0, angle=0)
+        start_positions = [
+            (-48, 0),
+            (48, 0),
+            (-48, 48),
+            (48, 48),
+        ]
+        start_types = [
+            ThingType.PLAYER1_START,
+            ThingType.PLAYER2_START,
+            ThingType.PLAYER3_START,
+            ThingType.PLAYER4_START,
+        ]
+        for i in range(num_agents):
+            sx, sy = start_positions[i]
+            builder.add_thing(start_types[i], sx, sy, angle=0)
 
         # MAP_SPOTs in Harvest Field (TIDs 3000+)
         spot_base = 3000
@@ -151,10 +173,18 @@ ACTOR ForageBonus : CustomInventory 15040 {
         acs.add_script(ScriptType.RESPAWN, script_setup, number=2)
 
         # Script 997 (VOID): Harvest callback — degrade spawn rate, give HP
+        harvest_cases = []
+        for i in range(num_agents):
+            harvest_cases.append(f"if (pn == {i}) fc_p{i + 1}_harvests = fc_p{i + 1}_harvests + 1;")
+        harvest_cases_str = "\n        ".join(harvest_cases)
+
         script_harvest = f"""
+        int pn;
+        pn = PlayerNumber();
         fc_spawn_rate = fc_spawn_rate - {harvest_deg};
         if (fc_spawn_rate < 5) fc_spawn_rate = 5;
         fc_total_harvest = fc_total_harvest + 1;
+        {harvest_cases_str}
         int hp;
         hp = GetActorProperty(0, APROP_Health);
         hp = hp + 2;
@@ -164,10 +194,23 @@ ACTOR ForageBonus : CustomInventory 15040 {
         acs.add_script(ScriptType.VOID, script_harvest, number=997)
 
         # Script 3 (OPEN): Main spawn loop — spawn rate mechanic
+        spawn_player_checks = []
+        for i in range(num_agents):
+            spawn_player_checks.append(f"if (PlayerInGame({i})) agents = agents + 1;")
+        spawn_player_checks_str = "\n            ".join(spawn_player_checks)
+
+        counter_resets = []
+        for i in range(1, 5):
+            counter_resets.append(f"fc_p{i}_harvests = 0;")
+            counter_resets.append(f"fc_p{i}_cleanups = 0;")
+            counter_resets.append(f"fc_p{i}_cleanup_progress = 0;")
+        counter_resets_str = "\n        ".join(counter_resets)
+
         script_spawn = f"""
         fc_spawn_rate = {initial_sr};
         fc_total_harvest = 0;
         fc_total_cleanups = 0;
+        {counter_resets_str}
         int decay_tick;
         decay_tick = 0;
 
@@ -178,10 +221,7 @@ ACTOR ForageBonus : CustomInventory 15040 {
 
         while (TRUE) {{
             agents = 0;
-            if (PlayerInGame(0)) agents = agents + 1;
-            if (PlayerInGame(1)) agents = agents + 1;
-            if (PlayerInGame(2)) agents = agents + 1;
-            if (PlayerInGame(3)) agents = agents + 1;
+            {spawn_player_checks_str}
 
             for (att = 0; att < agents; att = att + 1) {{
                 if (ThingCount(T_NONE, 800) < 48) {{
@@ -204,81 +244,82 @@ ACTOR ForageBonus : CustomInventory 15040 {
         acs.add_script(ScriptType.OPEN, script_spawn, number=3)
 
         # Script 4 (OPEN): Cleanup detection — single station
+        cleanup_state_vars = []
+        cleanup_blocks = []
+        for i in range(num_agents):
+            cleanup_var = f"c_p{i}"
+            player_tid = 1000 + i
+            player_num = i + 1
+            cleanup_state_vars.append(f"int {cleanup_var};")
+            cleanup_blocks.append(
+                f"""
+            if (PlayerInGame({i}) && ThingCount(T_NONE, {player_tid}) > 0) {{
+                px = GetActorX({player_tid}) >> 16;
+                py = GetActorY({player_tid}) >> 16;
+                if (px >= {cz_xmin} && px <= {cz_xmax} && py >= {cz_ymin} && py <= {cz_ymax}) {{
+                    {cleanup_var} = {cleanup_var} + 4;
+                    fc_p{player_num}_cleanup_progress = {cleanup_var};
+                    if ({cleanup_var} >= {cleanup_time}) {{
+                        fc_spawn_rate = fc_spawn_rate + {cleanup_boost};
+                        if (fc_spawn_rate > 100) fc_spawn_rate = 100;
+                        fc_total_cleanups = fc_total_cleanups + 1;
+                        fc_p{player_num}_cleanups = fc_p{player_num}_cleanups + 1;
+                        {cleanup_var} = 0;
+                        fc_p{player_num}_cleanup_progress = 0;
+                    }}
+                }} else {{
+                    {cleanup_var} = 0;
+                    fc_p{player_num}_cleanup_progress = 0;
+                }}
+            }} else {{
+                {cleanup_var} = 0;
+                fc_p{player_num}_cleanup_progress = 0;
+            }}"""
+            )
+
+        cleanup_state_vars_str = "\n        ".join(cleanup_state_vars)
+        cleanup_state_init_str = "\n        ".join(f"c_p{i} = 0;" for i in range(num_agents))
+        cleanup_blocks_str = "\n".join(cleanup_blocks)
+
         script_cleanup = f"""
-        int c_p0;
-        int c_p1;
+        {cleanup_state_vars_str}
         int px;
         int py;
-        c_p0 = 0;
-        c_p1 = 0;
+        {cleanup_state_init_str}
 
         Delay(35);
 
         while (TRUE) {{
-            if (PlayerInGame(0) && ThingCount(T_NONE, 1000) > 0) {{
-                px = GetActorX(1000) >> 16;
-                py = GetActorY(1000) >> 16;
-                if (px >= {cz_xmin} && px <= {cz_xmax} && py >= {cz_ymin} && py <= {cz_ymax}) {{
-                    c_p0 = c_p0 + 4;
-                    if (c_p0 >= {cleanup_time}) {{
-                        fc_spawn_rate = fc_spawn_rate + {cleanup_boost};
-                        if (fc_spawn_rate > 100) fc_spawn_rate = 100;
-                        fc_total_cleanups = fc_total_cleanups + 1;
-                        c_p0 = 0;
-                    }}
-                }} else {{
-                    c_p0 = 0;
-                }}
-            }}
-
-            if (PlayerInGame(1) && ThingCount(T_NONE, 1001) > 0) {{
-                px = GetActorX(1001) >> 16;
-                py = GetActorY(1001) >> 16;
-                if (px >= {cz_xmin} && px <= {cz_xmax} && py >= {cz_ymin} && py <= {cz_ymax}) {{
-                    c_p1 = c_p1 + 4;
-                    if (c_p1 >= {cleanup_time}) {{
-                        fc_spawn_rate = fc_spawn_rate + {cleanup_boost};
-                        if (fc_spawn_rate > 100) fc_spawn_rate = 100;
-                        fc_total_cleanups = fc_total_cleanups + 1;
-                        c_p1 = 0;
-                    }}
-                }} else {{
-                    c_p1 = 0;
-                }}
-            }}
-
-            fc_p1_health = GetActorProperty(1000, APROP_Health);
-            fc_p2_health = GetActorProperty(1001, APROP_Health);
-
+            {cleanup_blocks_str}
             Delay(4);
         }}
         """
         acs.add_script(ScriptType.OPEN, script_cleanup, number=4)
 
         # Script 5 (OPEN): Health drain loop
+        drain_blocks = []
+        for i in range(num_agents):
+            player_tid = 1000 + i
+            drain_blocks.append(
+                f"""
+            if (PlayerInGame({i}) && ThingCount(T_NONE, {player_tid}) > 0) {{
+                hp = GetActorProperty({player_tid}, APROP_Health);
+                hp = hp - {hp_drain};
+                SetActorProperty({player_tid}, APROP_Health, hp);
+                if (hp <= 0) {{
+                    Exit_Normal(0);
+                }}
+            }}"""
+            )
+        drain_blocks_str = "\n".join(drain_blocks)
+
         script_drain = f"""
         int hp;
 
         Delay(35 * 3);
 
         while (TRUE) {{
-            if (PlayerInGame(0) && ThingCount(T_NONE, 1000) > 0) {{
-                hp = GetActorProperty(1000, APROP_Health);
-                hp = hp - {hp_drain};
-                SetActorProperty(1000, APROP_Health, hp);
-                if (hp <= 0) {{
-                    Exit_Normal(0);
-                }}
-            }}
-            if (PlayerInGame(1) && ThingCount(T_NONE, 1001) > 0) {{
-                hp = GetActorProperty(1001, APROP_Health);
-                hp = hp - {hp_drain};
-                SetActorProperty(1001, APROP_Health, hp);
-                if (hp <= 0) {{
-                    Exit_Normal(0);
-                }}
-            }}
-
+            {drain_blocks_str}
             Delay(35);
         }}
         """
@@ -343,5 +384,5 @@ if __name__ == "__main__":
     os.makedirs(out_dir, exist_ok=True)
     path = os.path.join(out_dir, "foraging_commons.wad")
     print(f"Generating {path}...")
-    UncommonHarvestScenario().generate(path)
+    ForagingCommonsScenario().generate(path)
     print("Done.")
