@@ -167,6 +167,7 @@ ACTOR ForageBonus : CustomInventory 15040 {
         pn = PlayerNumber();
         Thing_ChangeTID(0, 1000 + pn);
         ClearInventory();
+        SetActorProperty(0, APROP_Health, 100);
         ACS_ExecuteAlways(10, 0, 0, 0, 0);
         """
         acs.add_script(ScriptType.ENTER,   script_setup, number=1)
