@@ -137,6 +137,7 @@ class ResourceGreedScenario(Scenario):
         script_setup = f"""
         int pn = PlayerNumber();
         Thing_ChangeTID(0, 1000 + pn);
+        SetActorProperty(0, APROP_Health, 100);
         ClearInventory();
         SetAmmoCapacity("Clip", 400);
         GiveInventory("Chaingun", 1);

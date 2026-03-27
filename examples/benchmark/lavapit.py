@@ -344,6 +344,7 @@ class LavaPitScenario(Scenario):
             int pn = PlayerNumber();
             if (pn < 0 || pn >= {max_players}) terminate;
             Thing_ChangeTID(0, 1000 + pn);
+            SetActorProperty(0, APROP_Health, 100);
             // Ensure players have no weapons (fists only)
             ClearInventory();
             GiveInventory("Fist", 1);
@@ -361,6 +362,7 @@ class LavaPitScenario(Scenario):
             if (pn < 0 || pn >= {max_players}) terminate;
             p_tid = 1000 + pn;
             Thing_ChangeTID(0, p_tid);
+            SetActorProperty(0, APROP_Health, 100);
             spot = 100 + pn;
             SetActorPosition(0, GetActorX(spot), GetActorY(spot), GetActorZ(spot), 0);
             // Remove all weapons on respawn so players keep only fists

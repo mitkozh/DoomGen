@@ -147,6 +147,7 @@ ACTOR Rabbit : Zombieman 15031 {{
         script_setup = """
 int pn = PlayerNumber();
 Thing_ChangeTID(0, 1000 + pn);
+SetActorProperty(0, APROP_Health, 100);
 ClearInventory();
 SetAmmoCapacity("Shell", 9999);
 GiveInventory("Shotgun", 1);

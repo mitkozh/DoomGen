@@ -192,6 +192,7 @@ ACTOR MazeDemon : Demon 14001 {
         script_enter = """
         int pn = PlayerNumber();
         Thing_ChangeTID(0, 1000 + pn);
+        SetActorProperty(0, APROP_Health, 100);
         ClearInventory();
         if (pn == 1) {
             GiveInventory("Shotgun", 1);

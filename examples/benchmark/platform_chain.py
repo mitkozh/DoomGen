@@ -303,6 +303,7 @@ class PlatformChainScenario(Scenario):
             if (pn < 0 || pn >= {max_players}) terminate;
             p_tid = 1000 + pn;
             Thing_ChangeTID(0, p_tid);
+            SetActorProperty(0, APROP_Health, 100);
             spot = 100 + pn;
             SetActorPosition(0, GetActorX(spot), GetActorY(spot), GetActorZ(spot), 0);
 
@@ -382,6 +383,7 @@ class PlatformChainScenario(Scenario):
             if (pn < 0 || pn >= {max_players}) terminate;
             p_tid = 1000 + pn;
             Thing_ChangeTID(0, p_tid);
+            SetActorProperty(0, APROP_Health, 100);
             spot = 100 + pn;
             SetActorPosition(0, GetActorX(spot), GetActorY(spot), GetActorZ(spot), 0);
             """,

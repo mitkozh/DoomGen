@@ -421,6 +421,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
         if (PlayerNumber() != 0) terminate;
 
         Thing_ChangeTID(0, 1000);
+        SetActorProperty(0, APROP_Health, 100);
 
         int wx = get_world_x(g_start_x) << 16;
         int wy = get_world_y(g_start_y) << 16;
@@ -497,6 +498,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
         if (PlayerNumber() != 1) terminate;
 
         Thing_ChangeTID(0, 1001);
+        SetActorProperty(0, APROP_Health, 100);
 
         ClearInventory();
         GiveInventory("LMPistol",      1);

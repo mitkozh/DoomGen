@@ -309,6 +309,7 @@ ACTOR SiegeLostSoul : LostSoul 15007
         acs.add_script(ScriptType.ENTER, """
             int p_tid = 1000 + PlayerNumber();
             Thing_ChangeTID(0, p_tid);
+            SetActorProperty(0, APROP_Health, 100);
             ClearInventory();
             int dest_spot = 60 + Random(0, 9);
             SetActorPosition(0, GetActorX(dest_spot), GetActorY(dest_spot), GetActorZ(dest_spot), 0);
@@ -317,6 +318,7 @@ ACTOR SiegeLostSoul : LostSoul 15007
         acs.add_script(ScriptType.RESPAWN, """
             int p_tid = 1000 + PlayerNumber();
             Thing_ChangeTID(0, p_tid);
+            SetActorProperty(0, APROP_Health, 100);
             ClearInventory();
             int dest_spot = 60 + Random(0, 9);
             SetActorPosition(0, GetActorX(dest_spot), GetActorY(dest_spot), GetActorZ(dest_spot), 0);

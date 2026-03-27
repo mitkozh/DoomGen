@@ -206,6 +206,7 @@ class SmartEnemiesScenario(Scenario):
         script 100 ENTER {{
             int pid = PlayerNumber();
             Thing_ChangeTID(0, PLAYER_BASE_TID + pid);
+            SetActorProperty(0, APROP_Health, 100);
             
             // Give Loadout
             ClearInventory();

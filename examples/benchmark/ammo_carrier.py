@@ -159,6 +159,8 @@ class AmmoCarrierScenario(Scenario):
             SetActorPosition(0, GetActorX(dest2), GetActorY(dest2), GetActorZ(dest2), 0);
             
             // Attributes: Fast, Fragile
+            SetActorProperty(0, APROP_Health, 100);
+            SetActorProperty(0, APROP_SpawnHealth, 100);
             SetActorProperty(0, APROP_Speed, 1.5); // Very fast
             ClearInventory();
             // No Weapons - Pacifist run
