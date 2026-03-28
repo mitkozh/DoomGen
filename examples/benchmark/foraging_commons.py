@@ -246,40 +246,56 @@ ACTOR ForageBonus : CustomInventory 15040 {
 
         # Script 4 (OPEN): Cleanup detection — single station
         cleanup_state_vars = []
+        cleanup_ready_vars = []
         cleanup_blocks = []
         for i in range(num_agents):
             cleanup_var = f"c_p{i}"
+            cleanup_ready_var = f"ready_p{i}"
             player_tid = 1000 + i
             player_num = i + 1
             cleanup_state_vars.append(f"int {cleanup_var};")
+            cleanup_ready_vars.append(f"int {cleanup_ready_var};")
             cleanup_blocks.append(
                 f"""
             if (PlayerInGame({i}) && ThingCount(T_NONE, {player_tid}) > 0) {{
                 px = GetActorX({player_tid}) >> 16;
                 py = GetActorY({player_tid}) >> 16;
                 if (px >= {cz_xmin} && px <= {cz_xmax} && py >= {cz_ymin} && py <= {cz_ymax}) {{
-                    {cleanup_var} = {cleanup_var} + 4;
-                    fc_p{player_num}_cleanup_progress = {cleanup_var};
-                    if ({cleanup_var} >= {cleanup_time}) {{
-                        fc_spawn_rate = fc_spawn_rate + {cleanup_boost};
-                        if (fc_spawn_rate > 100) fc_spawn_rate = 100;
-                        fc_total_cleanups = fc_total_cleanups + 1;
-                        fc_p{player_num}_cleanups = fc_p{player_num}_cleanups + 1;
-                        {cleanup_var} = 0;
+                    if ({cleanup_ready_var}) {{
+                        {cleanup_var} = {cleanup_var} + 4;
+                        fc_p{player_num}_cleanup_progress = {cleanup_var};
+                        if ({cleanup_var} >= {cleanup_time}) {{
+                            if (fc_spawn_rate < 100) {{
+                                fc_spawn_rate = fc_spawn_rate + {cleanup_boost};
+                                if (fc_spawn_rate > 100) fc_spawn_rate = 100;
+                                fc_total_cleanups = fc_total_cleanups + 1;
+                                fc_p{player_num}_cleanups = fc_p{player_num}_cleanups + 1;
+                            }}
+                            {cleanup_var} = 0;
+                            {cleanup_ready_var} = 0;
+                            fc_p{player_num}_cleanup_progress = 0;
+                        }}
+                    }} else {{
                         fc_p{player_num}_cleanup_progress = 0;
                     }}
                 }} else {{
                     {cleanup_var} = 0;
+                    {cleanup_ready_var} = 1;
                     fc_p{player_num}_cleanup_progress = 0;
                 }}
             }} else {{
                 {cleanup_var} = 0;
+                {cleanup_ready_var} = 1;
                 fc_p{player_num}_cleanup_progress = 0;
             }}"""
             )
 
-        cleanup_state_vars_str = "\n        ".join(cleanup_state_vars)
-        cleanup_state_init_str = "\n        ".join(f"c_p{i} = 0;" for i in range(num_agents))
+        cleanup_state_vars_str = "\n        ".join(cleanup_state_vars + cleanup_ready_vars)
+        cleanup_state_init = []
+        for i in range(num_agents):
+            cleanup_state_init.append(f"c_p{i} = 0;")
+            cleanup_state_init.append(f"ready_p{i} = 1;")
+        cleanup_state_init_str = "\n        ".join(cleanup_state_init)
         cleanup_blocks_str = "\n".join(cleanup_blocks)
 
         script_cleanup = f"""
@@ -291,6 +307,7 @@ ACTOR ForageBonus : CustomInventory 15040 {
         Delay(35);
 
         while (TRUE) {{
+            // Require agents to leave and re-enter after a successful cleanup.
             {cleanup_blocks_str}
             Delay(4);
         }}
