@@ -1,5 +1,7 @@
 import os
 import random
+import struct
+import zlib
 from typing import Any, Dict
 
 from doomgen.abstraction.layout import ConnectionType
@@ -8,13 +10,68 @@ from doomgen.builder import ProceduralMapBuilder
 from doomgen.logic.acs_builder import ACSBuilder, ScriptType
 
 
+def _png_chunk(chunk_type: bytes, data: bytes) -> bytes:
+    return (
+        struct.pack(">I", len(data))
+        + chunk_type
+        + data
+        + struct.pack(">I", zlib.crc32(chunk_type + data) & 0xFFFFFFFF)
+    )
+
+
+def solid_rgba_png(width: int, height: int, rgba: tuple[int, int, int, int]) -> bytes:
+    row = bytes(rgba) * width
+    raw = b"".join(b"\x00" + row for _ in range(height))
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
+    return b"".join(
+        [
+            b"\x89PNG\r\n\x1a\n",
+            _png_chunk(b"IHDR", ihdr),
+            _png_chunk(b"IDAT", zlib.compress(raw, level=9)),
+            _png_chunk(b"IEND", b""),
+        ]
+    )
+
+
+def border_rgba_png(
+    width: int,
+    height: int,
+    rgba: tuple[int, int, int, int],
+    *,
+    thickness: int,
+) -> bytes:
+    transparent = (0, 0, 0, 0)
+    rows = []
+    for y in range(height):
+        row = bytearray()
+        for x in range(width):
+            pixel = rgba if (
+                x < thickness
+                or x >= width - thickness
+                or y < thickness
+                or y >= height - thickness
+            ) else transparent
+            row.extend(pixel)
+        rows.append(b"\x00" + bytes(row))
+
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
+    return b"".join(
+        [
+            b"\x89PNG\r\n\x1a\n",
+            _png_chunk(b"IHDR", ihdr),
+            _png_chunk(b"IDAT", zlib.compress(b"".join(rows), level=9)),
+            _png_chunk(b"IEND", b""),
+        ]
+    )
+
+
 class RhythmSyncScenario(Scenario):
     def get_default_config(self) -> Dict[str, Any]:
         return {
             "seed": None,
             "random_seed_on_generate": True,
             "num_sections": 20,
-            "intro_regular_sections": 1,
+            "intro_regular_sections": 4,
             "delta_t_tics": 36,
             "beat_tics": 140,
             "jitter_tics": 35,
@@ -107,6 +164,15 @@ class RhythmSyncScenario(Scenario):
             num_seeds=seed_count,
             seed=seed,
         )
+
+        overlay_lumps = {
+            "RS_CLEAR": solid_rgba_png(320, 240, (0, 0, 0, 0)),
+            "RS_BEAT": border_rgba_png(320, 240, (255, 0, 0, 255), thickness=18),
+            "RS_GOOD": solid_rgba_png(320, 240, (0, 255, 0, 255)),
+            "RS_FAIL": solid_rgba_png(320, 240, (255, 0, 0, 255)),
+        }
+        for lump_name, lump_data in overlay_lumps.items():
+            builder.wad_writer.add_lump(lump_name, lump_data)
 
         builder.add_area(
             "Start_A",
@@ -283,18 +349,25 @@ class RhythmSyncScenario(Scenario):
         acs.add_include("zcommon.acs")
 
         acs.add_map_var("delta_t", "int", delta_t_tics)
-        acs.add_map_var("env_signal", "int", 0)
         acs.add_map_var("tick_serial", "int", 0)
         acs.add_map_var("current_stage", "int", 1)
+        acs.add_map_var("completed_stages", "int", 0)
         acs.add_map_var("pending_a", "int", 0)
         acs.add_map_var("pending_b", "int", 0)
         acs.add_map_var("press_tic_a", "int", -999999)
         acs.add_map_var("press_tic_b", "int", -999999)
         acs.add_map_var("failed", "int", 0)
         acs.add_map_var("finished", "int", 0)
+        acs.add_map_var("num_sections_total", "int", num_sections)
 
         for idx in range(1, num_sections + 1):
             acs.add_map_var(f"stage_type_{idx}", "int", 0)
+            acs.add_map_var(f"cue_owner_{idx}", "int", -1)
+
+        post_intro_sections = max(0, num_sections - intro_regular)
+        num_stage_blocks = (post_intro_sections + 2) // 3
+        for idx in range(1, num_stage_blocks + 1):
+            acs.add_map_var(f"stage_block_offset_{idx}", "int", 0)
 
         get_stage_type_lines = ["function int GetStageType(int stage) {"]
         for idx in range(1, num_sections + 1):
@@ -303,12 +376,27 @@ class RhythmSyncScenario(Scenario):
         get_stage_type_lines.append("    return 0;")
         get_stage_type_lines.append("}")
 
+        get_cue_owner_lines = ["function int GetCueOwner(int stage) {"]
+        for idx in range(1, num_sections + 1):
+            prefix = "if" if idx == 1 else "else if"
+            get_cue_owner_lines.append(f"    {prefix} (stage == {idx}) return cue_owner_{idx};")
+        get_cue_owner_lines.append("    return -1;")
+        get_cue_owner_lines.append("}")
+
         assign_stage_type_lines = ["function void AssignStageTypes(void) {"]
+        for block_idx in range(1, num_stage_blocks + 1):
+            assign_stage_type_lines.append(f"    stage_block_offset_{block_idx} = Random(0, 2);")
         for idx in range(1, num_sections + 1):
             if idx <= intro_regular:
                 assign_stage_type_lines.append(f"    stage_type_{idx} = 0;")
+                assign_stage_type_lines.append(f"    cue_owner_{idx} = -1;")
             else:
-                assign_stage_type_lines.append(f"    stage_type_{idx} = Random(0, 2);")
+                block_idx = ((idx - intro_regular - 1) // 3) + 1
+                block_slot = (idx - intro_regular - 1) % 3
+                assign_stage_type_lines.append(f"    stage_type_{idx} = stage_block_offset_{block_idx} + {block_slot};")
+                assign_stage_type_lines.append(f"    if (stage_type_{idx} >= 3) stage_type_{idx} = stage_type_{idx} - 3;")
+                assign_stage_type_lines.append(f"    if (stage_type_{idx} == 2) cue_owner_{idx} = Random(0, 1);")
+                assign_stage_type_lines.append(f"    else cue_owner_{idx} = -1;")
         assign_stage_type_lines.append("}")
 
         switch_x_a_lines = ["function int GetSwitchXA(int stage) {"]
@@ -342,6 +430,7 @@ class RhythmSyncScenario(Scenario):
         complete_stage_lines = [
             "function void CompleteStage(int stage) {",
             "    if (failed || finished) return;",
+            "    completed_stages = completed_stages + 1;",
         ]
 
         if num_sections == 1:
@@ -349,8 +438,8 @@ class RhythmSyncScenario(Scenario):
             complete_stage_lines.append(f"        Door_Open({exit_tag_a}, 16, 0);")
             complete_stage_lines.append(f"        Door_Open({exit_tag_b}, 16, 0);")
             complete_stage_lines.append("        finished = 1;")
-            complete_stage_lines.append("        FadeTo(0.0, 1.0, 0.0, 0.45, 0.0);")
-            complete_stage_lines.append("        Exit_Normal(0);")
+            complete_stage_lines.append('        ShowOverlayForAllPlayers("RS_GOOD");')
+            complete_stage_lines.append("        ACS_ExecuteAlways(907, 0);")
             complete_stage_lines.append("    }")
         else:
             for idx in range(1, num_sections):
@@ -365,8 +454,8 @@ class RhythmSyncScenario(Scenario):
             complete_stage_lines.append(f"        Door_Open({exit_tag_a}, 16, 0);")
             complete_stage_lines.append(f"        Door_Open({exit_tag_b}, 16, 0);")
             complete_stage_lines.append("        finished = 1;")
-            complete_stage_lines.append("        FadeTo(0.0, 1.0, 0.0, 0.45, 0.0);")
-            complete_stage_lines.append("        Exit_Normal(0);")
+            complete_stage_lines.append('        ShowOverlayForAllPlayers("RS_GOOD");')
+            complete_stage_lines.append("        ACS_ExecuteAlways(907, 0);")
             complete_stage_lines.append("    }")
 
         complete_stage_lines.append("    ResetPending();")
@@ -389,11 +478,36 @@ function void TriggerFail(void) {
     }
 
     failed = 1;
-    FadeTo(1.0, 0.0, 0.0, 0.75, 0.0);
-    Exit_Normal(0);
+    ShowOverlayForAllPlayers("RS_FAIL");
+    ACS_ExecuteAlways(907, 0);
+}
+
+function void ShowOverlayForActivator(str lump) {
+    SetHudSize(320, 240, 1);
+    SetFont(lump);
+    HudMessage(s:"A"; HUDMSG_PLAIN, 700, CR_UNTRANSLATED, 160.0, 120.0, 0.0);
+}
+
+function void ShowOverlayForAllPlayers(str lump) {
+    int player_idx = 0;
+    while (player_idx < 2) {
+        SetActivatorToPlayer(player_idx);
+        ShowOverlayForActivator(lump);
+        player_idx = player_idx + 1;
+    }
+}
+
+function void SyncTelemetryForActivator(void) {
+    SetUserVariable(0, "user24", current_stage);
+    SetUserVariable(0, "user25", completed_stages);
+    SetUserVariable(0, "user26", GetStageType(current_stage));
+    SetUserVariable(0, "user29", failed);
+    SetUserVariable(0, "user30", finished);
+    SetUserVariable(0, "user32", num_sections_total);
 }
 """,
                     "\n".join(get_stage_type_lines),
+                    "\n".join(get_cue_owner_lines),
                     "\n".join(assign_stage_type_lines),
                     "\n".join(switch_x_a_lines),
                     "\n".join(switch_y_a_lines),
@@ -403,8 +517,7 @@ function void TriggerFail(void) {
 function int ShouldShowCueForPlayer(int player_num) {{
     int stage_type = GetStageType(current_stage);
     if (stage_type == 2) {{
-        if (player_num == 0) return 1;
-        return 0;
+        return player_num == GetCueOwner(current_stage);
     }}
     return 1;
 }}
@@ -519,10 +632,7 @@ while (!failed && !finished) {
         terminate;
     }
 
-    env_signal = 1;
     tick_serial = tick_serial + 1;
-    Delay(1);
-    env_signal = 0;
 }
 """,
             number=901,
@@ -552,6 +662,7 @@ while (!failed && !finished) {
             ScriptType.ENTER,
             """
 Thing_ChangeTID(0, 1000 + PlayerNumber());
+SetActorProperty(0, APROP_Health, 100);
 """,
             number=903,
         )
@@ -562,6 +673,11 @@ Thing_ChangeTID(0, 1000 + PlayerNumber());
 int pn = PlayerNumber();
 int seen = tick_serial;
 int prev_buttons = 0;
+int cue_remaining = 0;
+int cue_visible = 0;
+
+ACS_ExecuteAlways(905, 0, 0);
+SyncTelemetryForActivator();
 
 while (!failed && !finished) {
     int buttons = GetPlayerInput(-1, INPUT_BUTTONS);
@@ -571,20 +687,57 @@ while (!failed && !finished) {
     }
     prev_buttons = buttons;
 
+    if (failed || finished) {
+        break;
+    }
+
     if (tick_serial != seen) {
         seen = tick_serial;
-
         if (ShouldShowCueForPlayer(pn)) {
-            FadeTo(1.0, 0.0, 0.0, 0.35, 0.0);
-            Delay(1);
-            FadeTo(0.0, 0.0, 0.0, 0.0, 0.2);
+            cue_remaining = 8;
         }
     }
 
+    if (cue_remaining > 0) {
+        if (!cue_visible) {
+            ACS_ExecuteAlways(905, 0, 1);
+            cue_visible = 1;
+        }
+        cue_remaining = cue_remaining - 1;
+    } else if (cue_visible) {
+        ACS_ExecuteAlways(905, 0, 0);
+        cue_visible = 0;
+    }
+
+    SyncTelemetryForActivator();
     Delay(1);
 }
+
+SyncTelemetryForActivator();
 """,
             number=904,
+        )
+
+        acs.add_script(
+            ScriptType.VOID,
+            """
+if (show_beat) {
+    ShowOverlayForActivator("RS_BEAT");
+} else {
+    ShowOverlayForActivator("RS_CLEAR");
+}
+""",
+            number=905,
+            args=["show_beat"],
+        )
+
+        acs.add_script(
+            ScriptType.VOID,
+            """
+Delay(1);
+Exit_Normal(0);
+""",
+            number=907,
         )
 
         builder.map_data.scripts = acs.to_code()
