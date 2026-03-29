@@ -82,7 +82,10 @@ class RhythmSyncScenario(Scenario):
             "bottom_y": -128,
             "switch_width": 32,
             "switch_height": 45,
-            "switch_x_offset": 144,
+            "switch_wall_margin": 32, # How far away from wall, reduce to jitter more
+            "switch_intro_stages": 2, # How many stage to start actual randomizing
+            "switch_intro_jitter_frac": 0.01, # How much random in intro stages 
+            "switch_pos_seed_offset": 0, # 0 means switch rng tied to scenario seed, but setting seed offset allows different switch placements in same scenario seed (for batch training)
             "switch_use_range": 64,
             "seed_density_per_section": 1400,
             "min_seed_count": 3200,
@@ -94,6 +97,9 @@ class RhythmSyncScenario(Scenario):
         delta_t_tics = int(self.config["delta_t_tics"])
         beat_tics = int(self.config["beat_tics"])
         jitter_tics = int(self.config["jitter_tics"])
+        switch_wall_margin = int(self.config["switch_wall_margin"])
+        switch_intro_stages = int(self.config["switch_intro_stages"])
+        switch_intro_jitter_frac = float(self.config["switch_intro_jitter_frac"])
 
         if num_sections < 1:
             raise ValueError("num_sections must be >= 1")
@@ -107,6 +113,14 @@ class RhythmSyncScenario(Scenario):
             raise ValueError("beat_tics must be >= 1")
         if jitter_tics < 0:
             raise ValueError("jitter_tics must be >= 0")
+        if switch_wall_margin < 0:
+            raise ValueError("switch_wall_margin must be >= 0")
+        if switch_intro_stages < 0:
+            raise ValueError("switch_intro_stages must be >= 0")
+        if switch_intro_stages > num_sections:
+            raise ValueError("switch_intro_stages must be <= num_sections")
+        if not (0.0 <= switch_intro_jitter_frac <= 1.0):
+            raise ValueError("switch_intro_jitter_frac must be in [0.0, 1.0]")
 
     def _choose_seed(self) -> int:
         if self.config["seed"] is not None:
@@ -133,8 +147,12 @@ class RhythmSyncScenario(Scenario):
 
         switch_w = int(cfg["switch_width"])
         switch_h = int(cfg["switch_height"])
-        switch_x_offset = int(cfg["switch_x_offset"])
+        switch_wall_margin = int(cfg["switch_wall_margin"])
+        switch_intro_stages = int(cfg["switch_intro_stages"])
+        switch_intro_jitter_frac = float(cfg["switch_intro_jitter_frac"])
+        switch_pos_seed_offset = int(cfg["switch_pos_seed_offset"])
         switch_use_range = int(cfg["switch_use_range"])
+        switch_rng = random.Random(seed + switch_pos_seed_offset)
 
         # Hardcoded theme
         floor_tex = "FLAT19"
@@ -315,14 +333,73 @@ class RhythmSyncScenario(Scenario):
 
         switch_positions_a: Dict[int, tuple[int, int]] = {}
         switch_positions_b: Dict[int, tuple[int, int]] = {}
-        for idx, x_pos in enumerate(stage_x, start=1):
-            sx = x_pos + switch_x_offset
-            switch_positions_a[idx] = (sx, top_y)
-            switch_positions_b[idx] = (sx, bottom_y)
+        max_dx = (room_w // 2) - (switch_w // 2) - switch_wall_margin
+        max_dy = (room_h // 2) - (switch_h // 2) - switch_wall_margin
+        if max_dx < 0 or max_dy < 0:
+            raise ValueError(
+                "switch dimensions + switch_wall_margin exceed stage room bounds"
+            )
+
+        intro_jitter_dx = int(max_dx * switch_intro_jitter_frac)
+        intro_jitter_dy = int(max_dy * switch_intro_jitter_frac)
+
+        def _clamp(v: int, lo: int, hi: int) -> int:
+            return max(lo, min(hi, v))
+
+        # Stable-but-random intro base offsets, sampled independently per side.
+        base_dx_a = _clamp(switch_rng.randint(-max_dx, max_dx), -max_dx, max_dx)
+        base_dy_a = _clamp(switch_rng.randint(-max_dy, max_dy), -max_dy, max_dy)
+        base_dx_b = _clamp(switch_rng.randint(-max_dx, max_dx), -max_dx, max_dx)
+        base_dy_b = _clamp(switch_rng.randint(-max_dy, max_dy), -max_dy, max_dy)
+
+        def _areas_adjacent(room_a_name: str, room_b_name: str) -> bool:
+            id_a = builder.name_to_id.get(room_a_name, room_a_name)
+            id_b = builder.name_to_id.get(room_b_name, room_b_name)
+            seeds_a = [i for i, s in enumerate(builder.seeds) if s.area_id == id_a]
+            for idx_seed in seeds_a:
+                for neighbor in builder.mesh.adjacency.get(idx_seed, []):
+                    if builder.seeds[neighbor].area_id == id_b:
+                        return True
+            return False
+
+        for idx, x_pos in enumerate(stage_x, start=1): # room center
+            if idx <= switch_intro_stages:
+                dx_a = _clamp(
+                    base_dx_a + switch_rng.randint(-intro_jitter_dx, intro_jitter_dx),
+                    -max_dx,
+                    max_dx,
+                )
+                dy_a = _clamp(
+                    base_dy_a + switch_rng.randint(-intro_jitter_dy, intro_jitter_dy),
+                    -max_dy,
+                    max_dy,
+                )
+                dx_b = _clamp(
+                    base_dx_b + switch_rng.randint(-intro_jitter_dx, intro_jitter_dx),
+                    -max_dx,
+                    max_dx,
+                )
+                dy_b = _clamp(
+                    base_dy_b + switch_rng.randint(-intro_jitter_dy, intro_jitter_dy),
+                    -max_dy,
+                    max_dy,
+                )
+            else:
+                dx_a = switch_rng.randint(-max_dx, max_dx)
+                dy_a = switch_rng.randint(-max_dy, max_dy)
+                dx_b = switch_rng.randint(-max_dx, max_dx)
+                dy_b = switch_rng.randint(-max_dy, max_dy)
+
+            sx_a = x_pos + dx_a
+            sy_a = top_y + dy_a
+            sx_b = x_pos + dx_b
+            sy_b = bottom_y + dy_b
+            switch_positions_a[idx] = (sx_a, sy_a)
+            switch_positions_b[idx] = (sx_b, sy_b)
 
             switch_specs = [
-                (f"Stage{idx}_A", f"Switch{idx}_A", sx, top_y),
-                (f"Stage{idx}_B", f"Switch{idx}_B", sx, bottom_y),
+                (f"Stage{idx}_A", f"Switch{idx}_A", sx_a, sy_a),
+                (f"Stage{idx}_B", f"Switch{idx}_B", sx_b, sy_b),
             ]
 
             for room_name, switch_name, sx, sy in switch_specs:
@@ -334,13 +411,22 @@ class RhythmSyncScenario(Scenario):
                     ceiling_height=128,
                     floor_texture="TLITE6_4",
                     ceiling_texture=ceil_tex,
-                    wall_texture="COMPBLUE",
+                    wall_texture=switch_tex,
                 )
+                if builder.get_area_centroid(switch_name) is None:
+                    raise ValueError(
+                        f"{switch_name} has no claimed cells (seed={seed}, stage={idx})"
+                    )
                 builder.connect_adjacent(
                     room_name,
                     switch_name,
                     ConnectionType.OPEN,
+                    silent=True,
                 )
+                if not _areas_adjacent(room_name, switch_name):
+                    raise ValueError(
+                        f"{room_name} and {switch_name} are not adjacent (seed={seed}, stage={idx})"
+                    )
 
         builder.add_thing("PLAYER1_START", start_x - 80, top_y, angle=0)
         builder.add_thing("PLAYER2_START", start_x - 80, bottom_y, angle=0)
