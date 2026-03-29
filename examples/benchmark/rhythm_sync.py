@@ -80,10 +80,10 @@ class RhythmSyncScenario(Scenario):
             "room_height": 256,
             "top_y": 128,
             "bottom_y": -128,
-            "switch_width": 64,
-            "switch_height": 90,
+            "switch_width": 32,
+            "switch_height": 45,
             "switch_x_offset": 144,
-            "switch_use_range": 96,
+            "switch_use_range": 64,
             "seed_density_per_section": 1400,
             "min_seed_count": 3200,
         }
@@ -348,17 +348,22 @@ class RhythmSyncScenario(Scenario):
         acs = ACSBuilder()
         acs.add_include("zcommon.acs")
 
+        # Internal map vars (not exposed to ViZDoom)
         acs.add_map_var("delta_t", "int", delta_t_tics)
         acs.add_map_var("tick_serial", "int", 0)
-        acs.add_map_var("current_stage", "int", 1)
-        acs.add_map_var("completed_stages", "int", 0)
-        acs.add_map_var("pending_a", "int", 0)
-        acs.add_map_var("pending_b", "int", 0)
         acs.add_map_var("press_tic_a", "int", -999999)
         acs.add_map_var("press_tic_b", "int", -999999)
-        acs.add_map_var("failed", "int", 0)
-        acs.add_map_var("finished", "int", 0)
-        acs.add_map_var("num_sections_total", "int", num_sections)
+
+        # Global vars exposed to ViZDoom as USER24-USER32
+        acs.add_global_var("current_stage", 24, "int")
+        acs.add_global_var("completed_stages", 25, "int")
+        acs.add_global_var("current_stage_type", 26, "int")
+        acs.add_global_var("pending_a", 27, "int")
+        acs.add_global_var("pending_b", 28, "int")
+        acs.add_global_var("failed", 29, "int")
+        acs.add_global_var("finished", 30, "int")
+        acs.add_global_var("current_cue_owner", 31, "int")
+        acs.add_global_var("num_sections_total", 32, "int")
 
         for idx in range(1, num_sections + 1):
             acs.add_map_var(f"stage_type_{idx}", "int", 0)
@@ -448,6 +453,7 @@ class RhythmSyncScenario(Scenario):
                 complete_stage_lines.append(f"        Door_Open({transition_tags_a[idx]}, 16, 0);")
                 complete_stage_lines.append(f"        Door_Open({transition_tags_b[idx]}, 16, 0);")
                 complete_stage_lines.append(f"        current_stage = {idx + 1};")
+                complete_stage_lines.append("        SyncPublicState();")
                 complete_stage_lines.append("    }")
 
             complete_stage_lines.append(f"    else if (stage == {num_sections}) {{")
@@ -470,6 +476,11 @@ function void ResetPending(void) {
     pending_b = 0;
     press_tic_a = -999999;
     press_tic_b = -999999;
+}
+
+function void SyncPublicState(void) {
+    current_stage_type = GetStageType(current_stage);
+    current_cue_owner = GetCueOwner(current_stage);
 }
 
 function void TriggerFail(void) {
@@ -495,15 +506,6 @@ function void ShowOverlayForAllPlayers(str lump) {
         ShowOverlayForActivator(lump);
         player_idx = player_idx + 1;
     }
-}
-
-function void SyncTelemetryForActivator(void) {
-    SetUserVariable(0, "user24", current_stage);
-    SetUserVariable(0, "user25", completed_stages);
-    SetUserVariable(0, "user26", GetStageType(current_stage));
-    SetUserVariable(0, "user29", failed);
-    SetUserVariable(0, "user30", finished);
-    SetUserVariable(0, "user32", num_sections_total);
 }
 """,
                     "\n".join(get_stage_type_lines),
@@ -613,9 +615,15 @@ function void HandleSwitchPress(int stage, int side) {{
 
         acs.add_script(
             ScriptType.OPEN,
-            """
+            f"""
 ResetPending();
 AssignStageTypes();
+current_stage = 1;
+completed_stages = 0;
+failed = 0;
+finished = 0;
+num_sections_total = {num_sections};
+SyncPublicState();
 ACS_ExecuteAlways(901, 0);
 ACS_ExecuteAlways(902, 0);
 """,
@@ -663,6 +671,7 @@ while (!failed && !finished) {
             """
 Thing_ChangeTID(0, 1000 + PlayerNumber());
 SetActorProperty(0, APROP_Health, 100);
+ClearInventory();
 """,
             number=903,
         )
@@ -677,7 +686,6 @@ int cue_remaining = 0;
 int cue_visible = 0;
 
 ACS_ExecuteAlways(905, 0, 0);
-SyncTelemetryForActivator();
 
 while (!failed && !finished) {
     int buttons = GetPlayerInput(-1, INPUT_BUTTONS);
@@ -709,11 +717,8 @@ while (!failed && !finished) {
         cue_visible = 0;
     }
 
-    SyncTelemetryForActivator();
     Delay(1);
 }
-
-SyncTelemetryForActivator();
 """,
             number=904,
         )
