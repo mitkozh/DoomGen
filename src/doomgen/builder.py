@@ -120,6 +120,28 @@ class ProceduralMapBuilder:
                     s.area_id = area_id
                     count += 1
 
+        # Small overwrite areas can be smaller than the seed spacing, so they don't exist and can't be connected if seedless
+        if count == 0 and mode == "overwrite":
+            cx = poly.centroid.x
+            cy = poly.centroid.y
+            minx, miny, maxx, maxy = poly.bounds
+            max_d = max(maxx - minx, maxy - miny) * 2.0
+            max_d2 = max_d * max_d
+
+            best_seed = None
+            best_d2 = None
+            for s in self.seeds:
+                dx = s.x - cx
+                dy = s.y - cy
+                d2 = dx * dx + dy * dy
+                if best_d2 is None or d2 < best_d2:
+                    best_d2 = d2
+                    best_seed = s
+
+            if best_seed is not None and best_d2 is not None and best_d2 <= max_d2:
+                best_seed.area_id = area_id
+                count = 1
+
         if count == 0:
             print(f"Warning: Area {name} claimed 0 seeds. Check bounds/density.")
 
