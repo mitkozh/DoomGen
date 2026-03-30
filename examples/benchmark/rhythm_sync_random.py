@@ -72,7 +72,7 @@ class RhythmSyncScenario(Scenario):
             "random_seed_on_generate": True,
             "num_sections": 20,
             "intro_regular_sections": 4,
-            "delta_t_tics": 36,
+            "delta_t_tics": 12,
             "beat_tics": 140,
             "jitter_tics": 35,
             "stage_step": 512,
@@ -85,7 +85,7 @@ class RhythmSyncScenario(Scenario):
             "switch_wall_margin": 32, # How far away from wall, reduce to jitter more
             "switch_intro_stages": 2, # How many stage to start actual randomizing
             "switch_intro_jitter_frac": 0.01, # How much random in intro stages 
-            "switch_pos_seed_offset": 0, # 0 means switch rng tied to scenario seed, but setting seed offset allows different switch placements in same scenario seed (for batch training)
+            "switch_pos_seed_offset": 0, # Burns ACS RNG draws before switch sampling; 0 keeps default stream
             "switch_use_range": 64,
             "seed_density_per_section": 1400,
             "min_seed_count": 3200,
@@ -152,7 +152,7 @@ class RhythmSyncScenario(Scenario):
         switch_intro_jitter_frac = float(cfg["switch_intro_jitter_frac"])
         switch_pos_seed_offset = int(cfg["switch_pos_seed_offset"])
         switch_use_range = int(cfg["switch_use_range"])
-        switch_rng = random.Random(seed + switch_pos_seed_offset)
+        switch_marker_actor = "BlueTorch"
 
         # Hardcoded theme
         floor_tex = "FLAT19"
@@ -161,7 +161,6 @@ class RhythmSyncScenario(Scenario):
         door_wall_tex = "DOORTRAK"
         door_flat_tex = "GATE1"
         window_tex = "MIDGRATE"
-        switch_tex = "COMPBLUE"  # Used for side of console
 
         start_x = 0
         stage_x = [stage_step * i for i in range(1, num_sections + 1)]
@@ -331,8 +330,6 @@ class RhythmSyncScenario(Scenario):
         builder.graph.get_area(door_a_exit).config.tag = exit_tag_a
         builder.graph.get_area(door_b_exit).config.tag = exit_tag_b
 
-        switch_positions_a: Dict[int, tuple[int, int]] = {}
-        switch_positions_b: Dict[int, tuple[int, int]] = {}
         max_dx = (room_w // 2) - (switch_w // 2) - switch_wall_margin
         max_dy = (room_h // 2) - (switch_h // 2) - switch_wall_margin
         if max_dx < 0 or max_dy < 0:
@@ -342,91 +339,6 @@ class RhythmSyncScenario(Scenario):
 
         intro_jitter_dx = int(max_dx * switch_intro_jitter_frac)
         intro_jitter_dy = int(max_dy * switch_intro_jitter_frac)
-
-        def _clamp(v: int, lo: int, hi: int) -> int:
-            return max(lo, min(hi, v))
-
-        # Stable-but-random intro base offsets, sampled independently per side.
-        base_dx_a = _clamp(switch_rng.randint(-max_dx, max_dx), -max_dx, max_dx)
-        base_dy_a = _clamp(switch_rng.randint(-max_dy, max_dy), -max_dy, max_dy)
-        base_dx_b = _clamp(switch_rng.randint(-max_dx, max_dx), -max_dx, max_dx)
-        base_dy_b = _clamp(switch_rng.randint(-max_dy, max_dy), -max_dy, max_dy)
-
-        def _areas_adjacent(room_a_name: str, room_b_name: str) -> bool:
-            id_a = builder.name_to_id.get(room_a_name, room_a_name)
-            id_b = builder.name_to_id.get(room_b_name, room_b_name)
-            seeds_a = [i for i, s in enumerate(builder.seeds) if s.area_id == id_a]
-            for idx_seed in seeds_a:
-                for neighbor in builder.mesh.adjacency.get(idx_seed, []):
-                    if builder.seeds[neighbor].area_id == id_b:
-                        return True
-            return False
-
-        for idx, x_pos in enumerate(stage_x, start=1): # room center
-            if idx <= switch_intro_stages:
-                dx_a = _clamp(
-                    base_dx_a + switch_rng.randint(-intro_jitter_dx, intro_jitter_dx),
-                    -max_dx,
-                    max_dx,
-                )
-                dy_a = _clamp(
-                    base_dy_a + switch_rng.randint(-intro_jitter_dy, intro_jitter_dy),
-                    -max_dy,
-                    max_dy,
-                )
-                dx_b = _clamp(
-                    base_dx_b + switch_rng.randint(-intro_jitter_dx, intro_jitter_dx),
-                    -max_dx,
-                    max_dx,
-                )
-                dy_b = _clamp(
-                    base_dy_b + switch_rng.randint(-intro_jitter_dy, intro_jitter_dy),
-                    -max_dy,
-                    max_dy,
-                )
-            else:
-                dx_a = switch_rng.randint(-max_dx, max_dx)
-                dy_a = switch_rng.randint(-max_dy, max_dy)
-                dx_b = switch_rng.randint(-max_dx, max_dx)
-                dy_b = switch_rng.randint(-max_dy, max_dy)
-
-            sx_a = x_pos + dx_a
-            sy_a = top_y + dy_a
-            sx_b = x_pos + dx_b
-            sy_b = bottom_y + dy_b
-            switch_positions_a[idx] = (sx_a, sy_a)
-            switch_positions_b[idx] = (sx_b, sy_b)
-
-            switch_specs = [
-                (f"Stage{idx}_A", f"Switch{idx}_A", sx_a, sy_a),
-                (f"Stage{idx}_B", f"Switch{idx}_B", sx_b, sy_b),
-            ]
-
-            for room_name, switch_name, sx, sy in switch_specs:
-                builder.add_area(
-                    switch_name,
-                    shape=(sx, sy, switch_w, switch_h),
-                    mode="overwrite",
-                    floor_height=40,
-                    ceiling_height=128,
-                    floor_texture="TLITE6_4",
-                    ceiling_texture=ceil_tex,
-                    wall_texture=switch_tex,
-                )
-                if builder.get_area_centroid(switch_name) is None:
-                    raise ValueError(
-                        f"{switch_name} has no claimed cells (seed={seed}, stage={idx})"
-                    )
-                builder.connect_adjacent(
-                    room_name,
-                    switch_name,
-                    ConnectionType.OPEN,
-                    silent=True,
-                )
-                if not _areas_adjacent(room_name, switch_name):
-                    raise ValueError(
-                        f"{room_name} and {switch_name} are not adjacent (seed={seed}, stage={idx})"
-                    )
 
         builder.add_thing("PLAYER1_START", start_x - 80, top_y, angle=0)
         builder.add_thing("PLAYER2_START", start_x - 80, bottom_y, angle=0)
@@ -454,6 +366,12 @@ class RhythmSyncScenario(Scenario):
         for idx in range(1, num_sections + 1):
             acs.add_map_var(f"stage_type_{idx}", "int", 0)
             acs.add_map_var(f"cue_owner_{idx}", "int", -1)
+
+        acs.add_map_var("switch_base_dx_a", "int", 0)
+        acs.add_map_var("switch_base_dy_a", "int", 0)
+        acs.add_map_var("switch_base_dx_b", "int", 0)
+        acs.add_map_var("switch_base_dy_b", "int", 0)
+        acs.add_map_var("switch_episode_seed", "int", 0)
 
         post_intro_sections = max(0, num_sections - intro_regular)
         num_stage_blocks = (post_intro_sections + 2) // 3
@@ -490,33 +408,106 @@ class RhythmSyncScenario(Scenario):
                 assign_stage_type_lines.append(f"    else cue_owner_{idx} = -1;")
         assign_stage_type_lines.append("}")
 
-        switch_x_a_lines = ["function int GetSwitchXA(int stage) {"]
-        for idx in range(1, num_sections + 1):
-            prefix = "if" if idx == 1 else "else if"
-            switch_x_a_lines.append(f"    {prefix} (stage == {idx}) return {switch_positions_a[idx][0]};")
-        switch_x_a_lines.append("    return 0;")
-        switch_x_a_lines.append("}")
+        switch_calc_lines = [
+            "function int PositiveMod(int value, int mod) {",
+            "    int rem = value % mod;",
+            "    if (rem < 0) rem = rem + mod;",
+            "    return rem;",
+            "}",
+            "function int EpisodeRandFromStage(int stage, int side, int axis, int lo, int hi) {",
+            "    int span = (hi - lo) + 1;",
+            "    int hash = switch_episode_seed + (stage * 1103) + (side * 1999) + (axis * 3571);",
+            "    hash = hash * 1103515 + 12345;",
+            "    if (hash < 0) hash = -hash;",
+            "    return lo + PositiveMod(hash, span);",
+            "}",
+            "function int GetSwitchDXA(int stage) {",
+            f"    if (stage <= {switch_intro_stages}) {{",
+            f"        return ClampInt(switch_base_dx_a + EpisodeRandFromStage(stage, 0, 0, -{intro_jitter_dx}, {intro_jitter_dx}), -{max_dx}, {max_dx});",
+            "    }",
+            f"    return EpisodeRandFromStage(stage, 0, 0, -{max_dx}, {max_dx});",
+            "}",
+            "function int GetSwitchDYA(int stage) {",
+            f"    if (stage <= {switch_intro_stages}) {{",
+            f"        return ClampInt(switch_base_dy_a + EpisodeRandFromStage(stage, 0, 1, -{intro_jitter_dy}, {intro_jitter_dy}), -{max_dy}, {max_dy});",
+            "    }",
+            f"    return EpisodeRandFromStage(stage, 0, 1, -{max_dy}, {max_dy});",
+            "}",
+            "function int GetSwitchDXB(int stage) {",
+            f"    if (stage <= {switch_intro_stages}) {{",
+            f"        return ClampInt(switch_base_dx_b + EpisodeRandFromStage(stage, 1, 0, -{intro_jitter_dx}, {intro_jitter_dx}), -{max_dx}, {max_dx});",
+            "    }",
+            f"    return EpisodeRandFromStage(stage, 1, 0, -{max_dx}, {max_dx});",
+            "}",
+            "function int GetSwitchDYB(int stage) {",
+            f"    if (stage <= {switch_intro_stages}) {{",
+            f"        return ClampInt(switch_base_dy_b + EpisodeRandFromStage(stage, 1, 1, -{intro_jitter_dy}, {intro_jitter_dy}), -{max_dy}, {max_dy});",
+            "    }",
+            f"    return EpisodeRandFromStage(stage, 1, 1, -{max_dy}, {max_dy});",
+            "}",
+        ]
 
-        switch_y_a_lines = ["function int GetSwitchYA(int stage) {"]
-        for idx in range(1, num_sections + 1):
-            prefix = "if" if idx == 1 else "else if"
-            switch_y_a_lines.append(f"    {prefix} (stage == {idx}) return {switch_positions_a[idx][1]};")
-        switch_y_a_lines.append("    return 0;")
-        switch_y_a_lines.append("}")
+        assign_switch_positions_lines = ["function void AssignSwitchPositions(void) {"]
+        if switch_pos_seed_offset > 0:
+            assign_switch_positions_lines.append("    int burn = 0;")
+            assign_switch_positions_lines.append(
+                f"    while (burn < {switch_pos_seed_offset}) {{"
+            )
+            assign_switch_positions_lines.append("        Random(0, 255);")
+            assign_switch_positions_lines.append("        burn = burn + 1;")
+            assign_switch_positions_lines.append("    }")
+        assign_switch_positions_lines.append(f"    switch_base_dx_a = Random(-{max_dx}, {max_dx});")
+        assign_switch_positions_lines.append(f"    switch_base_dy_a = Random(-{max_dy}, {max_dy});")
+        assign_switch_positions_lines.append(f"    switch_base_dx_b = Random(-{max_dx}, {max_dx});")
+        assign_switch_positions_lines.append(f"    switch_base_dy_b = Random(-{max_dy}, {max_dy});")
+        assign_switch_positions_lines.append("    switch_episode_seed = Random(0, 32767);")
+        assign_switch_positions_lines.append("    int stage = 1;")
+        assign_switch_positions_lines.append(f"    while (stage <= {num_sections}) {{")
+        assign_switch_positions_lines.append(
+            "        int switch_x_a = GetSwitchXA(stage);"
+        )
+        assign_switch_positions_lines.append(
+            "        int switch_y_a = GetSwitchYA(stage);"
+        )
+        assign_switch_positions_lines.append(
+            "        int switch_x_b = GetSwitchXB(stage);"
+        )
+        assign_switch_positions_lines.append(
+            "        int switch_y_b = GetSwitchYB(stage);"
+        )
+        assign_switch_positions_lines.append(
+            f'        Spawn("{switch_marker_actor}", switch_x_a << 16, switch_y_a << 16, 0, 5000 + stage, 0);'
+        )
+        assign_switch_positions_lines.append(
+            f'        Spawn("{switch_marker_actor}", switch_x_b << 16, switch_y_b << 16, 0, 6000 + stage, 0);'
+        )
+        assign_switch_positions_lines.append("        stage = stage + 1;")
+        assign_switch_positions_lines.append("    }")
+        assign_switch_positions_lines.append("}")
 
-        switch_x_b_lines = ["function int GetSwitchXB(int stage) {"]
-        for idx in range(1, num_sections + 1):
-            prefix = "if" if idx == 1 else "else if"
-            switch_x_b_lines.append(f"    {prefix} (stage == {idx}) return {switch_positions_b[idx][0]};")
-        switch_x_b_lines.append("    return 0;")
-        switch_x_b_lines.append("}")
+        switch_x_a_lines = [
+            "function int GetSwitchXA(int stage) {",
+            f"    return ({stage_step} * stage) + GetSwitchDXA(stage);",
+            "}",
+        ]
 
-        switch_y_b_lines = ["function int GetSwitchYB(int stage) {"]
-        for idx in range(1, num_sections + 1):
-            prefix = "if" if idx == 1 else "else if"
-            switch_y_b_lines.append(f"    {prefix} (stage == {idx}) return {switch_positions_b[idx][1]};")
-        switch_y_b_lines.append("    return 0;")
-        switch_y_b_lines.append("}")
+        switch_y_a_lines = [
+            "function int GetSwitchYA(int stage) {",
+            f"    return {top_y} + GetSwitchDYA(stage);",
+            "}",
+        ]
+
+        switch_x_b_lines = [
+            "function int GetSwitchXB(int stage) {",
+            f"    return ({stage_step} * stage) + GetSwitchDXB(stage);",
+            "}",
+        ]
+
+        switch_y_b_lines = [
+            "function int GetSwitchYB(int stage) {",
+            f"    return {bottom_y} + GetSwitchDYB(stage);",
+            "}",
+        ]
 
         complete_stage_lines = [
             "function void CompleteStage(int stage) {",
@@ -593,10 +584,22 @@ function void ShowOverlayForAllPlayers(str lump) {
         player_idx = player_idx + 1;
     }
 }
+
+function int ClampInt(int value, int lo, int hi) {
+    if (value < lo) {
+        return lo;
+    }
+    if (value > hi) {
+        return hi;
+    }
+    return value;
+}
 """,
                     "\n".join(get_stage_type_lines),
                     "\n".join(get_cue_owner_lines),
                     "\n".join(assign_stage_type_lines),
+                    "\n".join(switch_calc_lines),
+                    "\n".join(assign_switch_positions_lines),
                     "\n".join(switch_x_a_lines),
                     "\n".join(switch_y_a_lines),
                     "\n".join(switch_x_b_lines),
@@ -704,6 +707,7 @@ function void HandleSwitchPress(int stage, int side) {{
             f"""
 ResetPending();
 AssignStageTypes();
+AssignSwitchPositions();
 current_stage = 1;
 completed_stages = 0;
 failed = 0;

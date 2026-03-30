@@ -72,7 +72,7 @@ class RhythmSyncScenario(Scenario):
             "random_seed_on_generate": True,
             "num_sections": 20,
             "intro_regular_sections": 4,
-            "delta_t_tics": 36,
+            "delta_t_tics": 12,
             "beat_tics": 140,
             "jitter_tics": 35,
             "stage_step": 512,
