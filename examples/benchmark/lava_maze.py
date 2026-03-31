@@ -188,12 +188,15 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
 
         acs.scripts = []
 
+        STANDS_RADIUS_UNITS = int(STANDS_INNER + STANDS_THICKNESS / 2)
+
         maze_logic_script = f"""
     #define MAP_WIDTH {PHYSICAL_SIZE}
     #define CELL_SIZE {CELL_SIZE}
     #define BASE_TAG {base_tag}
     #define MAX_TILES {MAX_MAZE_SIZE}
     #define APROP_PainChance 21
+    #define PLATFORM_RADIUS {STANDS_RADIUS_UNITS}
 
     int current_maze_size = {INITIAL_MAZE_SIZE};
     int current_start_tag = 0;
@@ -244,6 +247,24 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
             int shift = bit_idx % 27;
             maze_bits_chunk[chunk] = maze_bits_chunk[chunk] | (1 << shift);
         }}
+    }}
+
+    function int RingDistToX(int s_fix, int r_fix) {{
+        while (s_fix < 0) s_fix += 8 * r_fix;
+        s_fix = s_fix % (8 * r_fix);
+        if (s_fix < 2 * r_fix) return r_fix - s_fix;
+        if (s_fix < 4 * r_fix) return -r_fix;
+        if (s_fix < 6 * r_fix) return (s_fix - 4 * r_fix) - r_fix;
+        return r_fix;
+    }}
+
+    function int RingDistToY(int s_fix, int r_fix) {{
+        while (s_fix < 0) s_fix += 8 * r_fix;
+        s_fix = s_fix % (8 * r_fix);
+        if (s_fix < 2 * r_fix) return r_fix;
+        if (s_fix < 4 * r_fix) return r_fix - (s_fix - 2 * r_fix);
+        if (s_fix < 6 * r_fix) return -r_fix;
+        return (s_fix - 6 * r_fix) - r_fix;
     }}
 
     function int IsInFOV(int observer, int target) {{
@@ -404,7 +425,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
         lm_maze_bits_2_global      = maze_bits_chunk[2];
 
         Sector_SetColor(current_end_tag, 0, 0, 255);
-        Print(s:"Level Up! Size: ", d:size);
+        //Print(s:"Level Up! Size: ", d:size);
     }}
 
     script "EndGame" (void) {{
@@ -433,7 +454,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
 
         SetHudSize(320, 200, 1);
         SetFont("S_BLACK");
-        HudMessage(s:"A"; HUDMSG_PLAIN, 1, CR_UNTRANSLATED, 160.0, 100.0, 0.0);
+        HudMessage(s:"A"; HUDMSG_PLAIN | HUDMSG_LAYER_UNDERHUD, 1, CR_UNTRANSLATED, 160.0, 100.0, 0.0);
         ClearInventory();
 
         while (TRUE) {{
@@ -473,7 +494,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
                 if (g_flash_state == 0 || g_flash_timer > 18) {{
                      SetHudSize(320, 200, 1);
                      SetFont(g_flash_lump);
-                     HudMessage(s:"A"; HUDMSG_PLAIN, 1, CR_UNTRANSLATED, 160.0, 100.0, 0.0);
+                     HudMessage(s:"A"; HUDMSG_PLAIN | HUDMSG_LAYER_UNDERHUD, 1, CR_UNTRANSLATED, 160.0, 100.0, 0.0);
                      g_flash_state = 1;
                      lm_flash_active_global = 1;
                 }}
@@ -481,7 +502,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
                 if (g_flash_state == 1) {{
                     SetHudSize(320, 200, 1);
                     SetFont("S_BLACK");
-                    HudMessage(s:"A"; HUDMSG_PLAIN, 1, CR_UNTRANSLATED, 160.0, 100.0, 0.0);
+                    HudMessage(s:"A"; HUDMSG_PLAIN | HUDMSG_LAYER_UNDERHUD, 1, CR_UNTRANSLATED, 160.0, 100.0, 0.0);
                     g_flash_state = 0;
                     lm_flash_active_global = 0;
                 }}
@@ -499,6 +520,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
 
         Thing_ChangeTID(0, 1001);
         SetActorProperty(0, APROP_Health, 100);
+        SetPlayerProperty(0, 1, 0); // PROP_FROZEN (Disables manual movement but allows weapons/looking)
 
         ClearInventory();
         GiveInventory("LMPistol",      1);
@@ -511,12 +533,55 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
         SetWeapon("LMPistol");
 
         int btns, old_btns;
+        int r_fix = PLATFORM_RADIUS << 16;
+        int current_s = 5 * r_fix; // Start at middle of South edge
 
         while(TRUE) {{
             GiveInventory("Clip",  1);
             GiveInventory("Shell", 1);
             GiveInventory("Cell",  1);
             
+            // Calculate optimal target on the square ring (opposite to player 1)
+            int px = GetActorX(1000);
+            int py = GetActorY(1000);
+            int tx = -px;
+            int ty = -py;
+            int abs_tx = tx; if (abs_tx < 0) abs_tx = -abs_tx;
+            int abs_ty = ty; if (abs_ty < 0) abs_ty = -abs_ty;
+            
+            int target_s = current_s; // fallback if centered
+            
+            if (abs_tx > 655360 || abs_ty > 655360) {{ // > 10 units away from center
+                if (abs_tx > abs_ty) {{
+                    ty = FixedMul(ty, FixedDiv(r_fix, abs_tx));
+                    if (tx > 0) {{ target_s = r_fix + ty + 6 * r_fix; }} 
+                    else        {{ target_s = r_fix - ty + 2 * r_fix; }}
+                }} else {{
+                    tx = FixedMul(tx, FixedDiv(r_fix, abs_ty));
+                    if (ty > 0) {{ target_s = r_fix - tx; }} 
+                    else        {{ target_s = tx + r_fix + 4 * r_fix; }}
+                }}
+            }}
+
+            int p_len = 8 * r_fix;
+            int diff = (target_s - current_s) % p_len;
+            if (diff < 0) diff += p_len;
+            if (diff > p_len / 2) diff -= p_len;
+            
+            int max_speed = 32 << 16; // maximum orbital units per tic
+            int move_amt = diff / 10; // smooth ease-in/ease-out
+            if (move_amt > max_speed) move_amt = max_speed;
+            if (move_amt < -max_speed) move_amt = -max_speed;
+            
+            current_s = (current_s + move_amt) % p_len;
+            if (current_s < 0) current_s += p_len;
+            
+            int obs_x = RingDistToX(current_s, r_fix);
+            int obs_y = RingDistToY(current_s, r_fix);
+            int obs_z = GetActorZ(0); // stay grounded
+
+            SetActorPosition(0, obs_x, obs_y, obs_z, 0);
+
             // Always look at Player 1 (TID 1000)
             int dx = GetActorX(1000) - GetActorX(0);
             int dy = GetActorY(1000) - GetActorY(0);
@@ -553,7 +618,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
 
                     g_flash_timer = 25;
 
-                    HudMessage(s:"Signaling: ", s:w_name; HUDMSG_FADEOUT, 2, CR_WHITE, 0.5, 0.8, 1.0, 0.5);
+                    //HudMessage(s:"Signaling: ", s:w_name; HUDMSG_FADEOUT, 2, CR_WHITE, 0.5, 0.8, 1.0, 0.5);
                 }}
             }}
             old_btns = btns;
