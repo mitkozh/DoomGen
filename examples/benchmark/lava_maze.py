@@ -450,6 +450,8 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
         SetActorPosition(0, wx, wy, 0, 0);
         SetActorProperty(0, APROP_ViewHeight, 45.0);
         SetActorProperty(0, APROP_Mass, 0x7FFFFFFF);
+        SetActorProperty(0, APROP_ScaleX, 2.5);
+        SetActorProperty(0, APROP_ScaleY, 2.5);
         SetActorProperty(0, 21, 0);
 
         SetHudSize(320, 200, 1);
