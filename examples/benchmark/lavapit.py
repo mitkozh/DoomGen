@@ -14,7 +14,7 @@ class LavaPitScenario(Scenario):
         return {
             "seed": None,
             "random_seed_on_generate": True,
-            "num_platforms": 80,
+            "num_platforms": 5,
             "max_players": 4,
             "platform_width_min": 236,
             "platform_width_max": 320,
@@ -28,7 +28,7 @@ class LavaPitScenario(Scenario):
             "curve_waves": 2,
             "platform_floor_height": 0,
             "lava_height": -80,
-            "lava_damage": 16,
+            "lava_damage": 100,
             "poll_tics": 4,
             "runtime_jitter_tics": 2,
             "seeds_per_platform": 1000,
