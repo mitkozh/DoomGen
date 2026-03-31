@@ -352,7 +352,7 @@ class RhythmSyncScenario(Scenario):
         acs.add_map_var("press_tic_a", "int", -999999)
         acs.add_map_var("press_tic_b", "int", -999999)
 
-        # Global vars exposed to ViZDoom as USER24-USER32
+        # Global vars exposed to ViZDoom as USER24-USER38
         acs.add_global_var("current_stage", 24, "int")
         acs.add_global_var("completed_stages", 25, "int")
         acs.add_global_var("current_stage_type", 26, "int")
@@ -362,6 +362,12 @@ class RhythmSyncScenario(Scenario):
         acs.add_global_var("finished", 30, "int")
         acs.add_global_var("current_cue_owner", 31, "int")
         acs.add_global_var("num_sections_total", 32, "int")
+        acs.add_global_var("switch_x_a", 33, "int")
+        acs.add_global_var("switch_y_a", 34, "int")
+        acs.add_global_var("switch_x_b", 35, "int")
+        acs.add_global_var("switch_y_b", 36, "int")
+        acs.add_global_var("cue_visible_a", 37, "int")
+        acs.add_global_var("cue_visible_b", 38, "int")
 
         for idx in range(1, num_sections + 1):
             acs.add_map_var(f"stage_type_{idx}", "int", 0)
@@ -464,22 +470,22 @@ class RhythmSyncScenario(Scenario):
         assign_switch_positions_lines.append("    int stage = 1;")
         assign_switch_positions_lines.append(f"    while (stage <= {num_sections}) {{")
         assign_switch_positions_lines.append(
-            "        int switch_x_a = GetSwitchXA(stage);"
+            "        int stage_switch_x_a = GetSwitchXA(stage);"
         )
         assign_switch_positions_lines.append(
-            "        int switch_y_a = GetSwitchYA(stage);"
+            "        int stage_switch_y_a = GetSwitchYA(stage);"
         )
         assign_switch_positions_lines.append(
-            "        int switch_x_b = GetSwitchXB(stage);"
+            "        int stage_switch_x_b = GetSwitchXB(stage);"
         )
         assign_switch_positions_lines.append(
-            "        int switch_y_b = GetSwitchYB(stage);"
+            "        int stage_switch_y_b = GetSwitchYB(stage);"
         )
         assign_switch_positions_lines.append(
-            f'        Spawn("{switch_marker_actor}", switch_x_a << 16, switch_y_a << 16, 0, 5000 + stage, 0);'
+            f'        Spawn("{switch_marker_actor}", stage_switch_x_a << 16, stage_switch_y_a << 16, 0, 5000 + stage, 0);'
         )
         assign_switch_positions_lines.append(
-            f'        Spawn("{switch_marker_actor}", switch_x_b << 16, switch_y_b << 16, 0, 6000 + stage, 0);'
+            f'        Spawn("{switch_marker_actor}", stage_switch_x_b << 16, stage_switch_y_b << 16, 0, 6000 + stage, 0);'
         )
         assign_switch_positions_lines.append("        stage = stage + 1;")
         assign_switch_positions_lines.append("    }")
@@ -558,6 +564,10 @@ function void ResetPending(void) {
 function void SyncPublicState(void) {
     current_stage_type = GetStageType(current_stage);
     current_cue_owner = GetCueOwner(current_stage);
+    switch_x_a = GetSwitchXA(current_stage);
+    switch_y_a = GetSwitchYA(current_stage);
+    switch_x_b = GetSwitchXB(current_stage);
+    switch_y_b = GetSwitchYB(current_stage);
 }
 
 function void TriggerFail(void) {
