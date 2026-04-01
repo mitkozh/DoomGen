@@ -74,6 +74,28 @@ ACTOR LMPistol : Pistol replaces Pistol
   Weapon.SlotNumber 1
   States
   {
+  Select:
+    PISG A 0 A_Raise
+    PISG A 0 A_Raise
+    PISG A 0 A_Raise
+    PISG A 0 A_Raise
+    PISG A 0 A_Raise
+    PISG A 0 A_Raise
+    PISG A 0 A_Raise
+    PISG A 0 A_Raise
+    PISG A 1 A_Raise
+    Loop
+  Deselect:
+    PISG A 0 A_Lower
+    PISG A 0 A_Lower
+    PISG A 0 A_Lower
+    PISG A 0 A_Lower
+    PISG A 0 A_Lower
+    PISG A 0 A_Lower
+    PISG A 0 A_Lower
+    PISG A 0 A_Lower
+    PISG A 1 A_Lower
+    Loop
   Fire:
     PISG A 4 
     PISG B 6 A_FirePistol
@@ -90,6 +112,28 @@ ACTOR LMShotgun : Shotgun replaces Shotgun
   Weapon.SlotNumber 2
   States
   {
+  Select:
+    SHTG A 0 A_Raise
+    SHTG A 0 A_Raise
+    SHTG A 0 A_Raise
+    SHTG A 0 A_Raise
+    SHTG A 0 A_Raise
+    SHTG A 0 A_Raise
+    SHTG A 0 A_Raise
+    SHTG A 0 A_Raise
+    SHTG A 1 A_Raise
+    Loop
+  Deselect:
+    SHTG A 0 A_Lower
+    SHTG A 0 A_Lower
+    SHTG A 0 A_Lower
+    SHTG A 0 A_Lower
+    SHTG A 0 A_Lower
+    SHTG A 0 A_Lower
+    SHTG A 0 A_Lower
+    SHTG A 0 A_Lower
+    SHTG A 1 A_Lower
+    Loop
   Fire:
     SHTG A 3
     SHTG A 0 A_FireShotgun
@@ -110,6 +154,28 @@ ACTOR LMChaingun : Chaingun replaces Chaingun
   Weapon.SlotNumber 3
   States
   {
+  Select:
+    CHGG A 0 A_Raise
+    CHGG A 0 A_Raise
+    CHGG A 0 A_Raise
+    CHGG A 0 A_Raise
+    CHGG A 0 A_Raise
+    CHGG A 0 A_Raise
+    CHGG A 0 A_Raise
+    CHGG A 0 A_Raise
+    CHGG A 1 A_Raise
+    Loop
+  Deselect:
+    CHGG A 0 A_Lower
+    CHGG A 0 A_Lower
+    CHGG A 0 A_Lower
+    CHGG A 0 A_Lower
+    CHGG A 0 A_Lower
+    CHGG A 0 A_Lower
+    CHGG A 0 A_Lower
+    CHGG A 0 A_Lower
+    CHGG A 1 A_Lower
+    Loop
   Fire:
     CHGG A 4 A_FireCGun
     CHGG B 4 A_FireCGun
@@ -124,6 +190,28 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
   Weapon.SlotNumber 4
   States
   {
+  Select:
+    PLSG A 0 A_Raise
+    PLSG A 0 A_Raise
+    PLSG A 0 A_Raise
+    PLSG A 0 A_Raise
+    PLSG A 0 A_Raise
+    PLSG A 0 A_Raise
+    PLSG A 0 A_Raise
+    PLSG A 0 A_Raise
+    PLSG A 1 A_Raise
+    Loop
+  Deselect:
+    PLSG A 0 A_Lower
+    PLSG A 0 A_Lower
+    PLSG A 0 A_Lower
+    PLSG A 0 A_Lower
+    PLSG A 0 A_Lower
+    PLSG A 0 A_Lower
+    PLSG A 0 A_Lower
+    PLSG A 0 A_Lower
+    PLSG A 1 A_Lower
+    Loop
   Fire:
     PLSG A 3 A_FirePlasma
     PLSG B 24
