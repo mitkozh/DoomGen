@@ -176,6 +176,13 @@ class CoopHealthGatheringScenario(Scenario):
         acs.add_global_var("chg_active_health_kits_global", 1, "int")
         acs.add_global_var("chg_total_spawned_kits_global", 2, "int")
         acs.add_global_var("chg_chain_stretches_global", 3, "int")
+        acs.add_global_var("chg_total_pickups_global", 4, "int")
+        
+        acs.add_script(
+            ScriptType.VOID,
+            "chg_total_pickups_global++;",
+            number=10
+        )
         
         script_setup = f"""
         int pn = PlayerNumber();
@@ -273,6 +280,7 @@ class CoopHealthGatheringScenario(Scenario):
                         if (Random(0, 3) == 0) type = "Medikit"; 
                         
                         SpawnSpot(type, target_spot_tid, health_kit_tid, 0);
+                        SetThingSpecial(health_kit_tid, 80, 10, 0, 0, 0, 0);
                         chg_total_spawned_kits_global++;
                     }}
                     chg_active_health_kits_global = ThingCount(T_NONE, health_kit_tid);
