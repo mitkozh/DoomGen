@@ -21,9 +21,9 @@ class LavaMazeScenario(Scenario):
 
     def get_default_config(self) -> Dict[str, Any]:
         return {
-            "physical_size": 5,
+            "physical_size": 6,
             "cell_size": 128,
-            "initial_maze_size": 4,
+            "initial_maze_size": 2,
             "max_maze_size": 10,
             "lava_damage": 10,
             "seed": None,
@@ -63,28 +63,73 @@ class LavaMazeScenario(Scenario):
             "S_BLUE":  (0, 0, 255),
             "S_BLACK": (0, 0, 0),
         }
+        builder.wad_writer.add_lump("TX_START", b"")
         for lump_name, color in lump_files.items():
             create_color_lump(lump_name, color)
+        builder.wad_writer.add_lump("TX_END", b"")
 
         decorate_str = """
 ACTOR LMPistol : Pistol replaces Pistol
 {
   Weapon.SlotNumber 1
+  States
+  {
+  Fire:
+    PISG A 4 
+    PISG B 6 A_FirePistol
+    PISG C 4
+    PISG B 5
+    PISG A 20
+    PISG A 1 A_ReFire
+    Goto Ready
+  }
 }
 
 ACTOR LMShotgun : Shotgun replaces Shotgun
 {
   Weapon.SlotNumber 2
+  States
+  {
+  Fire:
+    SHTG A 3
+    SHTG A 0 A_FireShotgun
+    SHTG A 4
+    SHTG B 5
+    SHTG C 5
+    SHTG D 4
+    SHTG C 5
+    SHTG B 5
+    SHTG A 20
+    SHTG A 7 A_ReFire
+    Goto Ready
+  }
 }
 
 ACTOR LMChaingun : Chaingun replaces Chaingun
 {
   Weapon.SlotNumber 3
+  States
+  {
+  Fire:
+    CHGG A 4 A_FireCGun
+    CHGG B 4 A_FireCGun
+    CHGG B 20
+    CHGG B 0 A_ReFire
+    Goto Ready
+  }
 }
 
 ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
 {
   Weapon.SlotNumber 4
+  States
+  {
+  Fire:
+    PLSG A 3 A_FirePlasma
+    PLSG B 24
+    PLSG B 0 A_ReFire
+    Goto Ready
+  }
 }
 """
         builder.wad_writer.add_lump("DECORATE", decorate_str.encode('utf-8'))
@@ -96,7 +141,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
             ceiling_height=512,
             floor_texture="LAVA1",
             mode="overwrite",
-            # light_level=255,
+            light_level=255,
             tag=99,
         )
 
@@ -106,13 +151,13 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
 
         pos_y = STANDS_INNER + STANDS_THICKNESS / 2
         stands_width = 2 * STANDS_INNER + 2 * STANDS_THICKNESS
-        builder.add_area("Stands_N", shape=(0, pos_y, stands_width, STANDS_THICKNESS),   floor_height=STANDS_HEIGHT, ceiling_height=512, mode="overwrite", tag=201, wall_texture="DOGLDIR",  light_level=255)
-        builder.add_area("Stands_S", shape=(0, -pos_y, stands_width, STANDS_THICKNESS),  floor_height=STANDS_HEIGHT, ceiling_height=512, mode="overwrite", tag=203, wall_texture="COMPBLUE", light_level=255)
+        builder.add_area("Stands_N", shape=(0, pos_y, stands_width, STANDS_THICKNESS),   floor_height=STANDS_HEIGHT, ceiling_height=512, mode="overwrite", tag=201, wall_texture="S_YELLOW",  light_level=255)
+        builder.add_area("Stands_S", shape=(0, -pos_y, stands_width, STANDS_THICKNESS),  floor_height=STANDS_HEIGHT, ceiling_height=512, mode="overwrite", tag=203, wall_texture="S_BLUE", light_level=255)
 
         pos_x = STANDS_INNER + STANDS_THICKNESS / 2
         h_span = 2 * STANDS_INNER + 2 * STANDS_THICKNESS
-        builder.add_area("Stands_E", shape=( pos_x, 0, STANDS_THICKNESS, h_span), floor_height=STANDS_HEIGHT, ceiling_height=512, mode="overwrite", tag=200, wall_texture="A-CAMO5", light_level=255)
-        builder.add_area("Stands_W", shape=(-pos_x, 0, STANDS_THICKNESS, h_span), floor_height=STANDS_HEIGHT, ceiling_height=512, mode="overwrite", tag=202, wall_texture="REDWALL",  light_level=255)
+        builder.add_area("Stands_E", shape=( pos_x, 0, STANDS_THICKNESS, h_span), floor_height=STANDS_HEIGHT, ceiling_height=512, mode="overwrite", tag=200, wall_texture="S_GREEN", light_level=255)
+        builder.add_area("Stands_W", shape=(-pos_x, 0, STANDS_THICKNESS, h_span), floor_height=STANDS_HEIGHT, ceiling_height=512, mode="overwrite", tag=202, wall_texture="S_RED",  light_level=255)
 
         base_tag = 100
         for py in range(PHYSICAL_SIZE):
@@ -450,8 +495,8 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
         SetActorPosition(0, wx, wy, 0, 0);
         SetActorProperty(0, APROP_ViewHeight, 45.0);
         SetActorProperty(0, APROP_Mass, 0x7FFFFFFF);
-        SetActorProperty(0, APROP_ScaleX, 2.5);
-        SetActorProperty(0, APROP_ScaleY, 2.5);
+        SetActorProperty(0, APROP_ScaleX, 3.5);
+        SetActorProperty(0, APROP_ScaleY, 3.5);
         SetActorProperty(0, 21, 0);
 
         SetHudSize(320, 200, 1);
@@ -537,8 +582,11 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
         int btns, old_btns;
         int r_fix = PLATFORM_RADIUS << 16;
         int current_s = 5 * r_fix; // Start at middle of South edge
+        int attack_cooldown = 0;
 
         while(TRUE) {{
+            if (attack_cooldown > 0) attack_cooldown--;
+
             GiveInventory("Clip",  1);
             GiveInventory("Shell", 1);
             GiveInventory("Cell",  1);
@@ -603,7 +651,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
 
             btns = GetPlayerInput(-1, INPUT_BUTTONS);
 
-            if (btns & BT_ATTACK) {{
+            if ((btns & BT_ATTACK) && attack_cooldown == 0) {{
                 int signal = 0;
                 str w_name = "";
                 if      (CheckWeapon("LMPistol"))      {{ signal = 1; w_name = "GREEN";  }}
@@ -619,6 +667,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
                     if (signal == 4) {{ g_flash_lump = "S_BLUE";   }}
 
                     g_flash_timer = 25;
+                    attack_cooldown = 40;
 
                     //HudMessage(s:"Signaling: ", s:w_name; HUDMSG_FADEOUT, 2, CR_WHITE, 0.5, 0.8, 1.0, 0.5);
                 }}
