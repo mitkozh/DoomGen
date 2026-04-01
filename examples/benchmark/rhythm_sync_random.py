@@ -72,7 +72,7 @@ class RhythmSyncScenario(Scenario):
             "random_seed_on_generate": True,
             "num_sections": 20,
             "intro_regular_sections": 4,
-            "delta_t_tics": 12,
+            "delta_t_tics": 36,
             "beat_tics": 140,
             "jitter_tics": 35,
             "stage_step": 512,
@@ -85,7 +85,7 @@ class RhythmSyncScenario(Scenario):
             "switch_wall_margin": 32, # How far away from wall, reduce to jitter more
             "switch_intro_stages": 2, # How many stage to start actual randomizing
             "switch_intro_jitter_frac": 0.01, # How much random in intro stages 
-            "switch_pos_seed_offset": 0, # Burns ACS RNG draws before switch sampling; 0 keeps default stream
+            "switch_pos_seed_offset": 0,
             "switch_use_range": 64,
             "seed_density_per_section": 1400,
             "min_seed_count": 3200,
@@ -722,6 +722,8 @@ current_stage = 1;
 completed_stages = 0;
 failed = 0;
 finished = 0;
+cue_visible_a = 0;
+cue_visible_b = 0;
 num_sections_total = {num_sections};
 SyncPublicState();
 ACS_ExecuteAlways(901, 0);
@@ -815,6 +817,13 @@ while (!failed && !finished) {
     } else if (cue_visible) {
         ACS_ExecuteAlways(905, 0, 0);
         cue_visible = 0;
+    }
+
+    // Mirror local cue_visible to global for RL telemetry
+    if (pn == 0) {
+        cue_visible_a = cue_visible;
+    } else if (pn == 1) {
+        cue_visible_b = cue_visible;
     }
 
     Delay(1);
