@@ -68,35 +68,39 @@ def border_rgba_png(
 class RhythmSyncScenario(Scenario):
     def get_default_config(self) -> Dict[str, Any]:
         return {
-            "seed": None,
-            "random_seed_on_generate": True,
-            "num_sections": 20,
-            "intro_regular_sections": 4,
-            "delta_t_tics": 12,  # Starting tolerance window (tics)
-            "delta_t_minimum": 2,  # Minimum tolerance after decay
-            "delta_t_decay": 1,  # Decrease per stage completed
-            "beat_tics": 70,
-            "jitter_tics": 35,
-            "stage_step": 512,
-            "room_width": 512,
-            "room_height": 256,
-            "top_y": 128,
-            "bottom_y": -128,
-            "switch_width": 32,
-            "switch_height": 45,
-            "switch_wall_margin": 32, # How far away from wall, reduce to jitter more
-            "switch_intro_stages": 2, # How many stage to start actual randomizing
-            "switch_intro_jitter_frac": 0.01, # How much random in intro stages 
-            "switch_pos_seed_offset": 0,
-            "switch_use_range": 64,
-            "seed_density_per_section": 1400,
-            "min_seed_count": 3200,
-        }
+        "seed": None,
+        "random_seed_on_generate": True,
+        "num_sections": 20,
+        "intro_regular_sections": 8,
+        "jitter_stage_count": 6,
+        "delta_t_tics": 16,  # Starting tolerance window (tics)
+        "delta_t_minimum": 8,  # Minimum tolerance after decay
+        "delta_t_decay": 1,  # Decrease per stage completed
+        "beat_tics": 72,
+        "jitter_tics": 24,
+        "stage_step": 512,
+        "room_width": 512,
+        "room_height": 256,
+        "top_y": 128,
+        "bottom_y": -128,
+        "switch_width": 32,
+        "switch_height": 45,
+        "switch_wall_margin": 32, # How far away from wall, reduce to jitter more
+        "switch_intro_stages": 8, # How many stage to start actual randomizing
+        "switch_intro_jitter_frac": 0.125, # How much random in intro stages 
+        "switch_pos_seed_offset": 0,
+        "switch_use_range": 64,
+        "seed_density_per_section": 1400,
+        "min_seed_count": 3200,
+    }
 
     def validate_config(self) -> None:
         num_sections = int(self.config["num_sections"])
         intro_regular = int(self.config["intro_regular_sections"])
+        jitter_stage_count = int(self.config["jitter_stage_count"])
         delta_t_tics = int(self.config["delta_t_tics"])
+        delta_t_minimum = int(self.config["delta_t_minimum"])
+        delta_t_decay = int(self.config["delta_t_decay"])
         beat_tics = int(self.config["beat_tics"])
         jitter_tics = int(self.config["jitter_tics"])
         switch_wall_margin = int(self.config["switch_wall_margin"])
@@ -109,10 +113,12 @@ class RhythmSyncScenario(Scenario):
             raise ValueError("intro_regular_sections must be >= 1")
         if intro_regular > num_sections:
             raise ValueError("intro_regular_sections must be <= num_sections")
+        if jitter_stage_count < 0:
+            raise ValueError("jitter_stage_count must be >= 0")
+        if intro_regular + jitter_stage_count > num_sections:
+            raise ValueError("intro_regular_sections + jitter_stage_count must be <= num_sections")
         if delta_t_tics < 1:
             raise ValueError("delta_t_tics must be >= 1")
-        delta_t_minimum = int(self.config["delta_t_minimum"])
-        delta_t_decay = int(self.config["delta_t_decay"])
         if delta_t_minimum < 1:
             raise ValueError("delta_t_minimum must be >= 1")
         if delta_t_minimum > delta_t_tics:
@@ -145,6 +151,7 @@ class RhythmSyncScenario(Scenario):
 
         num_sections = int(cfg["num_sections"])
         intro_regular = int(cfg["intro_regular_sections"])
+        jitter_stage_count = int(cfg["jitter_stage_count"])
         delta_t_tics = int(cfg["delta_t_tics"])
         delta_t_minimum = int(cfg["delta_t_minimum"])
         delta_t_decay = int(cfg["delta_t_decay"])
@@ -392,11 +399,7 @@ class RhythmSyncScenario(Scenario):
         acs.add_map_var("switch_base_dx_b", "int", 0)
         acs.add_map_var("switch_base_dy_b", "int", 0)
         acs.add_map_var("switch_episode_seed", "int", 0)
-
-        post_intro_sections = max(0, num_sections - intro_regular)
-        num_stage_blocks = (post_intro_sections + 2) // 3
-        for idx in range(1, num_stage_blocks + 1):
-            acs.add_map_var(f"stage_block_offset_{idx}", "int", 0)
+        acs.add_map_var("single_observer_owner_offset", "int", 0)
 
         get_stage_type_lines = ["function int GetStageType(int stage) {"]
         for idx in range(1, num_sections + 1):
@@ -412,20 +415,27 @@ class RhythmSyncScenario(Scenario):
         get_cue_owner_lines.append("    return -1;")
         get_cue_owner_lines.append("}")
 
-        assign_stage_type_lines = ["function void AssignStageTypes(void) {"]
-        for block_idx in range(1, num_stage_blocks + 1):
-            assign_stage_type_lines.append(f"    stage_block_offset_{block_idx} = Random(0, 2);")
+        assign_stage_type_lines = ["function void AssignStageTypes(void) {", "    single_observer_owner_offset = Random(0, 1);"]
         for idx in range(1, num_sections + 1):
-            if idx <= intro_regular:
+            def stage_type_for_index(stage, regular_sections, jitter_sections):
+                if stage <= regular_sections:
+                    return 0
+                if stage <= regular_sections + jitter_sections:
+                    return 1
+                return 2
+            stage_type = stage_type_for_index(idx, intro_regular, jitter_stage_count)
+            if stage_type == 0:
                 assign_stage_type_lines.append(f"    stage_type_{idx} = 0;")
                 assign_stage_type_lines.append(f"    cue_owner_{idx} = -1;")
+            elif stage_type == 1:
+                assign_stage_type_lines.append(f"    stage_type_{idx} = 1;")
+                assign_stage_type_lines.append(f"    cue_owner_{idx} = -1;")
             else:
-                block_idx = ((idx - intro_regular - 1) // 3) + 1
-                block_slot = (idx - intro_regular - 1) % 3
-                assign_stage_type_lines.append(f"    stage_type_{idx} = stage_block_offset_{block_idx} + {block_slot};")
-                assign_stage_type_lines.append(f"    if (stage_type_{idx} >= 3) stage_type_{idx} = stage_type_{idx} - 3;")
-                assign_stage_type_lines.append(f"    if (stage_type_{idx} == 2) cue_owner_{idx} = Random(0, 1);")
-                assign_stage_type_lines.append(f"    else cue_owner_{idx} = -1;")
+                single_idx = idx - intro_regular - jitter_stage_count - 1
+                assign_stage_type_lines.append(f"    stage_type_{idx} = 2;")
+                assign_stage_type_lines.append(
+                    f"    cue_owner_{idx} = (single_observer_owner_offset + {single_idx}) % 2;"
+                )
         assign_stage_type_lines.append("}")
 
         switch_calc_lines = [
