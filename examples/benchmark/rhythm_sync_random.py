@@ -72,7 +72,9 @@ class RhythmSyncScenario(Scenario):
             "random_seed_on_generate": True,
             "num_sections": 20,
             "intro_regular_sections": 4,
-            "delta_t_tics": 36,
+            "delta_t_tics": 12,  # Starting tolerance window (tics)
+            "delta_t_minimum": 2,  # Minimum tolerance after decay
+            "delta_t_decay": 1,  # Decrease per stage completed
             "beat_tics": 140,
             "jitter_tics": 35,
             "stage_step": 512,
@@ -109,6 +111,14 @@ class RhythmSyncScenario(Scenario):
             raise ValueError("intro_regular_sections must be <= num_sections")
         if delta_t_tics < 1:
             raise ValueError("delta_t_tics must be >= 1")
+        delta_t_minimum = int(self.config["delta_t_minimum"])
+        delta_t_decay = int(self.config["delta_t_decay"])
+        if delta_t_minimum < 1:
+            raise ValueError("delta_t_minimum must be >= 1")
+        if delta_t_minimum > delta_t_tics:
+            raise ValueError("delta_t_minimum must be <= delta_t_tics")
+        if delta_t_decay < 0:
+            raise ValueError("delta_t_decay must be >= 0")
         if beat_tics < 1:
             raise ValueError("beat_tics must be >= 1")
         if jitter_tics < 0:
@@ -136,6 +146,8 @@ class RhythmSyncScenario(Scenario):
         num_sections = int(cfg["num_sections"])
         intro_regular = int(cfg["intro_regular_sections"])
         delta_t_tics = int(cfg["delta_t_tics"])
+        delta_t_minimum = int(cfg["delta_t_minimum"])
+        delta_t_decay = int(cfg["delta_t_decay"])
         beat_tics = int(cfg["beat_tics"])
         jitter_tics = int(cfg["jitter_tics"])
 
@@ -348,6 +360,8 @@ class RhythmSyncScenario(Scenario):
 
         # Internal map vars (not exposed to ViZDoom)
         acs.add_map_var("delta_t", "int", delta_t_tics)
+        acs.add_map_var("delta_t_min", "int", delta_t_minimum)
+        acs.add_map_var("delta_t_dec", "int", delta_t_decay)
         acs.add_map_var("tick_serial", "int", 0)
         acs.add_map_var("press_tic_a", "int", -999999)
         acs.add_map_var("press_tic_b", "int", -999999)
@@ -548,6 +562,12 @@ class RhythmSyncScenario(Scenario):
             complete_stage_lines.append("    }")
 
         complete_stage_lines.append("    ResetPending();")
+        # Apply delta_t decay after each stage completion
+        complete_stage_lines.append("    // Decay timing tolerance to increase difficulty")
+        complete_stage_lines.append("    if (delta_t > delta_t_min) {")
+        complete_stage_lines.append("        delta_t = delta_t - delta_t_dec;")
+        complete_stage_lines.append("        if (delta_t < delta_t_min) delta_t = delta_t_min;")
+        complete_stage_lines.append("    }")
         complete_stage_lines.append("}")
 
         acs.add_global_code(
