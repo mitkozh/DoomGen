@@ -75,7 +75,7 @@ class RhythmSyncScenario(Scenario):
             "delta_t_tics": 12,  # Starting tolerance window (tics)
             "delta_t_minimum": 2,  # Minimum tolerance after decay
             "delta_t_decay": 1,  # Decrease per stage completed
-            "beat_tics": 140,
+            "beat_tics": 70,
             "jitter_tics": 35,
             "stage_step": 512,
             "room_width": 512,
