@@ -171,7 +171,8 @@ class RhythmSyncScenario(Scenario):
         switch_intro_jitter_frac = float(cfg["switch_intro_jitter_frac"])
         switch_pos_seed_offset = int(cfg["switch_pos_seed_offset"])
         switch_use_range = int(cfg["switch_use_range"])
-        switch_marker_actor = "BlueTorch"
+        switch_marker_actor_a = "BlueTorch"
+        switch_marker_actor_b = "GreenTorch"
 
         # Hardcoded theme
         floor_tex = "FLAT19"
@@ -506,10 +507,10 @@ class RhythmSyncScenario(Scenario):
             "        int stage_switch_y_b = GetSwitchYB(stage);"
         )
         assign_switch_positions_lines.append(
-            f'        Spawn("{switch_marker_actor}", stage_switch_x_a << 16, stage_switch_y_a << 16, 0, 5000 + stage, 0);'
+            f'        Spawn("{switch_marker_actor_a}", stage_switch_x_a << 16, stage_switch_y_a << 16, 0, 5000 + stage);'
         )
         assign_switch_positions_lines.append(
-            f'        Spawn("{switch_marker_actor}", stage_switch_x_b << 16, stage_switch_y_b << 16, 0, 6000 + stage, 0);'
+            f'        Spawn("{switch_marker_actor_b}", stage_switch_x_b << 16, stage_switch_y_b << 16, 0, 6000 + stage);'
         )
         assign_switch_positions_lines.append("        stage = stage + 1;")
         assign_switch_positions_lines.append("    }")
@@ -713,6 +714,10 @@ function void HandleSwitchPress(int stage, int side) {{
     int now = Timer();
 
     if (side == 0) {{
+        if (!pending_a) {{
+            Thing_Remove(5000 + stage);
+            Spawn("RedTorch", GetSwitchXA(stage) << 16, GetSwitchYA(stage) << 16, 0, 5000 + stage);
+        }}
         if (pending_b) {{
             if ((now - press_tic_b) <= delta_t) {{
                 CompleteStage(stage);
@@ -724,6 +729,10 @@ function void HandleSwitchPress(int stage, int side) {{
             press_tic_a = now;
         }}
     }} else {{
+        if (!pending_b) {{
+            Thing_Remove(6000 + stage);
+            Spawn("RedTorch", GetSwitchXB(stage) << 16, GetSwitchYB(stage) << 16, 0, 6000 + stage);
+        }}
         if (pending_a) {{
             if ((now - press_tic_a) <= delta_t) {{
                 CompleteStage(stage);

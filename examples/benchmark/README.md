@@ -13,7 +13,7 @@ In this defensive scenario, players are tasked with protecting a central "Defens
 ### Co-op Puzzle (`coop_puzzle.py`)
 This benchmark presents a series of linear zones where two players are physically separated but must interact through windows and partitions. Progress is gated by pressure plates that open doors for the partner on the opposite side, requiring synchronized movements and coordinated timing. Some puzzles feature "AND" logic, necessitating both players to occupy specific spots simultaneously to advance. It tests synchronization, communication density, and multi-agent logical coordination.
 
-### Rhythm Sync (`rhythm_sync.py`)
+### Rhythm Sync (`rhythm_sync_random.py`)
 This scenario is a progressive rhythm-synchronization benchmark where two agents are separated into parallel rooms and cannot exchange explicit messages. Each stage contains wall switches that must be pressed simultaneously within a strict tolerance window; pressing alone immediately fails the episode. The curriculum is staged deliberately: agents first learn a fixed shared beat with mostly stable switch placement, then a jittered beat with randomized switch placement, and finally a silent-partner variant where only one agent receives the beat cue while the cue owner alternates across stages. The environment exposes lightweight RL telemetry for stage type, cue ownership, pending-switch state, and relative switch position so the benchmark measures cooperative timing and convention formation rather than HUD OCR. It tests implicit coordination, temporal prediction, and adaptation to partial observability.
 
 ### Lava Maze (`lava_maze.py`)
