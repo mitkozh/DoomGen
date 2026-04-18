@@ -1,13 +1,10 @@
-
 import random
 import math
-from typing import Dict, Any, List
+from typing import Dict, Any
 from doomgen.builder import ProceduralMapBuilder
-from doomgen.abstraction.layout import ConnectionType
 from doomgen.logic.acs_builder import ACSBuilder, ScriptType
 from doomgen.batch.scenario import Scenario
 from doomgen.doom.things import ThingType
-import subprocess
 import os
 
 class AmmoCarrierScenario(Scenario):
@@ -471,7 +468,6 @@ class AmmoCarrierScenario(Scenario):
         builder.build(output_path)
 
 if __name__ == "__main__":
-    import sys
     
     # Ensure output dir exists
     out_dir = os.path.join("examples", "benchmark", "output")
