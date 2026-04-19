@@ -304,6 +304,14 @@ class AmmoCarrierScenario(Scenario):
         }
         """, number=7)
 
+        # Script 8: End the team episode immediately when any player dies.
+        # DEATH scripts are more reliable than polling actor health/TIDs because
+        # player actors can disappear or retag before an OPEN script observes them.
+        acs.add_script(ScriptType.DEATH, """
+        Delay(1);
+        Exit_Normal(0);
+        """, number=8)
+
         # Script 5: Force Freeze
         acs.add_script(ScriptType.VOID, "SetActorVelocity(0, 0, 0, 0, FALSE, FALSE); while(TRUE) { SetActorVelocity(0, 0, 0, 0, FALSE, FALSE); Delay(1); }", number=5)
         
@@ -426,6 +434,7 @@ class AmmoCarrierScenario(Scenario):
         # Compile ACS
         try:
             print("Compiling ACS...")
+            builder.map_data.scripts = acs.to_code()
             compiled = acs.compile(acc_path="acc")
             if compiled:
                 if hasattr(builder.map_data, 'behavior'):
