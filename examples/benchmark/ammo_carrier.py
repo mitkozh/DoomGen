@@ -358,6 +358,8 @@ class AmmoCarrierScenario(Scenario):
         depot_light = 216
         spoke_light = 208
         ring_light = 196
+        spoke_floor = "FLOOR4_8"
+        ring_floor = "FLOOR5_1"
         
         # 1. CENTRAL HUB
         # A medium sized octagonal shapes
@@ -404,7 +406,7 @@ class AmmoCarrierScenario(Scenario):
             
             # Connect to Hub (Spoke)
             # Use 'add_corridor' which pathfinds around the void
-            builder.add_corridor("Hub", name, width=4, floor_texture="RROCK19", light_level=spoke_light)
+            builder.add_corridor("Hub", name, width=4, floor_texture=spoke_floor, light_level=spoke_light)
             
             # 3. PLACEMENT IN DEPOT
             # Spawn Points for Enemies (TID 1000+)
@@ -473,7 +475,7 @@ class AmmoCarrierScenario(Scenario):
             next_depot = depots[next_i]
             
             # Create a path between depots
-            builder.add_corridor(curr_depot, next_depot, width=3, floor_texture="GRASS1", light_level=ring_light)
+            builder.add_corridor(curr_depot, next_depot, width=3, floor_texture=ring_floor, light_level=ring_light)
 
         # 5. SPAWN POINTS setup
         # Fixed defender anchor at the hub center keeps the benchmark partially observable

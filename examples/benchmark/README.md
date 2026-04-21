@@ -10,9 +10,6 @@ This scenario is a fixed-role asymmetric defense task. Player 1 is the stationar
 ### Armory Siege (`armory_siege.py`)
 In this defensive scenario, players are tasked with protecting a central "Defense Core" entity from relentless waves of melee-based monsters. The environment includes a central hub connected via corridors to specialized supply rooms for weapons, ammunition, and medical supplies. The doors to the supply rooms are time-gated, so agents have to be careful when making runs not to get stuck leaving the core helpless. Players must balance defending the core with making risky supply runs to upgrade their arsenal and restore health. It primarily tests combat skill, area control, and the strategic management of supply lines. It also test whether agents can swap roles betweeen defending and rushing.
 
-### Co-op Puzzle (`coop_puzzle.py`)
-This benchmark presents a series of linear zones where two players are physically separated but must interact through windows and partitions. Progress is gated by pressure plates that open doors for the partner on the opposite side, requiring synchronized movements and coordinated timing. Some puzzles feature "AND" logic, necessitating both players to occupy specific spots simultaneously to advance. It tests synchronization, communication density, and multi-agent logical coordination.
-
 ### Rhythm Sync (`rhythm_sync_random.py`)
 This scenario is a progressive rhythm-synchronization benchmark where two agents are separated into parallel rooms and cannot exchange explicit messages. Each stage contains wall switches that must be pressed simultaneously within a strict tolerance window; pressing alone immediately fails the episode. The curriculum is staged deliberately: agents first learn a fixed shared beat with mostly stable switch placement, then a jittered beat with randomized switch placement, and finally a silent-partner variant where only one agent receives the beat cue while the cue owner alternates across stages. The environment exposes lightweight RL telemetry for stage type, cue ownership, pending-switch state, and relative switch position so the benchmark measures cooperative timing and convention formation rather than HUD OCR. It tests implicit coordination, temporal prediction, and adaptation to partial observability.
 
@@ -28,8 +25,8 @@ Inspired by the game *Chained Together*, this scenario features a massive serpen
 ### Smart Enemies (`smart_enemies.py`)
 Set in a circular arena with damaging toxic floors, this scenario focuses on combat against enemies with adaptive AI behavior. These "hunted" demons change their speed and aggression levels based on the proximity and density of the players, punishing many agents attacking the same enemy at once. Players must manage their health and ammo by looting defeated enemies while avoiding environmental damage and navigating obstacles. It tests dynamic combat adaptation, team spacing, and tactical prioritization.
 
-### Co-op CQB (`coop_cqb.py`)
-This is a tight close-quarters battle scenario for marines operating in narrow interconnected corridors. At spawn, one marine is shotgun-only, one is plasma-only. The team must survive fast rushing shooter specialist while avoiding severe friendly-fire mistakes. Tere are also static civilians mixed into combat space, forcing agents to balance lethality with line-of-fire discipline. The objective is to kill as many enemies as possible. Civilian collateral immediately fails the episode.
+### Smart Enemies Reverse (`smart_enemies_rev.py`)
+Like Smart Enemies but reverse behavior.
 
 ### Resource Greed (`resource_greed.py`)
 Inspired by MeltingPot 2.0's "Common Harvest" scenario - the social dilemma benchmark. Two agents share an ammo pool in a central combat arena connected to four separate ammo rooms. Enemies spawn continuously in the arena, and defeating them yields rewards. However, ammo only spawns inside the outlying rooms when a player is physically present, and pickups benefit both agents equally. To collect ammo, an agent must leave the arena, traverse a corridor that blocks line-of-sight to enemies, and sacrifice their own combat time to restock. If both agents selfishly remain in the arena to score kills, the shared ammo pool depletes and all progress halts. At least one agent must routinely act altruistically by restocking—analogous to cleaning the river in the original MeltingPot scenario. The environment provides global RL observations for cumulative kills, shared ammo, world ammo items, and live enemy counts. It tests social dilemma resolution, altruistic behavior, and shared resource management.
@@ -44,3 +41,19 @@ Changed: Have to leave and re-enter cleanup space to do cleanup again to avoid s
 
 ### Stag Hunt Arena (`stag_hunt_arena.py`)
 A direct embodiment of the Stag Hunt coordination dilemma. Two hunters share an arena where weak "Rabbits" (1 HP, frightened, Speed 16, A_Wander scatter behavior) spawn every 20 tics at perimeter and interior locations, capped at 12 alive, and can be killed solo for minor reward (+3 HP). A massive "Stag" (Baron-class, 500 HP) spawns periodically at map center. The Stag is invulnerable unless *both* players are within 800 units simultaneously — when shielded, it regenerates 35 HP/sec, making solo attempts futile. Both must converge and commit to earn the large cooperative reward (+50 HP and +20 shells each). The Stag despawns after ~70 seconds if not killed, preventing endless standoffs. Players wield Shotguns with infinite shells. It tests emergent convention formation, trust building, and whether agents converge on the payoff-dominant or risk-dominant equilibrium.
+
+
+
+
+
+
+
+
+
+
+### Co-op CQB (`coop_cqb.py`)
+This is a tight close-quarters battle scenario for marines operating in narrow interconnected corridors. At spawn, one marine is shotgun-only, one is plasma-only. The team must survive fast rushing shooter specialist while avoiding severe friendly-fire mistakes. Tere are also static civilians mixed into combat space, forcing agents to balance lethality with line-of-fire discipline. The objective is to kill as many enemies as possible. Civilian collateral immediately fails the episode.
+
+
+### Co-op Puzzle (`coop_puzzle.py`)
+This benchmark presents a series of linear zones where two players are physically separated but must interact through windows and partitions. Progress is gated by pressure plates that open doors for the partner on the opposite side, requiring synchronized movements and coordinated timing. Some puzzles feature "AND" logic, necessitating both players to occupy specific spots simultaneously to advance. It tests synchronization, communication density, and multi-agent logical coordination.
