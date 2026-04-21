@@ -29,6 +29,7 @@ class AmmoCarrierScenario(Scenario):
         random.seed(seed)
         
         radius = cfg['map_radius']
+        num_depots = cfg['num_depots']
         bounds_pad = 512
         bounds = (-(radius+bounds_pad), -(radius+bounds_pad), (radius+bounds_pad), (radius+bounds_pad))
         
@@ -125,8 +126,8 @@ class AmmoCarrierScenario(Scenario):
             tid = 100;
             Thing_ChangeTID(0, tid);
             
-            // Teleport to Center (TID 10-14)
-            int dest = 10 + Random(0,4);
+            // Teleport to fixed hub anchor so delivery guidance remains stable.
+            int dest = 10;
             SetActorPosition(0, GetActorX(dest), GetActorY(dest), GetActorZ(dest), 0);
             
             // Attributes: Heavy, Slow, Healthy
@@ -135,11 +136,11 @@ class AmmoCarrierScenario(Scenario):
             SetActorProperty(0, APROP_Speed, 0.0);
             SetActorProperty(0, APROP_Mass, 0x7FFFFFFF); 
             
-            // Gear: Chaingun, limited ammo
+            // Gear: Chaingun, deliberately limited ammo so supply pressure starts early
             ClearInventory();
             SetAmmoCapacity("Clip", 10000); // Uncapped ammo
             GiveInventory("Chaingun", 1);
-            GiveInventory("Clip", 100); // Start with a decent amount
+            GiveInventory("Clip", 50);
             GiveInventory("GreenArmor", 1);
             SetWeapon("Chaingun");
             
@@ -248,39 +249,57 @@ class AmmoCarrierScenario(Scenario):
         acs.add_script(ScriptType.VOID, script_hud, number=10)
 
         # Script 4: Enemy Spawner
-        script_spawner = """
+        script_spawner = f"""
         int spot_tid_base = 1000;
-        int max_spots = 10; // Adjust max spots based on layout
+        int max_spots = {num_depots + 4};
+        int i;
+        int spot_tid;
+        int r;
+        str type;
+        int spawned;
         
-        // Initial Grace Period
-        Delay(35 * 15); // Wait 15 seconds before first wave
+        // Short grace period so the defender is trained on real contacts, not empty prefire.
+        Delay(35 * 2);
+
+        // Seed an early contact wave near the hub before outer spawns arrive through corridors.
+        for (i={num_depots}; i<max_spots; i++) {{
+            if (Random(0, 1) == 0) {{
+                spot_tid = spot_tid_base + i;
+                if (ThingCount(T_NONE, spot_tid) > 0) {{
+                    type = "BenchZombie";
+                    if (Random(0, 2) == 0) type = "BenchImp";
+                    SpawnSpotFacing(type, spot_tid, 700);
+                }}
+            }}
+        }}
+        ac_alive_enemies_global = ThingCount(T_NONE, 700);
         
-        while (TRUE) {
+        while (TRUE) {{
             // Wave Logic
-            Delay(35 * 6); // Wait 6 seconds
+            Delay(35 * 5); // Wait 5 seconds
             
-            int spawned = 0;
-            for (int i=0; i<max_spots; i++) {
-                 if (Random(0, 3) == 0) { // 25% chance per spot
-                     int spot_tid = spot_tid_base + i; 
-                     int r = Random(0, 10);
-                     str type = "BenchZombie";
+            spawned = 0;
+            for (i=0; i<max_spots; i++) {{
+                 if (Random(0, 3) == 0) {{ // 25% chance per spot
+                     spot_tid = spot_tid_base + i; 
+                     r = Random(0, 10);
+                     type = "BenchZombie";
                      if (r > 5) type = "BenchImp";
                      if (r > 8) type = "BenchShotgunGuy";
                      if (r == 10) type = "BenchDemon";
                      
                      // Spawn if spot exists
-                     if (ThingCount(T_NONE, spot_tid) > 0) {
+                     if (ThingCount(T_NONE, spot_tid) > 0) {{
                         SpawnSpotFacing(type, spot_tid, 700);
                         spawned++;
-                     }
-                 }
-            }
+                     }}
+                 }}
+            }}
             ac_alive_enemies_global = ThingCount(T_NONE, 700);
-            if (spawned > 0) {
+            if (spawned > 0) {{
                 // Alert if wave is huge?
-            }
-        }
+            }}
+        }}
         """
         acs.add_script(ScriptType.OPEN, script_spawner, number=4)
 
@@ -294,7 +313,7 @@ class AmmoCarrierScenario(Scenario):
         while (TRUE) {
             int shooter_ammo = CheckActorInventory(100, "Clip");
             ac_shooter_ammo_global = shooter_ammo;
-            if (shooter_ammo < 40) {
+            if (shooter_ammo < 60) {
                 ac_low_ammo_alert_global = 1;
             } else {
                 ac_low_ammo_alert_global = 0;
@@ -335,32 +354,36 @@ class AmmoCarrierScenario(Scenario):
         # Injected by Python Loop below to set correct num_ammo_spots
                 
         # --- MAP LAYOUT GENERATION ---
+        hub_light = 224
+        depot_light = 216
+        spoke_light = 208
+        ring_light = 196
         
         # 1. CENTRAL HUB
         # A medium sized octagonal shapes
         builder.add_area("Hub", shape=(0, 0, 700, 700), floor_height=0, ceiling_height=256, 
-                         floor_texture="FLOOR4_8", wall_texture="STONE3")
+                         floor_texture="FLOOR4_8", wall_texture="STONE3", light_level=hub_light)
         
         # Add pillars inside Hub using 'overwrite' mode
         # This carves out areas for cover
         pillar_dist = 200
         builder.add_area("Pillar_NE", shape=(pillar_dist, pillar_dist, 64, 64), mode="overwrite", 
-                         floor_height=0, ceiling_height=0, wall_texture="STONE3", floor_texture="FLOOR4_8") # Floor=Ceil = Solid Column effect if valid
+                         floor_height=0, ceiling_height=0, wall_texture="STONE3", floor_texture="FLOOR4_8",
+                         light_level=hub_light) # Floor=Ceil = Solid Column effect if valid
         # Actually standard Doom way for pillars is just a void or a sector with unique height.
         # Let's make raised platforms instead for cover
         # (Though technically distinct areas, keeping them flat-ish helps AI)
         builder.add_area("Platform_NE", shape=(pillar_dist, pillar_dist, 96, 96), mode="overwrite",
-                         floor_height=0, floor_texture="FLAT19")
+                         floor_height=0, floor_texture="FLAT19", light_level=hub_light)
         builder.add_area("Platform_NW", shape=(-pillar_dist, pillar_dist, 96, 96), mode="overwrite",
-                         floor_height=0, floor_texture="FLAT19")
+                         floor_height=0, floor_texture="FLAT19", light_level=hub_light)
         builder.add_area("Platform_SE", shape=(pillar_dist, -pillar_dist, 96, 96), mode="overwrite",
-                         floor_height=0, floor_texture="FLAT19")
+                         floor_height=0, floor_texture="FLAT19", light_level=hub_light)
         builder.add_area("Platform_SW", shape=(-pillar_dist, -pillar_dist, 96, 96), mode="overwrite",
-                         floor_height=0, floor_texture="FLAT19")
+                         floor_height=0, floor_texture="FLAT19", light_level=hub_light)
 
         # 2. SATELLITE DEPOTS (Ammo Sources)
         depots = []
-        num_depots = cfg['num_depots']
         depot_radius = radius * 0.8
         
         # Ammo Spot Logic
@@ -376,12 +399,12 @@ class AmmoCarrierScenario(Scenario):
             # Create Depot
             builder.add_area(name, shape=(dx, dy, 400, 400), 
                              floor_height=0, ceiling_height=200, 
-                             floor_texture="CEIL5_1", wall_texture="BROWN96")
+                             floor_texture="CEIL5_1", wall_texture="BROWN96", light_level=depot_light)
             depots.append(name)
             
             # Connect to Hub (Spoke)
             # Use 'add_corridor' which pathfinds around the void
-            builder.add_corridor("Hub", name, width=4, floor_texture="RROCK19")
+            builder.add_corridor("Hub", name, width=4, floor_texture="RROCK19", light_level=spoke_light)
             
             # 3. PLACEMENT IN DEPOT
             # Spawn Points for Enemies (TID 1000+)
@@ -450,14 +473,22 @@ class AmmoCarrierScenario(Scenario):
             next_depot = depots[next_i]
             
             # Create a path between depots
-            builder.add_corridor(curr_depot, next_depot, width=3, floor_texture="GRASS1")
+            builder.add_corridor(curr_depot, next_depot, width=3, floor_texture="GRASS1", light_level=ring_light)
 
         # 5. SPAWN POINTS setup
-        # Shooter candidates in Hub
-        for i in range(5):
-            pt = builder.get_random_point_in_area("Hub", safe=True)
-            if pt:
-                builder.add_thing("MAP_SPOT", pt[0], pt[1], tid=10+i)
+        # Fixed defender anchor at the hub center keeps the benchmark partially observable
+        # while making delivery/navigation semantics consistent across episodes.
+        builder.add_thing("MAP_SPOT", 0, 0, tid=10)
+
+        # Hub-adjacent enemy entry spots for early defender contact.
+        hub_enemy_spots = [
+            (0, 320),
+            (320, 0),
+            (0, -320),
+            (-320, 0),
+        ]
+        for offset, (x, y) in enumerate(hub_enemy_spots):
+            builder.add_thing("MAP_SPOT", x, y, tid=1000 + num_depots + offset)
                 
         # Carrier candidates in Depots or Hub outskirts
         for i in range(10):
