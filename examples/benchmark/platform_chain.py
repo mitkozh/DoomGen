@@ -485,7 +485,9 @@ class PlatformChainScenario(Scenario):
                         int render_by_{follower} = by_{follower};
                         int tether_state_{follower} = 0;
 
-                        if (dist_{follower} > (chain_limit_{follower} * 3) / 4) {{
+                        if (dist_{follower} > (chain_limit_{follower} * 9) / 10) {{
+                            tether_state_{follower} = 2;
+                        }} else if (dist_{follower} > (chain_limit_{follower} * 3) / 4) {{
                             tether_state_{follower} = 1;
                         }}
 
