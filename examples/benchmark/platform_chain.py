@@ -731,10 +731,11 @@ ACTOR ChainNodeHot {
   Scale 0.13
   RenderStyle Add
   Alpha 0.65
+  Translation "160:166=176:182,225:227=176:178"
   +NOBLOCKMAP +NOGRAVITY +NOINTERACTION +DONTSPLASH
   States {
     Spawn:
-      MANF AB 3 BRIGHT // Imp fireball (Red/Orange)
+      BAL1 AB 3 BRIGHT // Round orb (translated to red)
       Loop
   }
 }
