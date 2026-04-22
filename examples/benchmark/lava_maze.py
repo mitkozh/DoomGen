@@ -25,7 +25,7 @@ class LavaMazeScenario(Scenario):
             "cell_size": 128,
             "initial_maze_size": 2,
             "max_maze_size": 10,
-            "lava_damage": 10,
+            "lava_damage": 35,
             "seed": None,
         }
 
@@ -472,6 +472,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
         lm_maze_bits_0_global      = 0;
         lm_maze_bits_1_global      = 0;
         lm_maze_bits_2_global      = 0;
+        lm_levels_completed_global = 0;
 
         ACS_NamedExecute("GenerateMaze", 0, g_start_x, g_start_y, current_maze_size);
 
