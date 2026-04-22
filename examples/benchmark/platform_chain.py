@@ -695,43 +695,46 @@ class PlatformChainScenario(Scenario):
 
     def _decorate_lump(self) -> str | None:
         return """
-ACTOR ChainNodeCalm : GreenTorch 15060 {
-  Radius 4
-  Height 12
-  Scale 0.20
-  Alpha 0.70
+ACTOR ChainNodeCalm {
+  Radius 1
+  Height 1
+  Scale 0.13
   RenderStyle Add
-  +NOGRAVITY
-  +NOINTERACTION
-  +NOBLOCKMAP
-  +FLOAT
-  +DONTTHRUST
+  Alpha 0.55
+  +NOBLOCKMAP +NOGRAVITY +NOINTERACTION +DONTSPLASH
+  States {
+    Spawn:
+      APLS AB 3 BRIGHT // Arachnotron plasma (Green/Blue)
+      Loop
+  }
 }
 
-ACTOR ChainNodeWarn : Candelabra 15061 {
-  Radius 4
-  Height 12
-  Scale 0.10
-  Alpha 0.75
+ACTOR ChainNodeWarn {
+  Radius 1
+  Height 1
+  Scale 0.13
   RenderStyle Add
-  +NOGRAVITY
-  +NOINTERACTION
-  +NOBLOCKMAP
-  +FLOAT
-  +DONTTHRUST
+  Alpha 0.6
+  +NOBLOCKMAP +NOGRAVITY +NOINTERACTION +DONTSPLASH
+  States {
+    Spawn:
+      BAL1 AB 3 BRIGHT // Mancubus fireball (Orange)
+      Loop
+  }
 }
 
-ACTOR ChainNodeHot : RedTorch 15062 {
-  Radius 4
-  Height 12
-  Scale 0.20
-  Alpha 0.80
+ACTOR ChainNodeHot {
+  Radius 1
+  Height 1
+  Scale 0.13
   RenderStyle Add
-  +NOGRAVITY
-  +NOINTERACTION
-  +NOBLOCKMAP
-  +FLOAT
-  +DONTTHRUST
+  Alpha 0.65
+  +NOBLOCKMAP +NOGRAVITY +NOINTERACTION +DONTSPLASH
+  States {
+    Spawn:
+      MANF AB 3 BRIGHT // Imp fireball (Red/Orange)
+      Loop
+  }
 }
 """
 
@@ -742,7 +745,7 @@ ACTOR ChainNodeHot : RedTorch 15062 {
         max_players: int,
         chain_max_len: int,
     ) -> str:
-        tether_nodes = 7
+        tether_nodes = 30 # How dense it is
         tether_tid_base = 6000 + (follower * 64)
         return f"""
                         int node_idx_{follower};
