@@ -121,6 +121,7 @@ class SmartEnemiesScenario(Scenario):
         decorate_script = """
         ACTOR HuntedDemon : Demon 15001
         {
+            Health 20
             Speed 21
             +FRIGHTENED
             +LOOKALLAROUND
