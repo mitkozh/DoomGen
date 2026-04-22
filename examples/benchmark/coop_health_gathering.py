@@ -28,6 +28,182 @@ class CoopHealthGatheringScenario(Scenario):
             "maze_density": 0.6,
         }
 
+    def _decorate_lump(self) -> str | None:
+        return """
+ACTOR ChainNodeCalm {
+  Radius 1
+  Height 1
+  Scale 0.13
+  RenderStyle Add
+  Alpha 0.55
+  +NOBLOCKMAP +NOGRAVITY +NOINTERACTION +DONTSPLASH
+  States {
+    Spawn:
+      APLS AB 3 BRIGHT // Arachnotron plasma (Green/Blue)
+      Loop
+  }
+}
+
+ACTOR ChainNodeWarn {
+  Radius 1
+  Height 1
+  Scale 0.13
+  RenderStyle Add
+  Alpha 0.6
+  +NOBLOCKMAP +NOGRAVITY +NOINTERACTION +DONTSPLASH
+  States {
+    Spawn:
+      BAL1 AB 3 BRIGHT // Mancubus fireball (Orange)
+      Loop
+  }
+}
+
+ACTOR ChainNodeHot {
+  Radius 1
+  Height 1
+  Scale 0.13
+  RenderStyle Add
+  Alpha 0.65
+  Translation "160:166=176:182,225:227=176:178"
+  +NOBLOCKMAP +NOGRAVITY +NOINTERACTION +DONTSPLASH
+  States {
+    Spawn:
+      BAL1 AB 3 BRIGHT // Round orb (translated to red)
+      Loop
+  }
+}
+"""
+
+    def _enter_visual_script(self, max_players: int, chain_max_len: int) -> str:
+        bar_cases = []
+        for i in range(21):
+            filled = "=" * i
+            empty = "." * (20 - i)
+            bar_cases.append(f'case {i}: tether_bar = "o{filled}{empty}o"; break;')
+        bar_switch = "\n                    ".join(bar_cases)
+
+        return f"""
+        int overlay_tick = 0;
+        int chain_limit = {chain_max_len} << 16;
+
+        while (TRUE)
+        {{
+            if (overlay_tick % 5 == 0)
+            {{
+                int farthest = 0;
+                int teammate_found = 0;
+                int my_x = GetActorX(1000 + pn);
+                int my_y = GetActorY(1000 + pn);
+
+                int other;
+                for (other = 0; other < {max_players}; other++)
+                {{
+                    if (other == pn) continue;
+                    if (!PlayerInGame(other)) continue;
+
+                    int other_tid = 1000 + other;
+                    if (ThingCount(0, other_tid) <= 0) continue;
+
+                    int dx = my_x - GetActorX(other_tid);
+                    int dy = my_y - GetActorY(other_tid);
+                    int adx = dx;
+                    int ady = dy;
+                    if (adx < 0) adx = -adx;
+                    if (ady < 0) ady = -ady;
+
+                    int d;
+                    if (adx > ady) {{
+                        d = adx + (ady >> 1);
+                    }} else {{
+                        d = ady + (adx >> 1);
+                    }}
+
+                    if (!teammate_found || d > farthest) farthest = d;
+                    teammate_found = 1;
+                }}
+
+                SetHudSize(320, 240, 1);
+                SetFont("SMALLFONT");
+
+                if (!teammate_found)
+                {{
+                    HudMessage(s:""; HUDMSG_PLAIN, 211, CR_WHITE, 0.5, 0.86, 0.2);
+                    HudMessage(s:""; HUDMSG_PLAIN, 212, CR_WHITE, 0.5, 0.90, 0.2);
+                }}
+                else
+                {{
+                    int tension_idx = 0;
+                    if (chain_limit > 0) {{
+                        tension_idx = (farthest * 20) / chain_limit;
+                    }}
+                    if (tension_idx < 0) tension_idx = 0;
+                    if (tension_idx > 20) tension_idx = 20;
+
+                    str tether_bar = "";
+                    switch (tension_idx) {{
+                        {bar_switch}
+                    }}
+
+                    if (chg_dragged_links_flash_global > 0 || farthest > chain_limit)
+                    {{
+                        HudMessage(s:tether_bar; HUDMSG_PLAIN, 212, CR_RED, 0.5, 0.90, 0.2);
+                    }}
+                    else if (farthest > (chain_limit * 9) / 10)
+                    {{
+                        HudMessage(s:tether_bar; HUDMSG_PLAIN, 212, CR_RED, 0.5, 0.90, 0.2);
+                    }}
+                    else if (farthest > (chain_limit * 3) / 4)
+                    {{
+                        HudMessage(s:tether_bar; HUDMSG_PLAIN, 212, CR_GOLD, 0.5, 0.90, 0.2);
+                    }}
+                    else
+                    {{
+                        HudMessage(s:tether_bar; HUDMSG_PLAIN, 212, CR_GREEN, 0.5, 0.90, 0.2);
+                    }}
+                }}
+            }}
+
+            Delay(1);
+            overlay_tick++;
+        }}
+        """
+
+    def _chain_visual_lines(self, follower: int) -> str:
+        tether_nodes = 30
+        tether_tid_base = 6000 + (follower * 64)
+        return f"""
+                        if (tick % 5 == 0) {{
+                            int node_idx_{follower};
+                            for (node_idx_{follower} = 0; node_idx_{follower} < {tether_nodes}; node_idx_{follower}++) {{
+                                Thing_Remove({tether_tid_base} + node_idx_{follower});
+                            }}
+
+                            if (dist_{follower} > 0) {{
+                                int tether_az_{follower} = az_{follower} + (20 << 16);
+                                int tether_bz_{follower} = bz_{follower} + (20 << 16);
+                                int tether_dx_{follower} = render_bx_{follower} - render_ax_{follower};
+                                int tether_dy_{follower} = render_by_{follower} - render_ay_{follower};
+                                int tether_dz_{follower} = tether_bz_{follower} - tether_az_{follower};
+
+                                for (node_idx_{follower} = 0; node_idx_{follower} < {tether_nodes}; node_idx_{follower}++) {{
+                                    int frac_{follower} = FixedDiv((node_idx_{follower} + 1) << 16, {tether_nodes + 1} << 16);
+                                    int sx_{follower} = render_ax_{follower} + FixedMul(tether_dx_{follower}, frac_{follower});
+                                    int sy_{follower} = render_ay_{follower} + FixedMul(tether_dy_{follower}, frac_{follower});
+                                    int sz_{follower} = tether_az_{follower} + FixedMul(tether_dz_{follower}, frac_{follower});
+                                    int spawn_tid_{follower} = {tether_tid_base} + node_idx_{follower};
+
+                                    if (tether_state_{follower} >= 2) {{
+                                        Spawn("ChainNodeHot", sx_{follower}, sy_{follower}, sz_{follower}, spawn_tid_{follower});
+                                    }} else if (tether_state_{follower} == 1) {{
+                                        Spawn("ChainNodeWarn", sx_{follower}, sy_{follower}, sz_{follower}, spawn_tid_{follower});
+                                    }} else {{
+                                        Spawn("ChainNodeCalm", sx_{follower}, sy_{follower}, sz_{follower}, spawn_tid_{follower});
+                                    }}
+                                }}
+                            }}
+                        }}
+        """
+
     def generate(self, output_path: str) -> None:
         cfg = self.config
         seed = cfg.get("seed")
@@ -47,6 +223,10 @@ class CoopHealthGatheringScenario(Scenario):
             num_seeds=8000,
             seed=seed
         )
+
+        decorate_lump = self._decorate_lump()
+        if decorate_lump:
+            builder.wad_writer.add_lump("DECORATE", decorate_lump.encode("utf-8"))
 
         floor_tag = 900
         
@@ -177,6 +357,7 @@ class CoopHealthGatheringScenario(Scenario):
         acs.add_global_var("chg_total_spawned_kits_global", 2, "int")
         acs.add_global_var("chg_chain_stretches_global", 3, "int")
         acs.add_global_var("chg_total_pickups_global", 4, "int")
+        acs.add_global_var("chg_dragged_links_flash_global", 5, "int")
         
         acs.add_script(
             ScriptType.VOID,
@@ -192,6 +373,8 @@ class CoopHealthGatheringScenario(Scenario):
             TakeInventory("Fist", 999);
             TakeInventory("Pistol", 999);
         }}
+
+        {self._enter_visual_script(max_players, chain_max_len)}
         """
         acs.add_script(ScriptType.ENTER, script_setup, number=1)
         acs.add_script(ScriptType.RESPAWN, script_setup, number=2)
@@ -207,8 +390,10 @@ class CoopHealthGatheringScenario(Scenario):
                     if (ThingCount(0, a_tid_{follower}) > 0 && ThingCount(0, b_tid_{follower}) > 0) {{
                         int ax_{follower} = GetActorX(a_tid_{follower});
                         int ay_{follower} = GetActorY(a_tid_{follower});
+                        int az_{follower} = GetActorZ(a_tid_{follower});
                         int bx_{follower} = GetActorX(b_tid_{follower});
                         int by_{follower} = GetActorY(b_tid_{follower});
+                        int bz_{follower} = GetActorZ(b_tid_{follower});
 
                         int dx_{follower} = ax_{follower} - bx_{follower};
                         int dy_{follower} = ay_{follower} - by_{follower};
@@ -226,6 +411,18 @@ class CoopHealthGatheringScenario(Scenario):
                         }}
 
                         int chain_limit_{follower} = {chain_max_len} << 16;
+                        int render_ax_{follower} = ax_{follower};
+                        int render_ay_{follower} = ay_{follower};
+                        int render_bx_{follower} = bx_{follower};
+                        int render_by_{follower} = by_{follower};
+                        int tether_state_{follower} = 0;
+
+                        if (dist_{follower} > (chain_limit_{follower} * 9) / 10) {{
+                            tether_state_{follower} = 2;
+                        }} else if (dist_{follower} > (chain_limit_{follower} * 3) / 4) {{
+                            tether_state_{follower} = 1;
+                        }}
+
                         if (dist_{follower} > chain_limit_{follower} && dist_{follower} > 0) {{
                             int keep_half_{follower} = ({max(64, chain_max_len - 24)} << 15);
                             int ratio_{follower} = FixedDiv(keep_half_{follower}, dist_{follower});
@@ -239,10 +436,18 @@ class CoopHealthGatheringScenario(Scenario):
 
                             SetActorPosition(a_tid_{follower}, nax_{follower}, nay_{follower}, GetActorZ(a_tid_{follower}), 0);
                             SetActorPosition(b_tid_{follower}, nbx_{follower}, nby_{follower}, GetActorZ(b_tid_{follower}), 0);
-                            
-                            // Increment chain stretch count
+
+                            render_ax_{follower} = nax_{follower};
+                            render_ay_{follower} = nay_{follower};
+                            render_bx_{follower} = nbx_{follower};
+                            render_by_{follower} = nby_{follower};
+                            tether_state_{follower} = 2;
+
                             chg_chain_stretches_global++;
+                            chg_dragged_links_flash_global = 6;
                         }}
+
+                        {self._chain_visual_lines(follower)}
                     }}
                 }}
                 """
@@ -260,9 +465,14 @@ class CoopHealthGatheringScenario(Scenario):
         chg_active_health_kits_global = 0;
         chg_total_spawned_kits_global = 0;
         chg_chain_stretches_global = 0;
+        chg_dragged_links_flash_global = 0;
         
         while (TRUE) {{
             {chain_block}
+
+            if (chg_dragged_links_flash_global > 0) {{
+                chg_dragged_links_flash_global--;
+            }}
             
             active_health_kits = ThingCount(T_NONE, health_kit_tid);
             chg_active_health_kits_global = active_health_kits;

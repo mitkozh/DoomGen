@@ -50,10 +50,9 @@ A direct embodiment of the Stag Hunt coordination dilemma. Two hunters share an 
 
 
 
-
-### Co-op CQB (`coop_cqb.py`)
-This is a tight close-quarters battle scenario for marines operating in narrow interconnected corridors. At spawn, one marine is shotgun-only, one is plasma-only. The team must survive fast rushing shooter specialist while avoiding severe friendly-fire mistakes. Tere are also static civilians mixed into combat space, forcing agents to balance lethality with line-of-fire discipline. The objective is to kill as many enemies as possible. Civilian collateral immediately fails the episode.
-
-
 ### Co-op Puzzle (`coop_puzzle.py`)
 This benchmark presents a series of linear zones where two players are physically separated but must interact through windows and partitions. Progress is gated by pressure plates that open doors for the partner on the opposite side, requiring synchronized movements and coordinated timing. Some puzzles feature "AND" logic, necessitating both players to occupy specific spots simultaneously to advance. It tests synchronization, communication density, and multi-agent logical coordination.
+
+<!-- ### Co-op CQB (`coop_cqb.py`)
+This is a tight close-quarters battle scenario for marines operating in narrow interconnected corridors. At spawn, one marine is shotgun-only, one is plasma-only. The team must survive fast rushing shooter specialist while avoiding severe friendly-fire mistakes. Tere are also static civilians mixed into combat space, forcing agents to balance lethality with line-of-fire discipline. The objective is to kill as many enemies as possible. Civilian collateral immediately fails the episode. -->
+
