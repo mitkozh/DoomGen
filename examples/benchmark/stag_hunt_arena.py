@@ -103,6 +103,8 @@ ACTOR Rabbit : Zombieman 15031 {{
         acs.add_global_var("sh_rabbit_kills",    53, "int")
         acs.add_global_var("sh_stag_kills",      54, "int")
         acs.add_global_var("sh_stag_alive",      55, "int")
+        acs.add_global_var("sh_p1_rabbit_kills", 56, "int")
+        acs.add_global_var("sh_p2_rabbit_kills", 57, "int")
 
 
         builder.add_area(
@@ -170,6 +172,8 @@ sh_stag_vulnerable = 0;
 sh_rabbit_kills = 0;
 sh_stag_kills = 0;
 sh_stag_alive = 0;
+sh_p1_rabbit_kills = 0;
+sh_p2_rabbit_kills = 0;
 
 while (TRUE) {{
     if (stag_alive) {{
@@ -265,9 +269,15 @@ for (p = 0; p < 2; p = p + 1) {{
         # Script 997 (VOID): Rabbit kill reward
         script_rabbit_kill = f"""
 SetActivatorToTarget(0);
-if (PlayerNumber() >= 0) {{
+int pn = PlayerNumber();
+if (pn >= 0) {{
     GiveInventory("HealthBonus", {rabbit_kill_reward});
     sh_rabbit_kills = sh_rabbit_kills + 1;
+    if (pn == 0) {{
+        sh_p1_rabbit_kills = sh_p1_rabbit_kills + 1;
+    }} else if (pn == 1) {{
+        sh_p2_rabbit_kills = sh_p2_rabbit_kills + 1;
+    }}
 }}
 """
         acs.add_script(ScriptType.VOID, script_rabbit_kill, number=997)

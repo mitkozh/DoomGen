@@ -26,7 +26,7 @@ class PlatformChainScenario(Scenario):
             "height_step": 12,
             "max_players": 4,
             "lava_height": -96,
-            "lava_damage": 12,
+            "lava_damage": 50,
             "polyobject_count": 8,
             "map_radius": 1800,
             "cell_spacing": 222,
