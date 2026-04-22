@@ -39,6 +39,18 @@ class StealthLabyrinthScenario(Scenario):
         decorate_str = """
 ACTOR MazeDemon : Demon 14001 {
   Health 50
+  DropItem "None"
+  States {
+  Death:
+    SARG I 8
+    SARG J 8 A_Scream
+    SARG K 6
+    SARG L 6 A_NoBlocking
+    SARG L 0 ACS_ExecuteAlways(998, 0)
+    SARG M 4
+    SARG N 1 A_FadeOut(0.15)
+    Wait
+  }
 }
 """
         builder.wad_writer.add_lump("DECORATE", decorate_str.encode("utf-8"))
@@ -83,7 +95,6 @@ ACTOR MazeDemon : Demon 14001 {
 
         # Room
         spawn_cell = (grid_size // 2, grid_size // 2)
-        exit_cell = (grid_size - 1, grid_size - 1)
 
         # Compute center position for a grid cell
         def cell_center(row: int, col: int) -> Tuple[int, int]:
@@ -154,12 +165,12 @@ ACTOR MazeDemon : Demon 14001 {
         builder.add_thing(ThingType.PLAYER3_START, spawn_cx - 32, spawn_cy + 32, angle=0)
         builder.add_thing(ThingType.PLAYER4_START, spawn_cx + 32, spawn_cy + 32, angle=0)
 
-        # Place demons in random rooms (not spawn or exit)
+        # Place demons in random rooms outside spawn.
         eligible_rooms = [
             (r, c)
             for r in range(grid_size)
             for c in range(grid_size)
-            if (r, c) not in (spawn_cell, exit_cell)
+            if (r, c) != spawn_cell
         ]
         demon_rooms = random.sample(eligible_rooms, min(num_demons, len(eligible_rooms)))
         for idx, (r, c) in enumerate(demon_rooms):
@@ -168,7 +179,7 @@ ACTOR MazeDemon : Demon 14001 {
             if pt:
                 builder.add_thing(14001, pt[0], pt[1])  # MazeDemon
 
-        # Scatter pickups (health + ammo) in random non-spawn/exit rooms
+        # Scatter pickups (health + ammo) in random non-spawn rooms.
         pickup_rooms = random.sample(eligible_rooms, min(12, len(eligible_rooms)))
         for idx, (r, c) in enumerate(pickup_rooms):
             room_name = f"Room_r{r}_c{c}"
@@ -187,6 +198,8 @@ ACTOR MazeDemon : Demon 14001 {
         acs.add_global_var("sl_p2_alive", 42, "int")
         acs.add_global_var("sl_distance", 43, "int")
         acs.add_global_var("sl_demons_alive", 44, "int")
+        acs.add_global_var("sl_torch_room", 45, "int")
+        acs.add_global_var("sl_team_kills", 46, "int")
 
         # Script 1 (ENTER): Player setup
         script_enter = """
@@ -208,7 +221,6 @@ ACTOR MazeDemon : Demon 14001 {
         # Script 3 (OPEN): Light sweep loop
         # Build per-room light checks in Python since ACS lacks dynamic arrays
         spawn_tag = 100 + spawn_cell[0] * grid_size + spawn_cell[1]
-        # exit_tag = 100 + exit_cell[0] * grid_size + exit_cell[1]
 
         bright_dist = room_size // 2 + 48  # Chebyshev: covers room + Voronoi edge buffer
 
@@ -255,6 +267,25 @@ ACTOR MazeDemon : Demon 14001 {
             )
 
         light_block = "\n".join(light_checks)
+        room_id_checks = []
+        room_half = room_size // 2
+        for row in range(grid_size):
+            for col in range(grid_size):
+                room_id = row * grid_size + col
+                cx, cy = room_centers[(row, col)]
+                xmin = cx - room_half
+                xmax = cx + room_half
+                ymin = cy - room_half
+                ymax = cy + room_half
+                room_id_checks.append(
+                    f"""
+                if (torch_room < 0 &&
+                    px1 >= {xmin} && px1 <= {xmax} &&
+                    py1 >= {ymin} && py1 <= {ymax}) {{
+                    torch_room = {room_id};
+                }}"""
+                )
+        room_id_block = "\n".join(room_id_checks)
         script_light = f"""
         int p1x;
         int p1y;
@@ -273,26 +304,17 @@ ACTOR MazeDemon : Demon 14001 {
         """
         acs.add_script(ScriptType.OPEN, script_light, number=3)
 
-        # Script 4 (OPEN): Win condition + global variable updates
-        exit_cx, exit_cy = room_centers[exit_cell]
-        exit_half = room_size // 2
-        exit_xmin = exit_cx - exit_half
-        exit_xmax = exit_cx + exit_half
-        exit_ymin = exit_cy - exit_half
-        exit_ymax = exit_cy + exit_half
-
-        script_win = f"""
+        # Script 4 (OPEN): Global telemetry and completion checks.
+        script_telemetry = f"""
         int px1;
         int py1;
         int px2;
         int py2;
-        int p1_in;
-        int p2_in;
         int adx;
         int ady;
+        int torch_room;
 
         while (TRUE) {{
-            // Update alive status
             if (ThingCount(T_NONE, 1000) > 0) {{
                 sl_p1_alive = 1;
             }} else {{
@@ -304,13 +326,23 @@ ACTOR MazeDemon : Demon 14001 {
                 sl_p2_alive = 0;
             }}
 
-            // Update demon count
             sl_demons_alive = ThingCountName("MazeDemon", 0);
+            if (sl_demons_alive <= 0) {{
+                Delay(1);
+                Exit_Normal(0);
+            }}
 
-            // Update distance
-            if (sl_p1_alive && sl_p2_alive) {{
+            sl_distance = 0;
+            sl_torch_room = -1;
+            if (sl_p1_alive) {{
                 px1 = GetActorX(1000) >> 16;
                 py1 = GetActorY(1000) >> 16;
+                torch_room = -1;
+{room_id_block}
+                sl_torch_room = torch_room;
+            }}
+
+            if (sl_p1_alive && sl_p2_alive) {{
                 px2 = GetActorX(1001) >> 16;
                 py2 = GetActorY(1001) >> 16;
                 adx = px1 - px2;
@@ -318,36 +350,40 @@ ACTOR MazeDemon : Demon 14001 {
                 ady = py1 - py2;
                 if (ady < 0) ady = -ady;
                 sl_distance = adx + ady;
-
-                // Win condition: both in exit room
-                p1_in = (px1 >= {exit_xmin} && px1 <= {exit_xmax} && py1 >= {exit_ymin} && py1 <= {exit_ymax});
-                p2_in = (px2 >= {exit_xmin} && px2 <= {exit_xmax} && py2 >= {exit_ymin} && py2 <= {exit_ymax});
-                if (p1_in && p2_in) {{
-                    Exit_Normal(0);
-                }}
             }}
 
-            Delay(35);
+            Delay(4);
         }}
         """
-        acs.add_script(ScriptType.OPEN, script_win, number=4)
+        acs.add_script(ScriptType.OPEN, script_telemetry, number=4)
+
+        # Script 8 (DEATH): End the team episode immediately when any player dies.
+        acs.add_script(ScriptType.DEATH, """
+        Delay(1);
+        Exit_Normal(0);
+        """, number=8)
+
+        # Script 998 (VOID): exact team kill counter for MazeDemon deaths.
+        acs.add_script(ScriptType.VOID, """
+        sl_team_kills++;
+        """, number=998)
 
         # Script 10 (VOID): Per-player HUD loop
-        script_hud = """
-        while (TRUE) {
+        script_hud = f"""
+        while (TRUE) {{
             SetFont("SMALLFONT");
             int demons = sl_demons_alive;
-            int dist   = sl_distance;
-            str d_color = "\\cC";
-            if (demons > 13) d_color = "\\cR";
-            else if (demons > 7) d_color = "\\cE";
+            int kills = sl_team_kills;
+            str k_color = "\\cC";
+            if (kills >= {max(1, num_demons // 2)}) k_color = "\\cD";
+            if (kills >= {max(1, num_demons - 5)}) k_color = "\\cG";
 
-            HudMessage(s:"DEMONS: ", s:d_color, d:demons;
+            HudMessage(s:"KILLS: ", s:k_color, d:kills, s:"/", d:{num_demons};
                 HUDMSG_PLAIN, 1, CR_WHITE, 0.5, 0.80, 2.0);
-            HudMessage(s:"DISTANCE: ", d:dist;
+            HudMessage(s:"DEMONS LEFT: ", d:demons;
                 HUDMSG_PLAIN, 2, CR_WHITE, 0.5, 0.83, 2.0);
             Delay(4);
-        }
+        }}
         """
         acs.add_script(ScriptType.VOID, script_hud, number=10)
 
