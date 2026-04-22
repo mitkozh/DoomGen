@@ -15,7 +15,6 @@ from doomgen.logic.acs_builder import ACSBuilder, ScriptType
 
 
 class PlatformChainScenario(Scenario):
-    """Structured 120-level vertical platform chain benchmark (uniform generation + ACS-driven roles)."""
 
     def get_default_config(self) -> Dict[str, Any]:
         return {
@@ -56,7 +55,6 @@ class PlatformChainScenario(Scenario):
         return 42
 
     def _auto_connect_touching_areas(self, builder: ProceduralMapBuilder) -> None:
-        """Connect physically touching non-VOID areas to avoid accidental one-sided walls."""
         touching_pairs: set[Tuple[str, str]] = set()
         for idx, neighbors in builder.mesh.adjacency.items():
             area_a = builder.seeds[idx].area_id
@@ -83,7 +81,6 @@ class PlatformChainScenario(Scenario):
                 builder.graph.connect(area_a, area_b, ConnectionType.OPEN)
 
     def _route_positions(self, level_count: int, spacing: int) -> List[Tuple[int, int]]:
-        """Build a serpentine 12x10 path for exactly 120 levels."""
         cols = 12
         rows = int(math.ceil(level_count / cols))
 
@@ -102,6 +99,38 @@ class PlatformChainScenario(Scenario):
             positions.append((x, y))
 
         return positions
+
+    @staticmethod
+    def _mover_start_center(
+        ax: int,
+        ay: int,
+        bx: int,
+        by: int,
+        mover_panel_h: int,
+        mover_start_gap: int,
+    ) -> Tuple[int, int]:
+        mx = (ax + bx) // 2
+        my = (ay + by) // 2
+        offset = (mover_panel_h // 2) + mover_start_gap
+
+        if abs(bx - ax) >= abs(by - ay):
+            return mx, my + offset
+        return mx + offset, my
+
+    def _decorate_lump(self) -> str | None:
+        return None
+
+    def _enter_visual_script(self, max_players: int, chain_max_len: int) -> str:
+        return ""
+
+    def _chain_visual_lines(
+        self,
+        follower: int,
+        leader: int,
+        max_players: int,
+        chain_max_len: int,
+    ) -> str:
+        return ""
 
     def generate(self, output_path: str) -> None:
         cfg = self.config
@@ -122,14 +151,14 @@ class PlatformChainScenario(Scenario):
             seed=seed,
         )
 
+        decorate_lump = self._decorate_lump()
+        if decorate_lump:
+            builder.wad_writer.add_lump("DECORATE", decorate_lump.encode("utf-8"))
+
         platform_w = 112
         platform_h = 112
-        # Color Coding:
-        # FLOOR4_8 (Blue-Grey) -> Standard Platform
         platform_floor = "FLOOR4_8"
-        # CEIL3_5 (Grey Tiles) -> Lift
         lift_floor = "FLAT14"
-        # BLOOD1 (Red Blood) -> Vertical Crusher
         vertical_crusher_floor = "BLOOD1"
 
         platform_wall = "METAL2"
@@ -137,6 +166,7 @@ class PlatformChainScenario(Scenario):
         mover_panel_w = 56
         mover_panel_h = 20
         mover_start_gap = 10
+        mover_top_z_offset = 80
 
         platform_tags: List[int] = []
         platform_base_z: List[int] = []
@@ -244,7 +274,6 @@ class PlatformChainScenario(Scenario):
 
         self._auto_connect_touching_areas(builder)
 
-        # Multiple small polyobject movers, each spawned between adjacent platforms.
         po_builder = PolyobjectBuilder(builder.map_data)
         poly_nums: List[int] = []
         usable_pairs = max(1, level_count - 1)
@@ -259,8 +288,14 @@ class PlatformChainScenario(Scenario):
             za = platform_base_z[pair_idx]
             zb = platform_base_z[pair_idx + 1]
 
-            start_x = (ax + bx) // 2
-            start_y = (ay + by) // 2 + 30
+            start_x, start_y = self._mover_start_center(
+                ax,
+                ay,
+                bx,
+                by,
+                mover_panel_h,
+                mover_start_gap,
+            )
             start_z = min(za, zb)
 
             poly_num = po_idx + 1
@@ -275,7 +310,7 @@ class PlatformChainScenario(Scenario):
                     width=mover_panel_w,
                     height=mover_panel_h,
                     floor_height=start_z + 8,
-                    ceiling_height=start_z + 80,
+                    ceiling_height=start_z + mover_top_z_offset,
                     texture="METAL",
                     light_level=196,
                     start_spot_thing_type=POLYOBJ_START_SPOT_THING,
@@ -283,7 +318,6 @@ class PlatformChainScenario(Scenario):
             )
             poly_nums.append(poly_num)
 
-        # Add static obstacles.
         for idx, ox, oy in obstacle_candidates:
             builder.add_thing(30 if idx % 2 == 0 else 31, ox, oy)
 
@@ -307,69 +341,7 @@ class PlatformChainScenario(Scenario):
             spot = 100 + pn;
             SetActorPosition(0, GetActorX(spot), GetActorY(spot), GetActorZ(spot), 0);
 
-            int overlay_tick = 0;
-            int chain_limit = {chain_max_len} << 16;
-
-            while (TRUE)
-            {{
-                if (overlay_tick % 5 == 0)
-                {{
-                    int nearest = 0;
-                    int farthest = 0;
-                    int teammate_found = 0;
-
-                    int my_x = GetActorX(p_tid);
-                    int my_y = GetActorY(p_tid);
-
-                    int other;
-                    for (other = 0; other < {max_players}; other++)
-                    {{
-                        if (other == pn) continue;
-                        if (!PlayerInGame(other)) continue;
-
-                        int other_tid = 1000 + other;
-                        if (ThingCount(0, other_tid) <= 0) continue;
-
-                        int dx = my_x - GetActorX(other_tid);
-                        int dy = my_y - GetActorY(other_tid);
-                        int adx = dx;
-                        int ady = dy;
-                        if (adx < 0) adx = -adx;
-                        if (ady < 0) ady = -ady;
-
-                        int d;
-                        if (adx > ady) {{
-                            d = adx + (ady >> 1);
-                        }} else {{
-                            d = ady + (adx >> 1);
-                        }}
-
-                        if (!teammate_found || d < nearest) nearest = d;
-                        if (!teammate_found || d > farthest) farthest = d;
-                        teammate_found = 1;
-                    }}
-
-                    if (!teammate_found)
-                    {{
-                        FadeTo(0, 0, 0, 0.0, 0.15);
-                    }}
-                    else if (farthest <= (chain_limit * 3) / 4)
-                    {{
-                        FadeTo(0, 200, 32, 0.06, 0.15);
-                    }}
-                    else if (farthest <= chain_limit)
-                    {{
-                        FadeTo(230, 190, 0, 0.09, 0.15);
-                    }}
-                    else
-                    {{
-                        FadeTo(255, 48, 0, 0.14, 0.15);
-                    }}
-                }}
-
-                Delay(1);
-                overlay_tick++;
-            }}
+            {self._enter_visual_script(max_players, chain_max_len)}
             """,
             number=12,
         )
@@ -414,13 +386,11 @@ class PlatformChainScenario(Scenario):
         )
 
         dynamic_lines: List[str] = []
-        # Keep earliest levels stable for spawn safety.
         safe_start_levels = 8
 
         for idx, tag in enumerate(platform_tags):
             z = platform_base_z[idx]
             low = z
-            moving_high = z + 80
             lift_high = z + 152
             crusher_open_ceiling = 2048
 
@@ -458,7 +428,7 @@ class PlatformChainScenario(Scenario):
                 }} else if ((({tag} * 37 + run_shift) % 100) < 38) {{
                     ChangeFloor({tag}, "{vertical_crusher_floor}");
                     Floor_CrushStop({tag});
-                    Floor_MoveToValue({tag}, 14, {low}, 0); 
+                    Floor_MoveToValue({tag}, 14, {low}, 0);
 
                     Ceiling_CrushAndRaise({tag}, 64, 200, 0);
                 }} else {{
@@ -487,8 +457,10 @@ class PlatformChainScenario(Scenario):
                     if (ThingCount(0, a_tid_{follower}) > 0 && ThingCount(0, b_tid_{follower}) > 0) {{
                         int ax_{follower} = GetActorX(a_tid_{follower});
                         int ay_{follower} = GetActorY(a_tid_{follower});
+                        int az_{follower} = GetActorZ(a_tid_{follower});
                         int bx_{follower} = GetActorX(b_tid_{follower});
                         int by_{follower} = GetActorY(b_tid_{follower});
+                        int bz_{follower} = GetActorZ(b_tid_{follower});
 
                         int dx_{follower} = ax_{follower} - bx_{follower};
                         int dy_{follower} = ay_{follower} - by_{follower};
@@ -507,9 +479,20 @@ class PlatformChainScenario(Scenario):
                         if (dist_{follower} > max_chain_dist) max_chain_dist = dist_{follower};
 
                         int chain_limit_{follower} = {chain_max_len} << 16;
+                        int render_ax_{follower} = ax_{follower};
+                        int render_ay_{follower} = ay_{follower};
+                        int render_bx_{follower} = bx_{follower};
+                        int render_by_{follower} = by_{follower};
+                        int tether_state_{follower} = 0;
+
+                        if (dist_{follower} > (chain_limit_{follower} * 3) / 4) {{
+                            tether_state_{follower} = 1;
+                        }}
+
                         if (dist_{follower} > chain_limit_{follower} && dist_{follower} > 0) {{
                             dragged_links_count++;
                             chain_break_events++;
+                            tether_state_{follower} = 2;
                             int keep_half_{follower} = ({max(64, chain_max_len - 24)} << 15);
                             int ratio_{follower} = FixedDiv(keep_half_{follower}, dist_{follower});
                             int mx_{follower} = (ax_{follower} + bx_{follower}) >> 1;
@@ -519,9 +502,16 @@ class PlatformChainScenario(Scenario):
                             int nbx_{follower} = mx_{follower} - FixedMul(dx_{follower}, ratio_{follower});
                             int nby_{follower} = my_{follower} - FixedMul(dy_{follower}, ratio_{follower});
 
-                            SetActorPosition(a_tid_{follower}, nax_{follower}, nay_{follower}, GetActorZ(a_tid_{follower}), 0);
-                            SetActorPosition(b_tid_{follower}, nbx_{follower}, nby_{follower}, GetActorZ(b_tid_{follower}), 0);
+                            SetActorPosition(a_tid_{follower}, nax_{follower}, nay_{follower}, az_{follower}, 0);
+                            SetActorPosition(b_tid_{follower}, nbx_{follower}, nby_{follower}, bz_{follower}, 0);
+
+                            render_ax_{follower} = nax_{follower};
+                            render_ay_{follower} = nay_{follower};
+                            render_bx_{follower} = nbx_{follower};
+                            render_by_{follower} = nby_{follower};
                         }}
+
+                        {self._chain_visual_lines(follower, leader, max_players, chain_max_len)}
                     }}
                 }}
                 """
@@ -556,16 +546,18 @@ class PlatformChainScenario(Scenario):
                 int any_active = 0;
                 int p_check;
                 for (p_check = 0; p_check < {max_players}; p_check++) {{
-                     if (PlayerInGame(p_check)) {{
+                    if (PlayerInGame(p_check)) {{
                         int ct = 1000 + p_check;
-                        int cz = GetActorZ(ct) >> 16;
-                        int clvl = (cz - {base_height}) / {height_step};
-                        if (clvl < 0) clvl = 0;
-                        if (clvl >= {level_count}) clvl = {level_count} - 1;
-                        
-                        if (clvl < min_lvl) min_lvl = clvl;
-                        any_active = 1;
-                     }}
+                        if (ThingCount(0, ct) > 0) {{
+                            int cz = GetActorZ(ct) >> 16;
+                            int clvl = (cz - {base_height}) / {height_step};
+                            if (clvl < 0) clvl = 0;
+                            if (clvl >= {level_count}) clvl = {level_count} - 1;
+
+                            if (clvl < min_lvl) min_lvl = clvl;
+                            any_active = 1;
+                        }}
+                    }}
                 }}
                 if (any_active) {{
                     pc_level_reached_global = min_lvl;
@@ -607,6 +599,181 @@ class PlatformChainScenario(Scenario):
         builder.build(output_path)
         print(f"Platform Chain WAD written to {output_path} (seed={seed})")
 
+    def _enter_visual_script(self, max_players: int, chain_max_len: int) -> str:
+        bar_cases = []
+        for i in range(21):
+            filled = "=" * i
+            empty = "." * (20 - i)
+            bar_cases.append(f'case {i}: tether_bar = "o{filled}{empty}o"; break;')
+        bar_switch = "\n                    ".join(bar_cases)
+
+        return f"""
+        int overlay_tick = 0;
+        int chain_limit = {chain_max_len} << 16;
+
+        while (TRUE)
+        {{
+            if (overlay_tick % 5 == 0)
+            {{
+                int farthest = 0;
+                int teammate_found = 0;
+                int my_x = GetActorX(p_tid);
+                int my_y = GetActorY(p_tid);
+
+                int other;
+                for (other = 0; other < {max_players}; other++)
+                {{
+                    if (other == pn) continue;
+                    if (!PlayerInGame(other)) continue;
+
+                    int other_tid = 1000 + other;
+                    if (ThingCount(0, other_tid) <= 0) continue;
+
+                    int dx = my_x - GetActorX(other_tid);
+                    int dy = my_y - GetActorY(other_tid);
+                    int adx = dx;
+                    int ady = dy;
+                    if (adx < 0) adx = -adx;
+                    if (ady < 0) ady = -ady;
+
+                    int d;
+                    if (adx > ady) {{
+                        d = adx + (ady >> 1);
+                    }} else {{
+                        d = ady + (adx >> 1);
+                    }}
+
+                    if (!teammate_found || d > farthest) farthest = d;
+                    teammate_found = 1;
+                }}
+
+                SetHudSize(320, 240, 1);
+                SetFont("SMALLFONT");
+
+                if (!teammate_found)
+                {{
+                    HudMessage(s:""; HUDMSG_PLAIN, 211, CR_WHITE, 0.5, 0.86, 0.2);
+                    HudMessage(s:""; HUDMSG_PLAIN, 212, CR_WHITE, 0.5, 0.90, 0.2);
+                }}
+                else
+                {{
+                    int tension_idx = 0;
+                    if (chain_limit > 0) {{
+                        tension_idx = (farthest * 20) / chain_limit;
+                    }}
+                    if (tension_idx < 0) tension_idx = 0;
+                    if (tension_idx > 20) tension_idx = 20;
+
+                    str tether_bar = "";
+                    switch (tension_idx) {{
+                        {bar_switch}
+                    }}
+
+                    if (pc_dragged_links_global > 0 || farthest > chain_limit)
+                    {{
+                        HudMessage(s:tether_bar; HUDMSG_PLAIN, 212, CR_RED, 0.5, 0.90, 0.2);
+                    }}
+                    else if (farthest > (chain_limit * 9) / 10)
+                    {{
+                        HudMessage(s:tether_bar; HUDMSG_PLAIN, 212, CR_RED, 0.5, 0.90, 0.2);
+                    }}
+                    else if (farthest > (chain_limit * 3) / 4)
+                    {{
+                        HudMessage(s:tether_bar; HUDMSG_PLAIN, 212, CR_GOLD, 0.5, 0.90, 0.2);
+                    }}
+                    else
+                    {{
+                        HudMessage(s:tether_bar; HUDMSG_PLAIN, 212, CR_GREEN, 0.5, 0.90, 0.2);
+                    }}
+                }}
+            }}
+
+            Delay(1);
+            overlay_tick++;
+        }}
+        """
+
+    def _decorate_lump(self) -> str | None:
+        return """
+ACTOR ChainNodeCalm : GreenTorch 15060 {
+  Radius 4
+  Height 12
+  Scale 0.20
+  Alpha 0.70
+  RenderStyle Add
+  +NOGRAVITY
+  +NOINTERACTION
+  +NOBLOCKMAP
+  +FLOAT
+  +DONTTHRUST
+}
+
+ACTOR ChainNodeWarn : Candelabra 15061 {
+  Radius 4
+  Height 12
+  Scale 0.10
+  Alpha 0.75
+  RenderStyle Add
+  +NOGRAVITY
+  +NOINTERACTION
+  +NOBLOCKMAP
+  +FLOAT
+  +DONTTHRUST
+}
+
+ACTOR ChainNodeHot : RedTorch 15062 {
+  Radius 4
+  Height 12
+  Scale 0.20
+  Alpha 0.80
+  RenderStyle Add
+  +NOGRAVITY
+  +NOINTERACTION
+  +NOBLOCKMAP
+  +FLOAT
+  +DONTTHRUST
+}
+"""
+
+    def _chain_visual_lines(
+        self,
+        follower: int,
+        leader: int,
+        max_players: int,
+        chain_max_len: int,
+    ) -> str:
+        tether_nodes = 7
+        tether_tid_base = 6000 + (follower * 64)
+        return f"""
+                        int node_idx_{follower};
+                        for (node_idx_{follower} = 0; node_idx_{follower} < {tether_nodes}; node_idx_{follower}++) {{
+                            Thing_Remove({tether_tid_base} + node_idx_{follower});
+                        }}
+
+                        if (dist_{follower} > 0) {{
+                            int tether_az_{follower} = az_{follower} + (20 << 16);
+                            int tether_bz_{follower} = bz_{follower} + (20 << 16);
+                            int tether_dx_{follower} = render_bx_{follower} - render_ax_{follower};
+                            int tether_dy_{follower} = render_by_{follower} - render_ay_{follower};
+                            int tether_dz_{follower} = tether_bz_{follower} - tether_az_{follower};
+
+                            for (node_idx_{follower} = 0; node_idx_{follower} < {tether_nodes}; node_idx_{follower}++) {{
+                                int frac_{follower} = FixedDiv((node_idx_{follower} + 1) << 16, {tether_nodes + 1} << 16);
+                                int sx_{follower} = render_ax_{follower} + FixedMul(tether_dx_{follower}, frac_{follower});
+                                int sy_{follower} = render_ay_{follower} + FixedMul(tether_dy_{follower}, frac_{follower});
+                                int sz_{follower} = tether_az_{follower} + FixedMul(tether_dz_{follower}, frac_{follower});
+                                int spawn_tid_{follower} = {tether_tid_base} + node_idx_{follower};
+
+                                if (tether_state_{follower} >= 2) {{
+                                    Spawn("ChainNodeHot", sx_{follower}, sy_{follower}, sz_{follower}, spawn_tid_{follower});
+                                }} else if (tether_state_{follower} == 1) {{
+                                    Spawn("ChainNodeWarn", sx_{follower}, sy_{follower}, sz_{follower}, spawn_tid_{follower});
+                                }} else {{
+                                    Spawn("ChainNodeCalm", sx_{follower}, sy_{follower}, sz_{follower}, spawn_tid_{follower});
+                                }}
+                            }}
+                        }}
+        """
 
 if __name__ == "__main__":
     output = "examples/benchmark/output/platform_chain.wad"
