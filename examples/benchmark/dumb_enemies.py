@@ -177,8 +177,8 @@ class DumbEnemiesScenario(Scenario):
 
         acs = ACSBuilder()
         acs.add_global_var("de_alive_enemies_global", 31, "int")
-        acs.add_global_var("de_fast_enemies_global", 32, "int")
-        acs.add_global_var("de_fast_events_global", 33, "int")
+        acs.add_global_var("de_slow_enemies_global", 32, "int")
+        acs.add_global_var("de_slow_events_global", 33, "int")
         acs.add_global_var("de_spawn_events_global", 34, "int")
         
         # Logic constants
@@ -219,18 +219,18 @@ class DumbEnemiesScenario(Scenario):
             // Tag, Damage Amount, Interval (0=Default), MOD_UNKNOWN(0)
             Sector_SetDamage(ARENA_TAG, 1, 0); 
             de_alive_enemies_global = 0;
-            de_fast_enemies_global = 0;
-            de_fast_events_global = 0;
+            de_slow_enemies_global = 0;
+            de_slow_events_global = 0;
             de_spawn_events_global = 0;
-            int fast_state[MAX_ENEMIES];
+            int slow_state[MAX_ENEMIES];
             int i;
             for (i = 0; i < MAX_ENEMIES; i++) {{
-                fast_state[i] = 1;
+                slow_state[i] = 0;
             }}
             
             while (TRUE) {{
                 int alive_count = 0;
-                int fast_count = 0;
+                int slow_count = 0;
 
                 // Iterate all potential enemies
                 for (i = 0; i < MAX_ENEMIES; i++) {{
@@ -273,38 +273,38 @@ class DumbEnemiesScenario(Scenario):
                             Thing_Hate(etid, closest_pid, 1);
                         }}
 
-                        int is_fast = 0;
+                        int is_slow = 0;
                         // Reverse of smart_enemies:
                         // Fast (fleeing speed) if 0 or 1 player is nearby
                         // Slow (normal speed) if > 1 players are nearby
-                        if (nearby_players <= 1) {{
-                            is_fast = 1;
+                        if (nearby_players > 1) {{
+                            is_slow = 1;
                         }}
 
-                        if (is_fast) {{
-                            fast_count++;
-                            if (fast_state[i] == 0) {{
-                                de_fast_events_global++;
-                                fast_state[i] = 1;
+                        if (is_slow) {{
+                            slow_count++;
+                            if (slow_state[i] == 0) {{
+                                de_slow_events_global++;
+                                slow_state[i] = 1;
                             }}
                         }} else {{
-                            fast_state[i] = 0;
+                            slow_state[i] = 0;
                         }}
                         
                         // Apply movement behavior only (kept lightweight to reduce ACS overhead)
-                        if (is_fast) {{
+                        if (is_slow == 0) {{
                             SetActorProperty(etid, APROP_Speed, 70.0);
                         }} else {{
                             // Normal speed when multiple players coordinate
                             SetActorProperty(etid, APROP_Speed, 21.0);
                         }}
                     }} else {{
-                        fast_state[i] = 0;
+                        slow_state[i] = 0;
                     }}
                 }}
 
                 de_alive_enemies_global = alive_count;
-                de_fast_enemies_global = fast_count;
+                de_slow_enemies_global = slow_count;
                 Delay(8);
             }}
         }}
