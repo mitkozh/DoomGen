@@ -32,7 +32,7 @@ class SmartEnemiesScenario(Scenario):
             "spawn_interval": 3,     # Seconds between spawn checks
             "player_count": 2,       # Number of player starts
             "proximity_radius": 512, # Distance to trigger "smart" behavior
-            "num_obstacles": 35,     # Increased count for density
+            "num_obstacles": 30,     # Increased count for density
             "seed": 42
         }
 
@@ -119,9 +119,26 @@ class SmartEnemiesScenario(Scenario):
             obstacle_geoms.append(obs_shape)
 
         decorate_script = """
+        ACTOR ShortShotgun : Shotgun 15003
+        {
+            States
+            {
+            Fire:
+                SHTG A 3
+                SHTG A 0 A_FireBullets (5.6, 0, 7, 5, "BulletPuff", 1, 500)
+                SHTG A 7 A_GunFlash
+                SHTG BC 5
+                SHTG D 4
+                SHTG CB 5
+                SHTG A 3
+                SHTG A 7 A_ReFire
+                Goto Ready
+            }
+        }
+
         ACTOR HuntedDemon : Demon 15001
         {
-            Health 20
+            Health 100
             Speed 21
             +FRIGHTENED
             +LOOKALLAROUND
@@ -211,9 +228,9 @@ class SmartEnemiesScenario(Scenario):
             
             // Give Loadout
             ClearInventory();
-            GiveInventory("Shotgun", 1);
+            GiveInventory("ShortShotgun", 1);
             GiveInventory("Shell", 20);
-            SetWeapon("Shotgun");
+            SetWeapon("ShortShotgun");
             
             HudMessage(s:"WARNING: TOXIC FLOOR DETECTED"; HUDMSG_PLAIN, 1, CR_RED, 0.5, 0.8, 5.0);
         }}
@@ -222,7 +239,7 @@ class SmartEnemiesScenario(Scenario):
         script 1 OPEN {{
             // Set Sector Damage via ACS
             // Tag, Damage Amount, Interval (0=Default), MOD_UNKNOWN(0)
-            Sector_SetDamage(ARENA_TAG, 1, 0); 
+            Sector_SetDamage(ARENA_TAG, 2, 0); 
             se_alive_enemies_global = 0;
             se_fast_enemies_global = 0;
             se_fast_events_global = 0;
@@ -288,8 +305,17 @@ class SmartEnemiesScenario(Scenario):
                             if (fast_state[i] == 0) {{
                                 se_fast_events_global++;
                                 fast_state[i] = 1;
+                                SetActorProperty(etid, APROP_Health, GetActorProperty(etid, APROP_Health) + 400);
                             }}
                         }} else {{
+                            if (fast_state[i] == 1) {{
+                                int hp = GetActorProperty(etid, APROP_Health);
+                                if (hp > 400) {{
+                                    SetActorProperty(etid, APROP_Health, hp - 400);
+                                }} else {{
+                                    SetActorProperty(etid, APROP_Health, 1);
+                                }}
+                            }}
                             fast_state[i] = 0;
                         }}
                         
