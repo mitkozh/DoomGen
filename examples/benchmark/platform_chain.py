@@ -28,7 +28,7 @@ class PlatformChainScenario(Scenario):
             "lava_damage": 50,
             "polyobject_count": 8,
             "map_radius": 1800,
-            "cell_spacing": 222,
+            "cell_spacing": 180,
             "chain_max_len": 250,
         }
 
@@ -162,7 +162,7 @@ class PlatformChainScenario(Scenario):
         vertical_crusher_floor = "BLOOD1"
 
         platform_wall = "METAL2"
-        platform_light = 186
+        platform_light = 208
         mover_panel_w = 56
         mover_panel_h = 20
         mover_start_gap = 10
@@ -228,7 +228,7 @@ class PlatformChainScenario(Scenario):
                 wall_texture="METAL2",
                 lower_texture="METAL2",
                 upper_texture="METAL2",
-                light_level=192,
+                light_level=220,
                 tag=bridge_tag,
                 mode="overwrite",
             )
@@ -267,7 +267,7 @@ class PlatformChainScenario(Scenario):
             wall_texture="METAL2",
             lower_texture="METAL2",
             upper_texture="METAL2",
-            light_level=172,
+            light_level=196,
             tag=lava_tag,
             mode="claim_void",
         )
@@ -312,7 +312,7 @@ class PlatformChainScenario(Scenario):
                     floor_height=start_z + 8,
                     ceiling_height=start_z + mover_top_z_offset,
                     texture="METAL",
-                    light_level=196,
+                    light_level=224,
                     start_spot_thing_type=POLYOBJ_START_SPOT_THING,
                 )
             )
