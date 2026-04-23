@@ -18,7 +18,7 @@ class AmmoCarrierScenario(Scenario):
     def get_default_config(self) -> Dict[str, Any]:
         return {
             'map_radius': 1200,
-            'num_depots': 6,
+            'num_depots': 1,
             'enemy_density': 1.0,
             'seed': None,
         }
@@ -255,7 +255,7 @@ class AmmoCarrierScenario(Scenario):
         int i;
         int spot_tid;
         int r;
-        str type;
+        int spawn_success;
         int spawned;
         
         // Short grace period so the defender is trained on real contacts, not empty prefire.
@@ -266,9 +266,11 @@ class AmmoCarrierScenario(Scenario):
             if (Random(0, 1) == 0) {{
                 spot_tid = spot_tid_base + i;
                 if (ThingCount(T_NONE, spot_tid) > 0) {{
-                    type = "BenchZombie";
-                    if (Random(0, 2) == 0) type = "BenchImp";
-                    SpawnSpotFacing(type, spot_tid, 700);
+                    if (Random(0, 2) == 0) {{
+                        SpawnSpotFacing("BenchImp", spot_tid, 700);
+                    }} else {{
+                        SpawnSpotFacing("BenchZombie", spot_tid, 700);
+                    }}
                 }}
             }}
         }}
@@ -283,15 +285,20 @@ class AmmoCarrierScenario(Scenario):
                  if (Random(0, 3) == 0) {{ // 25% chance per spot
                      spot_tid = spot_tid_base + i; 
                      r = Random(0, 10);
-                     type = "BenchZombie";
-                     if (r > 5) type = "BenchImp";
-                     if (r > 8) type = "BenchShotgunGuy";
-                     if (r == 10) type = "BenchDemon";
+                     spawn_success = 0;
                      
                      // Spawn if spot exists
                      if (ThingCount(T_NONE, spot_tid) > 0) {{
-                        SpawnSpotFacing(type, spot_tid, 700);
-                        spawned++;
+                        if (r == 10) {{
+                            spawn_success = SpawnSpotFacing("BenchDemon", spot_tid, 700);
+                        }} else if (r > 8) {{
+                            spawn_success = SpawnSpotFacing("BenchShotgunGuy", spot_tid, 700);
+                        }} else if (r > 5) {{
+                            spawn_success = SpawnSpotFacing("BenchImp", spot_tid, 700);
+                        }} else {{
+                            spawn_success = SpawnSpotFacing("BenchZombie", spot_tid, 700);
+                        }}
+                        if (spawn_success) spawned++;
                      }}
                  }}
             }}
@@ -429,7 +436,9 @@ class AmmoCarrierScenario(Scenario):
         int ammo_spot_base = 3000;
         int num_ammo_spots = {total_ammo_spots};
         int tid_ammo = 800;
+        int tid_temp_spawn = 801;
         int max_ammo = 25; // Global Cap
+        int spawn_success;
         
         while(TRUE) {{
             // Count current ammo in the world
@@ -442,12 +451,17 @@ class AmmoCarrierScenario(Scenario):
                     int spot_index = Random(0, num_ammo_spots - 1);
                     int spot_tid = ammo_spot_base + spot_index;
                     
-                    // Randomize type (80% Clip, 20% Box)
-                    str type = "Clip";
-                    if (Random(0,4) == 0) type = "ClipBox"; 
-                    
-                    // Spawn with TID 800 so we can count it
-                    SpawnSpot(type, spot_tid, tid_ammo, 0);
+                    // Use a temp TID + success guard to avoid stale references.
+                    Thing_Remove(tid_temp_spawn);
+                    spawn_success = 0;
+                    if (Random(0,4) == 0) {{
+                        spawn_success = SpawnSpot("ClipBox", spot_tid, tid_temp_spawn, 0);
+                    }} else {{
+                        spawn_success = SpawnSpot("Clip", spot_tid, tid_temp_spawn, 0);
+                    }}
+                    if (spawn_success && ThingCount(T_NONE, tid_temp_spawn) > 0) {{
+                        Thing_ChangeTID(tid_temp_spawn, tid_ammo);
+                    }}
                 }}
             }}
             
