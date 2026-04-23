@@ -2,6 +2,23 @@
 
 This directory contains several benchmark scenarios for Multi-Agent Reinforcement Learning (MARL), designed to test different aspects of agent coordination, navigation, and combat.
 
+## Shared Reward Guidance
+
+`shared_reward_alpha` only matters for actor-critic multi-agent algos such as `MAPPO` and `HAPPO`. Use `shared_reward_alpha=1.0` only when the benchmark is intended to be fully joint and local incentives are not part of the task definition.
+
+| Scenario | Use `shared_reward_alpha=1.0`? | Why |
+|---|---:|---|
+| `ammo_carrier` | Yes | The intended objective is team defense and resupply; local role-specific shaping should be team-shared for actor-critic runs. |
+| `armory_siege` | Yes | The benchmark objective is protecting one shared defense core. |
+| `lava_maze` | Yes | Navigator and spectator solve one joint traversal task. |
+| `lavapit` | Yes | The bridge-holding / traversal objective is fully cooperative. |
+| `platform_chain` | Yes | Progress is joint and tether-constrained by design. |
+| `rhythm_sync` | Yes | Success/failure is defined by synchronized team timing. |
+| `rhythm_sync_dense` | Yes | Dense shaping still targets the same joint synchronization objective. |
+| `stealth_labyrinth` | Yes | Torch and Gunner are asymmetrically coupled around one team-clear objective. |
+
+Keep `shared_reward_alpha=0.0` for benchmarks where preserving local incentives is part of the design, especially `stag_hunt_arena`, `foraging_commons`, and `resource_greed` / `common_harvest_doom`. Leave other scenarios at their scenario default unless you intentionally want to change the benchmark.
+
 ## Scenario Overviews
 
 ### Ammo Carrier (`ammo_carrier.py`)
@@ -40,7 +57,7 @@ A classic Harvest social dilemma inspired by common-pool resource games. By defa
 Changed: Have to leave and re-enter cleanup space to do cleanup again to avoid spamming
 
 ### Stag Hunt Arena (`stag_hunt_arena.py`)
-A direct embodiment of the Stag Hunt coordination dilemma. Two hunters share an arena where weak "Rabbits" (1 HP, frightened, Speed 16, A_Wander scatter behavior) spawn every 20 tics at perimeter and interior locations, capped at 12 alive, and can be killed solo for minor reward (+3 HP). A massive "Stag" (Baron-class, 500 HP) spawns periodically at map center. The Stag is invulnerable unless *both* players are within 800 units simultaneously — when shielded, it regenerates 35 HP/sec, making solo attempts futile. Both must converge and commit to earn the large cooperative reward (+50 HP and +20 shells each). The Stag despawns after ~70 seconds if not killed, preventing endless standoffs. Players wield Shotguns with effectively unlimited shells (9999 capacity/start ammo in the generator). Canonical RL shaping should preserve the dilemma by keeping rabbit outcomes local while sharing only stag-kill outcomes, rather than blanket-sharing all rewards. It tests emergent convention formation, trust building, and whether agents converge on the payoff-dominant or risk-dominant equilibrium.
+A direct embodiment of the Stag Hunt coordination dilemma. Two hunters share an arena where weak "Rabbits" (1 HP, frightened, Speed 24, A_Wander scatter behavior) spawn every 20 tics at perimeter and interior locations, capped at 12 alive. Rabbits are only vulnerable inside a close-range kill radius around the hunters, so long-range potshots do not trivialize the hare option, and their corpses are cleaned up automatically after a short delay. Each rabbit can still be killed solo for minor reward (+3 HP). A massive "Stag" (Baron-class, 500 HP) spawns periodically at map center. The Stag is invulnerable unless *both* players are within 800 units simultaneously — when shielded, it regenerates 35 HP/sec, making solo attempts futile. Both must converge and commit to earn the large cooperative reward (+50 HP and +20 shells each). The Stag despawns after ~70 seconds if not killed, preventing endless standoffs. Players wield Shotguns with effectively unlimited shells (9999 capacity/start ammo in the generator). Canonical RL shaping should preserve the dilemma by keeping rabbit outcomes local while sharing only stag-kill outcomes, rather than blanket-sharing all rewards. It tests emergent convention formation, trust building, and whether agents converge on the payoff-dominant or risk-dominant equilibrium.
 
 
 
@@ -55,4 +72,3 @@ This benchmark presents a series of linear zones where two players are physicall
 
 <!-- ### Co-op CQB (`coop_cqb.py`)
 This is a tight close-quarters battle scenario for marines operating in narrow interconnected corridors. At spawn, one marine is shotgun-only, one is plasma-only. The team must survive fast rushing shooter specialist while avoiding severe friendly-fire mistakes. Tere are also static civilians mixed into combat space, forcing agents to balance lethality with line-of-fire discipline. The objective is to kill as many enemies as possible. Civilian collateral immediately fails the episode. -->
-

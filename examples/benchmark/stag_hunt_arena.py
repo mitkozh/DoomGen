@@ -27,6 +27,9 @@ class StagHuntArenaScenario(Scenario):
             "stag_respawn_despawn": 200,
             "rabbit_spawn_interval": 20,
             "max_rabbits": 12,
+            "rabbit_speed": 24,
+            "rabbit_kill_radius": 555,
+            "rabbit_corpse_cleanup_delay": 105,
             "rabbit_kill_reward": 3,
             "stag_kill_health_reward": 50,
             "stag_kill_ammo_reward": 20,
@@ -49,6 +52,9 @@ class StagHuntArenaScenario(Scenario):
         stag_respawn_despawn = cfg["stag_respawn_despawn"]
         rabbit_spawn_interval = cfg["rabbit_spawn_interval"]
         max_rabbits = cfg["max_rabbits"]
+        rabbit_speed = cfg["rabbit_speed"]
+        rabbit_kill_radius = cfg["rabbit_kill_radius"]
+        rabbit_corpse_cleanup_delay = cfg["rabbit_corpse_cleanup_delay"]
         rabbit_kill_reward = cfg["rabbit_kill_reward"]
         stag_kill_health_reward = cfg["stag_kill_health_reward"]
         stag_kill_ammo_reward = cfg["stag_kill_ammo_reward"]
@@ -73,23 +79,26 @@ ACTOR Stag : BaronOfHell 15030 {{
 
 ACTOR Rabbit : Zombieman 15031 {{
   Health 1
-  Speed 16
+  Speed {rabbit_speed}
   +FRIGHTENED
   DropItem "None"
   States {{
   Spawn:
-    POSS AB 10 A_Look
+    POSS AB 4 A_Look
+    POSS A 0 ACS_ExecuteAlways(995, 0)
     Loop
   See:
+    POSS A 0 ACS_ExecuteAlways(995, 0)
     POSS AABBCCDD 2 A_Wander
     Loop
   Missile:
     Goto See
   Death:
     POSS H 0 ACS_ExecuteAlways(997, 0)
+    POSS H 0 ACS_ExecuteAlways(998, 0)
     POSS I 3 A_Scream
     POSS J 3 A_NoBlocking
-    POSS K 1 A_FadeOut(0.2)
+    POSS K 35
     Wait
   }}
 }}
@@ -275,6 +284,28 @@ while (TRUE) {{
 """
         acs.add_script(ScriptType.OPEN, script_rabbits, number=5)
 
+        rabbit_kill_radius_sq = rabbit_kill_radius * rabbit_kill_radius
+        script_rabbit_vulnerability = f"""
+int rx = GetActorX(0) >> 16;
+int ry = GetActorY(0) >> 16;
+int p1x = GetActorX(1000) >> 16;
+int p1y = GetActorY(1000) >> 16;
+int p2x = GetActorX(1001) >> 16;
+int p2y = GetActorY(1001) >> 16;
+int d1x = rx - p1x;
+int d1y = ry - p1y;
+int d2x = rx - p2x;
+int d2y = ry - p2y;
+int d1sq = d1x * d1x + d1y * d1y;
+int d2sq = d2x * d2x + d2y * d2y;
+if (d1sq <= {rabbit_kill_radius_sq} || d2sq <= {rabbit_kill_radius_sq}) {{
+    SetActorProperty(0, APROP_Invulnerable, 0);
+}} else {{
+    SetActorProperty(0, APROP_Invulnerable, 1);
+}}
+"""
+        acs.add_script(ScriptType.VOID, script_rabbit_vulnerability, number=995)
+
         # Script 996 (VOID): Stag kill reward — both players get health+shells
         script_stag_kill = f"""
 sh_stag_kills = sh_stag_kills + 1;
@@ -303,8 +334,8 @@ if (pn >= 0) {{
         acs.add_script(ScriptType.VOID, script_rabbit_kill, number=997)
 
         # Script 998 (VOID): Corpse cleanup
-        acs.add_script(ScriptType.VOID, """
-Delay(35 * 3);
+        acs.add_script(ScriptType.VOID, f"""
+Delay({rabbit_corpse_cleanup_delay});
 Thing_Remove(0);
 """, number=998)
 
