@@ -116,6 +116,7 @@ class DumbEnemiesScenario(Scenario):
         decorate_script = """
         ACTOR DumbDemon : Demon 15002
         {
+            Health 20
             Speed 70
             +FRIGHTENED
             +LOOKALLAROUND
