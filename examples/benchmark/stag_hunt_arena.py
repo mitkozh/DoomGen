@@ -166,6 +166,8 @@ ACS_ExecuteAlways(10, 0, 0, 0, 0);
 int stag_alive = 0;
 int stag_timer = 0;
 int respawn_timer = {stag_spawn_delay};
+    int TID_TEMP_SPAWN = 9100;
+    int spawn_success = 0;
 
 sh_stag_health = 0;
 sh_stag_vulnerable = 0;
@@ -222,13 +224,22 @@ while (TRUE) {{
     }} else {{
         respawn_timer = respawn_timer - 4;
         if (respawn_timer <= 0) {{
-            SpawnSpot("Stag", 5000, 3000, 0);
-            SetActorProperty(3000, APROP_Invulnerable, 1);
-            stag_alive = 1;
-            stag_timer = 0;
-            sh_stag_alive = 1;
-            sh_stag_health = {stag_health};
-            sh_stag_vulnerable = 0;
+            // Use a temp TID + success guard to avoid stale references/crashes
+            // on failed spawns (blocked location, invalid spot TID).
+            Thing_Remove(TID_TEMP_SPAWN);
+            spawn_success = SpawnSpot("Stag", 5000, TID_TEMP_SPAWN, 0);
+            if (spawn_success && ThingCount(T_NONE, TID_TEMP_SPAWN) > 0) {{
+                Thing_ChangeTID(TID_TEMP_SPAWN, 3000);
+                SetActorProperty(3000, APROP_Invulnerable, 1);
+                stag_alive = 1;
+                stag_timer = 0;
+                sh_stag_alive = 1;
+                sh_stag_health = {stag_health};
+                sh_stag_vulnerable = 0;
+            }} else {{
+                // Back off briefly to avoid rapid spawn spam.
+                respawn_timer = 35;
+            }}
         }}
     }}
     Delay(4);
@@ -238,8 +249,12 @@ while (TRUE) {{
 
         # Script 5 (OPEN): Rabbit spawner
         script_rabbits = f"""
+int TID_RABBITS = 4000;
+int TID_TEMP_SPAWN = 9101;
+int spawn_success = 0;
+
 while (TRUE) {{
-    if (ThingCount(T_NONE, 4000) < {max_rabbits}) {{
+    if (ThingCount(T_NONE, TID_RABBITS) < {max_rabbits}) {{
         int ring;
         int spot;
         ring = Random(0, 1);
@@ -248,7 +263,12 @@ while (TRUE) {{
         }} else {{
             spot = 6100 + Random(0, {interior_count - 1});
         }}
-        SpawnSpotFacing("Rabbit", spot, 4000);
+        // Use a temp TID + success guard to avoid stale references/crashes.
+        Thing_Remove(TID_TEMP_SPAWN);
+        spawn_success = SpawnSpotFacing("Rabbit", spot, TID_TEMP_SPAWN);
+        if (spawn_success && ThingCount(T_NONE, TID_TEMP_SPAWN) > 0) {{
+            Thing_ChangeTID(TID_TEMP_SPAWN, TID_RABBITS);
+        }}
     }}
     Delay({rabbit_spawn_interval});
 }}
