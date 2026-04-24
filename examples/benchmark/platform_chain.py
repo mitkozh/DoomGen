@@ -25,7 +25,7 @@ def route_grid_origin(level_count: int, spacing: int) -> Tuple[int, int]:
 
 
 def route_positions(level_count: int, spacing: int) -> List[Tuple[int, int]]:
-    rows = int(math.ceil(level_count / ROUTE_COLS))
+    # rows = int(math.ceil(level_count / ROUTE_COLS))
     x0, y0 = route_grid_origin(level_count, spacing)
 
     positions: List[Tuple[int, int]] = []

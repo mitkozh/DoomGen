@@ -128,7 +128,9 @@ class AmmoCarrierScenario(Scenario):
             
             // Teleport to fixed hub anchor so delivery guidance remains stable.
             int dest = 10;
-            SetActorPosition(0, GetActorX(dest), GetActorY(dest), GetActorZ(dest), 0);
+            if (ThingCount(T_NONE, dest) > 0) {
+                SetActorPosition(0, GetActorX(dest), GetActorY(dest), GetActorZ(dest), 0);
+            }
             
             // Attributes: Heavy, Slow, Healthy
             SetActorProperty(0, APROP_Health, 200);
@@ -154,7 +156,12 @@ class AmmoCarrierScenario(Scenario):
             
             // Teleport to Outskirts (TID 20-29)
             int dest2 = 20 + Random(0,9);
-            SetActorPosition(0, GetActorX(dest2), GetActorY(dest2), GetActorZ(dest2), 0);
+            if (ThingCount(T_NONE, dest2) <= 0) {
+                dest2 = 10;
+            }
+            if (ThingCount(T_NONE, dest2) > 0) {
+                SetActorPosition(0, GetActorX(dest2), GetActorY(dest2), GetActorZ(dest2), 0);
+            }
             
             // Attributes: Fast, Fragile
             SetActorProperty(0, APROP_Health, 100);
@@ -174,6 +181,10 @@ class AmmoCarrierScenario(Scenario):
         # Giving ammo to shooter when close
         script_carrier = """
         while (TRUE) {
+            if (ThingCount(T_NONE, 100) <= 0) {
+                Delay(4);
+                continue;
+            }
             // Calculate distance to Shooter (TID 100)
             int x = GetActorX(0) - GetActorX(100);
             int y = GetActorY(0) - GetActorY(100);
@@ -185,7 +196,7 @@ class AmmoCarrierScenario(Scenario):
             // 256 units radius approx = 65536
             if (dist_sq < 65536) {
                 int clips = CheckInventory("Clip");
-                if (clips > 0) {
+                if (clips > 0 && ThingCount(T_NONE, 100) > 0) {
                     TakeInventory("Clip", clips);
                     // Give to shooter
                     GiveActorInventory(100, "Clip", clips);
@@ -318,7 +329,10 @@ class AmmoCarrierScenario(Scenario):
         ac_low_ammo_alert_global = 0;
 
         while (TRUE) {
-            int shooter_ammo = CheckActorInventory(100, "Clip");
+            int shooter_ammo = 0;
+            if (ThingCount(T_NONE, 100) > 0) {
+                shooter_ammo = CheckActorInventory(100, "Clip");
+            }
             ac_shooter_ammo_global = shooter_ammo;
             if (shooter_ammo < 60) {
                 ac_low_ammo_alert_global = 1;
@@ -346,11 +360,13 @@ class AmmoCarrierScenario(Scenario):
         SetActivatorToTarget(0); // Killer
         if (PlayerNumber() == 0) { // If Shooter killed it
              // Heal Shooter
-             GiveActorInventory(100, "HealthBonus", 10);
+             if (ThingCount(T_NONE, 100) > 0) {
+                 GiveActorInventory(100, "HealthBonus", 10);
+             }
              
              // Heal all potential Carriers (Players 1-7)
              for (int p = 1; p < 8; p++) {
-                 if (PlayerInGame(p)) {
+                 if (PlayerInGame(p) && ThingCount(T_NONE, 200 + p) > 0) {
                      GiveActorInventory(200 + p, "HealthBonus", 10);
                  }
              }
@@ -511,8 +527,12 @@ class AmmoCarrierScenario(Scenario):
             # Pick a random depot
             d_name = random.choice(depots)
             pt = builder.get_random_point_in_area(d_name, safe=True)
-            if pt:
-                builder.add_thing("MAP_SPOT", pt[0], pt[1], tid=20+i)
+            if pt is None:
+                pt = builder.get_random_point_in_area("Hub", safe=True)
+            if pt is None:
+                angle = (2 * math.pi * i) / 10.0
+                pt = (int(math.cos(angle) * 280), int(math.sin(angle) * 280))
+            builder.add_thing("MAP_SPOT", pt[0], pt[1], tid=20+i)
 
         # Standard Starts (required by engine)
         builder.add_thing(ThingType.PLAYER1_START, 0, 0)
