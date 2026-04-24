@@ -206,17 +206,25 @@ while (TRUE) {{
             }} else {{
                 int sx = GetActorX(3000) >> 16;
                 int sy = GetActorY(3000) >> 16;
-                int p1x = GetActorX(1000) >> 16;
-                int p1y = GetActorY(1000) >> 16;
-                int p2x = GetActorX(1001) >> 16;
-                int p2y = GetActorY(1001) >> 16;
-                int d1x = sx - p1x;
-                int d1y = sy - p1y;
-                int d2x = sx - p2x;
-                int d2y = sy - p2y;
-                int d1sq = d1x * d1x + d1y * d1y;
-                int d2sq = d2x * d2x + d2y * d2y;
-                if (d1sq < {range_sq} && d2sq < {range_sq}) {{
+                int p1_alive = ThingCount(T_NONE, 1000) > 0;
+                int p2_alive = ThingCount(T_NONE, 1001) > 0;
+                int d1sq = 2147483647;
+                int d2sq = 2147483647;
+                if (p1_alive) {{
+                    int p1x = GetActorX(1000) >> 16;
+                    int p1y = GetActorY(1000) >> 16;
+                    int d1x = sx - p1x;
+                    int d1y = sy - p1y;
+                    d1sq = d1x * d1x + d1y * d1y;
+                }}
+                if (p2_alive) {{
+                    int p2x = GetActorX(1001) >> 16;
+                    int p2y = GetActorY(1001) >> 16;
+                    int d2x = sx - p2x;
+                    int d2y = sy - p2y;
+                    d2sq = d2x * d2x + d2y * d2y;
+                }}
+                if (p1_alive && p2_alive && d1sq < {range_sq} && d2sq < {range_sq}) {{
                     SetActorProperty(3000, APROP_Invulnerable, 0);
                     sh_stag_vulnerable = 1;
                 }} else {{
@@ -288,17 +296,25 @@ while (TRUE) {{
         script_rabbit_vulnerability = f"""
 int rx = GetActorX(0) >> 16;
 int ry = GetActorY(0) >> 16;
-int p1x = GetActorX(1000) >> 16;
-int p1y = GetActorY(1000) >> 16;
-int p2x = GetActorX(1001) >> 16;
-int p2y = GetActorY(1001) >> 16;
-int d1x = rx - p1x;
-int d1y = ry - p1y;
-int d2x = rx - p2x;
-int d2y = ry - p2y;
-int d1sq = d1x * d1x + d1y * d1y;
-int d2sq = d2x * d2x + d2y * d2y;
-if (d1sq <= {rabbit_kill_radius_sq} || d2sq <= {rabbit_kill_radius_sq}) {{
+int p1_alive = ThingCount(T_NONE, 1000) > 0;
+int p2_alive = ThingCount(T_NONE, 1001) > 0;
+int d1sq = 2147483647;
+int d2sq = 2147483647;
+if (p1_alive) {{
+    int p1x = GetActorX(1000) >> 16;
+    int p1y = GetActorY(1000) >> 16;
+    int d1x = rx - p1x;
+    int d1y = ry - p1y;
+    d1sq = d1x * d1x + d1y * d1y;
+}}
+if (p2_alive) {{
+    int p2x = GetActorX(1001) >> 16;
+    int p2y = GetActorY(1001) >> 16;
+    int d2x = rx - p2x;
+    int d2y = ry - p2y;
+    d2sq = d2x * d2x + d2y * d2y;
+}}
+if ((p1_alive && d1sq <= {rabbit_kill_radius_sq}) || (p2_alive && d2sq <= {rabbit_kill_radius_sq})) {{
     SetActorProperty(0, APROP_Invulnerable, 0);
 }} else {{
     SetActorProperty(0, APROP_Invulnerable, 1);
@@ -311,8 +327,11 @@ if (d1sq <= {rabbit_kill_radius_sq} || d2sq <= {rabbit_kill_radius_sq}) {{
 sh_stag_kills = sh_stag_kills + 1;
 int p;
 for (p = 0; p < 2; p = p + 1) {{
-    GiveActorInventory(1000 + p, "HealthBonus", {stag_kill_health_reward});
-    GiveActorInventory(1000 + p, "Shell", {stag_kill_ammo_reward});
+    int player_tid = 1000 + p;
+    if (PlayerInGame(p) && ThingCount(T_NONE, player_tid) > 0) {{
+        GiveActorInventory(player_tid, "HealthBonus", {stag_kill_health_reward});
+        GiveActorInventory(player_tid, "Shell", {stag_kill_ammo_reward});
+    }}
 }}
 """
         acs.add_script(ScriptType.VOID, script_stag_kill, number=996)
@@ -335,8 +354,14 @@ if (pn >= 0) {{
 
         # Script 998 (VOID): Corpse cleanup
         acs.add_script(ScriptType.VOID, f"""
-Delay({rabbit_corpse_cleanup_delay});
-Thing_Remove(0);
+int cleanup_tid = UniqueTID(9200, 0);
+if (cleanup_tid > 0) {{
+    Thing_ChangeTID(0, cleanup_tid);
+    Delay({rabbit_corpse_cleanup_delay});
+    if (ThingCount(T_NONE, cleanup_tid) > 0) {{
+        Thing_Remove(cleanup_tid);
+    }}
+}}
 """, number=998)
 
         # Script 10 (VOID): Per-player HUD loop
