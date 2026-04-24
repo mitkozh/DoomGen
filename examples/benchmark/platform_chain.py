@@ -14,6 +14,86 @@ from doomgen.doom.polyobjects import (
 from doomgen.logic.acs_builder import ACSBuilder, ScriptType
 
 
+ROUTE_COLS = 12
+
+
+def route_grid_origin(level_count: int, spacing: int) -> Tuple[int, int]:
+    rows = int(math.ceil(level_count / ROUTE_COLS))
+    x0 = -((ROUTE_COLS - 1) * spacing) // 2
+    y0 = -((rows - 1) * spacing) // 2
+    return x0, y0
+
+
+def route_positions(level_count: int, spacing: int) -> List[Tuple[int, int]]:
+    rows = int(math.ceil(level_count / ROUTE_COLS))
+    x0, y0 = route_grid_origin(level_count, spacing)
+
+    positions: List[Tuple[int, int]] = []
+    for i in range(level_count):
+        row = i // ROUTE_COLS
+        col = i % ROUTE_COLS
+        if row % 2 == 1:
+            col = ROUTE_COLS - 1 - col
+
+        x = x0 + col * spacing
+        y = y0 + row * spacing
+        positions.append((x, y))
+
+    return positions
+
+
+def route_index_from_world(level_count: int, spacing: int, x_world: int, y_world: int) -> int:
+    rows = int(math.ceil(level_count / ROUTE_COLS))
+    x0, y0 = route_grid_origin(level_count, spacing)
+
+    col = max(0, min(ROUTE_COLS - 1, (x_world - x0 + spacing // 2) // spacing))
+    row = max(0, min(rows - 1, (y_world - y0 + spacing // 2) // spacing))
+
+    route_col = col if row % 2 == 0 else ROUTE_COLS - 1 - col
+    return max(0, min(level_count - 1, row * ROUTE_COLS + route_col))
+
+
+def platform_center_for_index(level_count: int, spacing: int, idx: int) -> Tuple[int, int]:
+    positions = route_positions(level_count, spacing)
+    clamped = max(0, min(level_count - 1, idx))
+    return positions[clamped]
+
+
+def safe_route_checkpoint(
+    *,
+    level_count: int,
+    spacing: int,
+    base_height: int,
+    height_step: int,
+    platform_w: int,
+    platform_h: int,
+    x_world: int,
+    y_world: int,
+    z_world: int,
+    min_safe_z_margin: int = 32,
+) -> int | None:
+    idx = route_index_from_world(level_count, spacing, x_world, y_world)
+    center_x, center_y = platform_center_for_index(level_count, spacing, idx)
+    base_z = base_height + idx * height_step
+
+    if abs(x_world - center_x) > platform_w // 2:
+        return None
+    if abs(y_world - center_y) > platform_h // 2:
+        return None
+    if z_world < base_z - min_safe_z_margin:
+        return None
+
+    return idx
+
+
+def advance_route_checkpoint(current_idx: int, safe_idx: int | None) -> int:
+    if safe_idx is None:
+        return current_idx
+    if safe_idx == current_idx + 1:
+        return safe_idx
+    return current_idx
+
+
 class PlatformChainScenario(Scenario):
 
     def get_default_config(self) -> Dict[str, Any]:
@@ -33,9 +113,6 @@ class PlatformChainScenario(Scenario):
         }
 
     def validate_config(self) -> None:
-        if int(self.config["level_count"]) != 120:
-            raise ValueError("level_count must be exactly 120")
-
         players = int(self.config["max_players"])
         if players < 1 or players > 4:
             raise ValueError("max_players must be in range [1, 4]")
@@ -81,24 +158,46 @@ class PlatformChainScenario(Scenario):
                 builder.graph.connect(area_a, area_b, ConnectionType.OPEN)
 
     def _route_positions(self, level_count: int, spacing: int) -> List[Tuple[int, int]]:
-        cols = 12
-        rows = int(math.ceil(level_count / cols))
+        return route_positions(level_count, spacing)
 
-        x0 = -((cols - 1) * spacing) // 2
-        y0 = -((rows - 1) * spacing) // 2
+    @staticmethod
+    def _route_grid_origin(level_count: int, spacing: int) -> Tuple[int, int]:
+        return route_grid_origin(level_count, spacing)
 
-        positions: List[Tuple[int, int]] = []
-        for i in range(level_count):
-            row = i // cols
-            col = i % cols
-            if row % 2 == 1:
-                col = cols - 1 - col
+    @staticmethod
+    def _route_index_from_world(level_count: int, spacing: int, x_world: int, y_world: int) -> int:
+        return route_index_from_world(level_count, spacing, x_world, y_world)
 
-            x = x0 + col * spacing
-            y = y0 + row * spacing
-            positions.append((x, y))
+    @staticmethod
+    def _platform_center_for_index(level_count: int, spacing: int, idx: int) -> Tuple[int, int]:
+        return platform_center_for_index(level_count, spacing, idx)
 
-        return positions
+    @staticmethod
+    def _safe_route_checkpoint(
+        *,
+        level_count: int,
+        spacing: int,
+        base_height: int,
+        height_step: int,
+        platform_w: int,
+        platform_h: int,
+        x_world: int,
+        y_world: int,
+        z_world: int,
+        min_safe_z_margin: int = 32,
+    ) -> int | None:
+        return safe_route_checkpoint(
+            level_count=level_count,
+            spacing=spacing,
+            base_height=base_height,
+            height_step=height_step,
+            platform_w=platform_w,
+            platform_h=platform_h,
+            x_world=x_world,
+            y_world=y_world,
+            z_world=z_world,
+            min_safe_z_margin=min_safe_z_margin,
+        )
 
     @staticmethod
     def _mover_start_center(
@@ -327,6 +426,80 @@ class PlatformChainScenario(Scenario):
         acs.add_global_var("pc_chain_break_events_global", 52, "int")
         acs.add_global_var("pc_dragged_links_global", 53, "int")
         acs.add_global_var("pc_level_reached_global", 54, "int")
+        acs.add_global_var("pc_route_progress_global", 55, "int")
+        for player_idx in range(max_players):
+            acs.add_map_var(f"pc_player_checkpoint_{player_idx}", "int", player_idx)
+
+        route_cols = 12
+        route_rows = int(math.ceil(level_count / route_cols))
+        route_x0, route_y0 = self._route_grid_origin(level_count, spacing)
+        route_last_idx = level_count - 1
+
+        acs.add_global_code(
+            f"""
+function int PcClampInt(int value, int lo, int hi) {{
+    if (value < lo) return lo;
+    if (value > hi) return hi;
+    return value;
+}}
+
+function int PcRouteIndexFromWorld(int x_world, int y_world) {{
+    int col = PcClampInt(((x_world - ({route_x0})) + {spacing // 2}) / {spacing}, 0, {route_cols - 1});
+    int row = PcClampInt(((y_world - ({route_y0})) + {spacing // 2}) / {spacing}, 0, {route_rows - 1});
+    int route_col = col;
+    if ((row % 2) == 1) {{
+        route_col = {route_cols - 1} - col;
+    }}
+
+    return PcClampInt((row * {route_cols}) + route_col, 0, {route_last_idx});
+}}
+
+function int PcCenterXForIndex(int idx) {{
+    int clamped = PcClampInt(idx, 0, {route_last_idx});
+    int row = clamped / {route_cols};
+    int route_col = clamped - (row * {route_cols});
+    int world_col = route_col;
+    if ((row % 2) == 1) {{
+        world_col = {route_cols - 1} - route_col;
+    }}
+
+    return ({route_x0}) + world_col * {spacing};
+}}
+
+function int PcCenterYForIndex(int idx) {{
+    int clamped = PcClampInt(idx, 0, {route_last_idx});
+    int row = clamped / {route_cols};
+    return ({route_y0}) + row * {spacing};
+}}
+
+function int PcAbsInt(int value) {{
+    if (value < 0) return -value;
+    return value;
+}}
+
+function int PcBaseZForIndex(int idx) {{
+    return {base_height} + PcClampInt(idx, 0, {route_last_idx}) * {height_step};
+}}
+
+function int PcSafeRouteIndex(int x_fix, int y_fix, int z_fix) {{
+    int idx = PcRouteIndexFromWorld(x_fix >> 16, y_fix >> 16);
+    int x_world = x_fix >> 16;
+    int y_world = y_fix >> 16;
+    int z_world = z_fix >> 16;
+
+    if (PcAbsInt(x_world - PcCenterXForIndex(idx)) > {platform_w // 2}) return -1;
+    if (PcAbsInt(y_world - PcCenterYForIndex(idx)) > {platform_h // 2}) return -1;
+    if (z_world < (PcBaseZForIndex(idx) - 32)) return -1;
+
+    return idx;
+}}
+
+function int PcAdvanceCheckpoint(int current_idx, int safe_idx) {{
+    if (safe_idx == current_idx + 1) return safe_idx;
+    return current_idx;
+}}
+"""
+        )
 
         acs.add_script(
             ScriptType.ENTER,
@@ -340,6 +513,9 @@ class PlatformChainScenario(Scenario):
             SetActorProperty(0, APROP_Health, 100);
             spot = 100 + pn;
             SetActorPosition(0, GetActorX(spot), GetActorY(spot), GetActorZ(spot), 0);
+            switch (pn) {{
+                {chr(10).join([f'case {player_idx}: pc_player_checkpoint_{player_idx} = {player_idx}; break;' for player_idx in range(max_players)])}
+            }}
 
             {self._enter_visual_script(max_players, chain_max_len)}
             """,
@@ -358,6 +534,9 @@ class PlatformChainScenario(Scenario):
             SetActorProperty(0, APROP_Health, 100);
             spot = 100 + pn;
             SetActorPosition(0, GetActorX(spot), GetActorY(spot), GetActorZ(spot), 0);
+            switch (pn) {{
+                {chr(10).join([f'case {player_idx}: pc_player_checkpoint_{player_idx} = {player_idx}; break;' for player_idx in range(max_players)])}
+            }}
             """,
             number=11,
         )
@@ -544,27 +723,36 @@ class PlatformChainScenario(Scenario):
                 max_chain_dist = 0;
                 dragged_links_count = 0;
 
-                int min_lvl = {level_count};
+                int min_lvl = {route_last_idx};
+                int joint_progress_fixed = {route_last_idx} << 16;
                 int any_active = 0;
                 int p_check;
                 for (p_check = 0; p_check < {max_players}; p_check++) {{
                     if (PlayerInGame(p_check)) {{
                         int ct = 1000 + p_check;
                         if (ThingCount(0, ct) > 0) {{
-                            int cz = GetActorZ(ct) >> 16;
-                            int clvl = (cz - {base_height}) / {height_step};
-                            if (clvl < 0) clvl = 0;
-                            if (clvl >= {level_count}) clvl = {level_count} - 1;
+                            int safe_idx = PcSafeRouteIndex(GetActorX(ct), GetActorY(ct), GetActorZ(ct));
+                            switch (p_check) {{
+                                {chr(10).join([f'case {player_idx}: pc_player_checkpoint_{player_idx} = PcAdvanceCheckpoint(pc_player_checkpoint_{player_idx}, safe_idx); break;' for player_idx in range(max_players)])}
+                            }}
+                            int clvl;
+                            switch (p_check) {{
+                                {chr(10).join([f'case {player_idx}: clvl = pc_player_checkpoint_{player_idx}; break;' for player_idx in range(max_players)])}
+                                default: clvl = 0; break;
+                            }}
 
                             if (clvl < min_lvl) min_lvl = clvl;
+                            if ((clvl << 16) < joint_progress_fixed) joint_progress_fixed = clvl << 16;
                             any_active = 1;
                         }}
                     }}
                 }}
                 if (any_active) {{
                     pc_level_reached_global = min_lvl;
+                    pc_route_progress_global = joint_progress_fixed;
                 }} else {{
                     pc_level_reached_global = 0;
+                    pc_route_progress_global = 0;
                 }}
 
                 {bridge_texture_block}
