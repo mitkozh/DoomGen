@@ -100,7 +100,7 @@ class PlatformChainScenario(Scenario):
         return {
             "seed": None,
             "random_seed_on_generate": True,
-            "level_count": 120,
+            "level_count": 48, # used to be 120
             "base_height": 0,
             "height_step": 12,
             "max_players": 4,
