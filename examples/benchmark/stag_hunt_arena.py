@@ -20,7 +20,7 @@ class StagHuntArenaScenario(Scenario):
             "alcove_depth": 128,
             "stag_health": 500,
             "stag_regen_rate": 4,
-            "stag_range": 800,
+            "stag_range": 555,
             "stag_spawn_delay": 175,
             "stag_respawn_killed": 500,
             "stag_despawn_time": 2450,
@@ -392,24 +392,19 @@ while (TRUE) {{
             {bar_switch_str}
         }}
         HudMessage(s:"STAG ", s:bar_gfx;
-            HUDMSG_PLAIN, 1, CR_WHITE, 0.5, 0.78, 2.0);
+            HUDMSG_PLAIN, 1, CR_WHITE, 0.5, 1.0, 2.0);
 
         if (vuln) {{
             HudMessage(s:"STAG: \\cDVULNERABLE";
-                HUDMSG_PLAIN, 2, CR_GREEN, 0.5, 0.81, 2.0);
+                HUDMSG_PLAIN, 2, CR_GREEN, 0.5, 0.97, 2.0);
         }} else {{
             HudMessage(s:"STAG: \\cGSHIELDED";
-                HUDMSG_PLAIN, 2, CR_RED, 0.5, 0.81, 2.0);
+                HUDMSG_PLAIN, 2, CR_RED, 0.5, 0.97, 2.0);
         }}
     }} else {{
         HudMessage(s:"STAG: \\cGNOT SPAWNED";
-            HUDMSG_PLAIN, 1, CR_GREY, 0.5, 0.78, 2.0);
-        HudMessage(s:"";
-            HUDMSG_PLAIN, 2, CR_WHITE, 0.5, 0.81, 2.0);
+            HUDMSG_PLAIN, 1, CR_GREY, 0.5, 0.99, 2.0);
     }}
-
-    HudMessage(s:"STAG KILLS: ", d:sk, s:"  RABBIT KILLS: ", d:rk;
-        HUDMSG_PLAIN, 3, CR_GOLD, 0.5, 0.84, 2.0);
 
     Delay(1);
 }}
