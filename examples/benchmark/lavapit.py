@@ -12,7 +12,7 @@ from doomgen.logic.acs_builder import ACSBuilder, ScriptType
 class LavaPitScenario(Scenario):
     def get_default_config(self) -> Dict[str, Any]:
         return {
-            "seed": None,
+            "seed": 42,
             "random_seed_on_generate": True,
             "num_platforms": 5,
             "max_players": 4,

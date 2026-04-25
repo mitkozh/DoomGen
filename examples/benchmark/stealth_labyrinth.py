@@ -12,7 +12,7 @@ class StealthLabyrinthScenario(Scenario):
 
     def get_default_config(self) -> Dict[str, Any]:
         return {
-            "seed": None,
+            "seed": 42,
             "grid_size": 8,
             "room_size": 384,
             "corridor_width": 3,

@@ -98,7 +98,7 @@ class PlatformChainScenario(Scenario):
 
     def get_default_config(self) -> Dict[str, Any]:
         return {
-            "seed": None,
+            "seed": 42,
             "random_seed_on_generate": True,
             "level_count": 48, # used to be 120
             "base_height": 0,

@@ -26,7 +26,7 @@ class LavaMazeScenario(Scenario):
             "initial_maze_size": 2,
             "max_maze_size": 10,
             "lava_damage": 35,
-            "seed": None,
+            "seed": 42,
         }
 
     def generate(self, output_path: str) -> None:

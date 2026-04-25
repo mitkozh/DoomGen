@@ -20,7 +20,7 @@ class AmmoCarrierScenario(Scenario):
             'map_radius': 1200,
             'num_depots': 1,
             'enemy_density': 1.0,
-            'seed': None,
+            'seed': 42,
         }
         
     def generate(self, output_path: str) -> None:

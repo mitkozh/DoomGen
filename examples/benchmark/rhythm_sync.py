@@ -68,7 +68,7 @@ def border_rgba_png(
 class RhythmSyncScenario(Scenario):
     def get_default_config(self) -> Dict[str, Any]:
         return {
-        "seed": None,
+        "seed": 42,
         "random_seed_on_generate": True,
         "num_sections": 20,
         "intro_regular_sections": 8,

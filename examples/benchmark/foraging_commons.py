@@ -12,7 +12,7 @@ class ForagingCommonsScenario(Scenario):
 
     def get_default_config(self) -> Dict[str, Any]:
         return {
-            "seed": None,
+            "seed": 42,
             "field_size": 1600,
             "cleanup_size": 384,
             "cleanup_distance": 1200,

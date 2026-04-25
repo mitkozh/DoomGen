@@ -3,11 +3,11 @@ Smart Enemies Benchmark Scenario.
 Generates an arena with custom enemy behavior governed by ACS.
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any
 import random
 import math
 import os
-from shapely.geometry import Point, Polygon, box
+from shapely.geometry import Point, box
 from shapely.affinity import rotate
 from doomgen.batch.scenario import Scenario
 from doomgen.builder import ProceduralMapBuilder

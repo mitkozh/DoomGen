@@ -1,5 +1,4 @@
 import random
-import math
 from typing import Dict, Any
 from doomgen.builder import ProceduralMapBuilder
 from doomgen.abstraction.layout import ConnectionType
@@ -18,7 +17,7 @@ class ArmorySiegeScenario(Scenario):
             'door_timer': 300,           # Door open duration (tics) (Longer = Easier access)
             'core_health': 1000,         # Health of the defense core (Higher = Easier)
             'enemy_difficulty': 0.5,     # Multiplier for enemy counts (Lower = Easier)
-            'seed': None,                # Random seed
+            'seed': 42,                # Random seed
         }
         
     def generate(self, output_path: str) -> None:

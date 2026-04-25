@@ -13,7 +13,7 @@ class StagHuntArenaScenario(Scenario):
 
     def get_default_config(self) -> Dict[str, Any]:
         return {
-            "seed": None,
+            "seed": 42,
             "arena_size": 2048,
             "num_alcoves": 12,
             "alcove_width": 192,

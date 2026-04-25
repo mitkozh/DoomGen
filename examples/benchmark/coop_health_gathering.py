@@ -19,7 +19,7 @@ class CoopHealthGatheringScenario(Scenario):
 
     def get_default_config(self) -> Dict[str, Any]:
         return {
-            "seed": None,
+            "seed": 42,
             "max_players": 4,
             "map_radius": 2000,
             "chain_max_len": 400,

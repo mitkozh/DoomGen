@@ -41,7 +41,7 @@ class ResourceGreedScenario(Scenario):
 
     def get_default_config(self) -> Dict[str, Any]:
         return {
-            "seed": None,
+            "seed": 42,
             "arena_radius": 750,         # half-side of the square combat arena
             "room_dist": 1150,           # center-to-center distance from origin to ammo room
             "room_size": 380,            # side length of each square ammo room
