@@ -103,6 +103,8 @@ class PlatformChainScenario(Scenario):
             "level_count": 48, # used to be 120
             "base_height": 0,
             "height_step": 12,
+            "safe_start_levels_min": 1,
+            "safe_start_levels_max": 3,
             "max_players": 4,
             "lava_height": -96,
             "lava_damage": 50,
@@ -122,6 +124,16 @@ class PlatformChainScenario(Scenario):
 
         if int(self.config.get("chain_max_len", 250)) < 64:
             raise ValueError("chain_max_len must be >= 64")
+
+        level_count = int(self.config["level_count"])
+        safe_start_levels_min = int(self.config.get("safe_start_levels_min", 3))
+        safe_start_levels_max = int(self.config.get("safe_start_levels_max", 6))
+        if safe_start_levels_min < 1:
+            raise ValueError("safe_start_levels_min must be >= 1")
+        if safe_start_levels_max < safe_start_levels_min:
+            raise ValueError("safe_start_levels_max must be >= safe_start_levels_min")
+        if safe_start_levels_max >= level_count:
+            raise ValueError("safe_start_levels_max must be < level_count")
 
     def _choose_seed(self) -> int:
         cfg = self.config
@@ -242,6 +254,8 @@ class PlatformChainScenario(Scenario):
         map_radius = int(cfg["map_radius"])
         spacing = int(cfg["cell_spacing"])
         chain_max_len = int(cfg.get("chain_max_len", 250))
+        safe_start_levels_min = int(cfg.get("safe_start_levels_min", 3))
+        safe_start_levels_max = int(cfg.get("safe_start_levels_max", 6))
         polyobject_count = max(1, int(cfg.get("polyobject_count", 1)))
 
         builder = ProceduralMapBuilder(
@@ -429,6 +443,9 @@ class PlatformChainScenario(Scenario):
         acs.add_global_var("pc_route_progress_global", 55, "int")
         for player_idx in range(max_players):
             acs.add_map_var(f"pc_player_checkpoint_{player_idx}", "int", player_idx)
+        for idx in range(level_count):
+            acs.add_map_var(f"pc_level_variant_{idx}", "int", 0)
+            acs.add_map_var(f"pc_level_phase_{idx}", "int", 0)
 
         route_cols = 12
         route_rows = int(math.ceil(level_count / route_cols))
@@ -565,16 +582,12 @@ function int PcAdvanceCheckpoint(int current_idx, int safe_idx) {{
         )
 
         dynamic_lines: List[str] = []
-        safe_start_levels = 8
 
         for idx, tag in enumerate(platform_tags):
             z = platform_base_z[idx]
             low = z
             lift_high = z + 152
             crusher_open_ceiling = 2048
-
-            if idx < safe_start_levels:
-                continue
 
             is_row_end = (idx % 12) == 11
 
@@ -592,10 +605,10 @@ function int PcAdvanceCheckpoint(int current_idx, int safe_idx) {{
 
             dynamic_lines.append(
                 f"""
-                if ((({tag} * 37 + run_shift) % 100) < 28) {{
+                if (pc_level_variant_{idx} == 1) {{
                     ChangeFloor({tag}, "{lift_floor}");
                     Sector_SetDamage({tag}, 0, 0);
-                    if (((tick + {idx * 9}) % 170) < 85) {{
+                    if (((tick + pc_level_phase_{idx}) % 170) < 85) {{
                         Floor_CrushStop({tag});
                         Floor_MoveToValue({tag}, 8, {lift_high}, 0);
                     }} else {{
@@ -604,7 +617,7 @@ function int PcAdvanceCheckpoint(int current_idx, int safe_idx) {{
                     }}
                     Ceiling_CrushStop({tag});
                     Ceiling_MoveToValue({tag}, 64, {crusher_open_ceiling}, 0);
-                }} else if ((({tag} * 37 + run_shift) % 100) < 38) {{
+                }} else if (pc_level_variant_{idx} == 2) {{
                     ChangeFloor({tag}, "{vertical_crusher_floor}");
                     Floor_CrushStop({tag});
                     Floor_MoveToValue({tag}, 14, {low}, 0);
@@ -701,10 +714,42 @@ function int PcAdvanceCheckpoint(int current_idx, int safe_idx) {{
         dynamic_block = "\n".join(dynamic_lines)
         bridge_texture_block = "\n".join(bridge_texture_lines)
         chain_block = "\n".join(chain_lines)
+        level_init_lines: List[str] = []
+        for idx in range(level_count):
+            is_row_end = (idx % 12) == 11
+            level_init_lines.append(f"pc_level_phase_{idx} = Random(0, 169);")
+            if is_row_end:
+                level_init_lines.append(f"pc_level_variant_{idx} = 0;")
+                continue
+
+            level_init_lines.append(
+                f"""
+                if ({idx} < safe_start_levels) {{
+                    pc_level_variant_{idx} = 0;
+                }} else if ({idx} < (safe_start_levels + 4)) {{
+                    int early_roll_{idx} = Random(0, 99);
+                    if (early_roll_{idx} < 68) {{
+                        pc_level_variant_{idx} = 0;
+                    }} else {{
+                        pc_level_variant_{idx} = 1;
+                    }}
+                }} else {{
+                    int level_roll_{idx} = Random(0, 99);
+                    if (level_roll_{idx} < 42) {{
+                        pc_level_variant_{idx} = 0;
+                    }} else if (level_roll_{idx} < 76) {{
+                        pc_level_variant_{idx} = 1;
+                    }} else {{
+                        pc_level_variant_{idx} = 2;
+                    }}
+                }}
+                """
+            )
+        level_init_block = "\n".join(level_init_lines)
 
         acs_open = f"""
         int tick = 0;
-        int run_shift = Random(0, 4095);
+        int safe_start_levels = Random({safe_start_levels_min}, {safe_start_levels_max});
         int chain_break_events = 0;
         int max_chain_dist = 0;
         int dragged_links_count = 0;
@@ -715,6 +760,7 @@ function int PcAdvanceCheckpoint(int current_idx, int safe_idx) {{
         pc_chain_break_events_global = 0;
         pc_dragged_links_global = 0;
         pc_level_reached_global = 0;
+        {level_init_block}
 
         while (TRUE)
         {{
