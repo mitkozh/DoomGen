@@ -887,7 +887,6 @@ if (show_beat) {
         acs.add_script(
             ScriptType.VOID,
             """
-Delay(1);
 Exit_Normal(0);
 """,
             number=907,
