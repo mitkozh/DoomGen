@@ -118,9 +118,6 @@ class AmmoCarrierScenario(Scenario):
         int pid = PlayerNumber();
         int tid;
         
-        // Setup HUD script (Script 10)
-        ACS_ExecuteAlways(10, 0, 0, 0, 0);
-
         if (pid == 0) {
             // --- SHOOTER ROLE ---
             tid = 100;
@@ -148,6 +145,7 @@ class AmmoCarrierScenario(Scenario):
             
             // Start immobility loop
             ACS_ExecuteAlways(5, 0, 0, 0, 0); 
+            ACS_ExecuteAlways(10, 0, 0, 0, 0);
             
         } else {
             // --- CARRIER ROLE ---
@@ -172,6 +170,7 @@ class AmmoCarrierScenario(Scenario):
             
             // Start carrier delivery loop
             ACS_ExecuteAlways(2, 0, 0, 0, 0);
+            ACS_ExecuteAlways(10, 0, 0, 0, 0);
         }
         """
         acs.add_script(ScriptType.ENTER, script_setup, number=1)
@@ -180,7 +179,11 @@ class AmmoCarrierScenario(Scenario):
         # Script 2: Carrier Delivery Loop
         # Giving ammo to shooter when close
         script_carrier = """
+        int self_tid = ActivatorTID();
         while (TRUE) {
+            if (self_tid > 0 && ThingCount(T_NONE, self_tid) <= 0) {
+                break;
+            }
             if (ThingCount(T_NONE, 100) <= 0) {
                 Delay(4);
                 continue;
@@ -212,20 +215,36 @@ class AmmoCarrierScenario(Scenario):
         """
         acs.add_script(ScriptType.VOID, script_carrier, number=2)
         
+        carrier_bar_cases = []
+        carrier_bar_max_ammo = 200
+        for i in range(21):
+            filled = "=" * i
+            empty = "-" * (20 - i)
+            carrier_bar_cases.append(
+                f'case {i}: carrier_bar = "\\cD{filled}\\cG{empty}"; break;'
+            )
+        carrier_bar_switch_str = "\n                    ".join(carrier_bar_cases)
+
         # Script 10: Persistent HUD
         # Simple squares above HUD
-        script_hud = """
-        while (TRUE) {
+        script_hud = f"""
+        int self_tid = ActivatorTID();
+        int carrier_idx;
+        str carrier_bar;
+        while (TRUE) {{
+            if (self_tid > 0 && ThingCount(T_NONE, self_tid) <= 0) {{
+                break;
+            }}
             SetFont("SMALLFONT");
             int tid = ActivatorTID();
             
             // Determine Role
-            if (tid == 100) { 
+            if (tid == 100) {{ 
                 // SHOOTER HUD
                 
                 // Role Indicator (Red Square)
                 HudMessage(s:"[ DEFENDER ]"; 
-                    HUDMSG_PLAIN, 1, CR_RED, 0.5, 0.82, 0.1);
+                    HUDMSG_PLAIN, 1, CR_RED, 0.5, 1.0, 0.1);
                 
                 // Vital Stats
                 int hp = GetActorProperty(0, APROP_Health);
@@ -233,29 +252,27 @@ class AmmoCarrierScenario(Scenario):
                 str ammoColor = "\\cC"; // Gold
                 if (ammo < 20) ammoColor = "\\cR"; // Red warning
                 
-                HudMessage(s:"HP: ", d:hp, s:"  ", s:ammoColor, s:"AMMO: ", d:ammo; 
-                    HUDMSG_PLAIN, 2, CR_WHITE, 0.5, 0.85, 0.1);
-                    
-            } else {
+            }} else {{
                 // CARRIER HUD
                 
                 // Role Indicator (Green Square)
                 HudMessage(s:"[ RUNNER ]"; 
-                    HUDMSG_PLAIN, 1, CR_GREEN, 0.5, 0.82, 0.1);
+                    HUDMSG_PLAIN, 1, CR_GREEN, 0.5, 1.0, 0.1);
                 
                 // Carry Status
                 int c_ammo = CheckInventory("Clip");
-                
-                if (c_ammo > 0) {
-                    HudMessage(s:"\\cD", d:c_ammo; 
-                        HUDMSG_PLAIN, 2, CR_WHITE, 0.5, 0.85, 0.1);
-                } else {
-                    HudMessage(s:"\\cR EMPTY - FIND AMMO"; 
-                        HUDMSG_PLAIN, 2, CR_WHITE, 0.5, 0.85, 0.1);
-                }
-            }
+                carrier_idx = (c_ammo * 20) / {carrier_bar_max_ammo};
+                if (carrier_idx < 0) carrier_idx = 0;
+                if (carrier_idx > 20) carrier_idx = 20;
+                carrier_bar = "";
+                switch (carrier_idx) {{
+                    {carrier_bar_switch_str}
+                }}
+                HudMessage(s:"AMMO ", s:carrier_bar;
+                    HUDMSG_PLAIN, 2, CR_WHITE, 0.5, 0.97, 0.1);
+            }}
             Delay(1);
-        }
+        }}
         """
         acs.add_script(ScriptType.VOID, script_hud, number=10)
 
@@ -348,17 +365,27 @@ class AmmoCarrierScenario(Scenario):
         # DEATH scripts are more reliable than polling actor health/TIDs because
         # player actors can disappear or retag before an OPEN script observes them.
         acs.add_script(ScriptType.DEATH, """
-        Delay(1);
         Exit_Normal(0);
         """, number=8)
 
         # Script 5: Force Freeze
-        acs.add_script(ScriptType.VOID, "SetActorVelocity(0, 0, 0, 0, FALSE, FALSE); while(TRUE) { SetActorVelocity(0, 0, 0, 0, FALSE, FALSE); Delay(1); }", number=5)
+        acs.add_script(ScriptType.VOID, """
+        int self_tid = ActivatorTID();
+        while(TRUE) {
+            if (self_tid > 0 && ThingCount(T_NONE, self_tid) <= 0) {
+                break;
+            }
+            SetActorVelocity(0, 0, 0, 0, FALSE, FALSE);
+            Delay(1);
+        }
+        """, number=5)
         
         # Script 998: Kill Reward
         acs.add_script(ScriptType.VOID, """
-        SetActivatorToTarget(0); // Killer
-        if (PlayerNumber() == 0) { // If Shooter killed it
+        // Enemy deaths happen during active stepping; guard the killer-target
+        // handoff so missing targets just skip the reward instead of touching
+        // player state from an invalid activator context.
+        if (SetActivatorToTarget(0) && PlayerNumber() == 0) { // If Shooter killed it
              // Heal Shooter
              if (ThingCount(T_NONE, 100) > 0) {
                  GiveActorInventory(100, "HealthBonus", 10);
