@@ -400,7 +400,7 @@ class SmartEnemiesScenario(Scenario):
             "int dead_tid = ActivatorTID(); int cleanup_tid = dead_tid + 5000; Thing_ChangeTID(0, cleanup_tid); Delay(35*2); Thing_Remove(cleanup_tid);",
             number=998
         )
-        acs.add_script(ScriptType.DEATH, "Exit_Normal(0);", number=999)
+        acs.add_script(ScriptType.DEATH, "Delay(1); Exit_Normal(0);", number=999)
         
         builder.map_data.scripts = acs.to_code()
         try:

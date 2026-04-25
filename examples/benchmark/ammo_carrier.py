@@ -244,7 +244,7 @@ class AmmoCarrierScenario(Scenario):
                 
                 // Role Indicator (Red Square)
                 HudMessage(s:"[ DEFENDER ]"; 
-                    HUDMSG_PLAIN, 1, CR_RED, 0.5, 1.0, 0.1);
+                    HUDMSG_PLAIN, 1, CR_RED, 0.5, 0.0, 0.1);
                 
                 // Vital Stats
                 int hp = GetActorProperty(0, APROP_Health);
@@ -257,7 +257,7 @@ class AmmoCarrierScenario(Scenario):
                 
                 // Role Indicator (Green Square)
                 HudMessage(s:"[ RUNNER ]"; 
-                    HUDMSG_PLAIN, 1, CR_GREEN, 0.5, 1.0, 0.1);
+                    HUDMSG_PLAIN, 1, CR_GREEN, 0.5, 0.0, 0.1);
                 
                 // Carry Status
                 int c_ammo = CheckInventory("Clip");
@@ -269,7 +269,7 @@ class AmmoCarrierScenario(Scenario):
                     {carrier_bar_switch_str}
                 }}
                 HudMessage(s:"AMMO ", s:carrier_bar;
-                    HUDMSG_PLAIN, 2, CR_WHITE, 0.5, 0.97, 0.1);
+                    HUDMSG_PLAIN, 2, CR_WHITE, 0.5, 1.0, 0.1);
             }}
             Delay(1);
         }}
@@ -365,6 +365,7 @@ class AmmoCarrierScenario(Scenario):
         # DEATH scripts are more reliable than polling actor health/TIDs because
         # player actors can disappear or retag before an OPEN script observes them.
         acs.add_script(ScriptType.DEATH, """
+        Delay(1);
         Exit_Normal(0);
         """, number=8)
 

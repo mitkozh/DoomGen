@@ -325,6 +325,7 @@ ACTOR ForageBonus : CustomInventory 15040 {
                 hp = hp - {hp_drain};
                 SetActorProperty({player_tid}, APROP_Health, hp);
                 if (hp <= 0) {{
+                    Delay(1);
                     Exit_Normal(0);
                 }}
             }}"""

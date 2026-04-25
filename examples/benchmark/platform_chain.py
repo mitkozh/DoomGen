@@ -797,6 +797,7 @@ function int PcAdvanceCheckpoint(int current_idx, int safe_idx) {{
                     pc_level_reached_global = min_lvl;
                     pc_route_progress_global = joint_progress_fixed;
                     if (min_lvl >= {route_last_idx}) {{
+                        Delay(1);
                         Exit_Normal(0);
                     }}
                 }} else {{

@@ -563,6 +563,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
     }}
 
     script "EndGame" (void) {{
+        Delay(1);
         Exit_Normal(0);
     }}
 
