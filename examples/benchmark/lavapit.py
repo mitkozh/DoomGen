@@ -14,12 +14,12 @@ class LavaPitScenario(Scenario):
         return {
             "seed": 42,
             "random_seed_on_generate": True,
-            "num_platforms": 5,
-            "max_players": 4,
-            "platform_width_min": 236,
-            "platform_width_max": 320,
-            "platform_depth_min": 164,
-            "platform_depth_max": 232,
+            "num_platforms": 20,
+            "max_players": 2,
+            "platform_width_min": 320,
+            "platform_width_max": 420,
+            "platform_depth_min": 220,
+            "platform_depth_max": 300,
             "gap_min": 280,
             "gap_max": 420,
             "lane_jitter": 86,
@@ -29,8 +29,8 @@ class LavaPitScenario(Scenario):
             "platform_floor_height": 0,
             "lava_height": -80,
             "lava_damage": 100,
-            "poll_tics": 4,
-            "runtime_jitter_tics": 2,
+            "poll_tics": 1,
+            "runtime_jitter_tics": 0,
             "seeds_per_platform": 1000,
         }
 
@@ -40,8 +40,8 @@ class LavaPitScenario(Scenario):
             raise ValueError("num_platforms must be in range [3, 200]")
 
         max_players = int(self.config["max_players"])
-        if max_players < 1 or max_players > 4:
-            raise ValueError("max_players must be in range [1, 4]")
+        if max_players < 1 or max_players > 2:
+            raise ValueError("max_players must be in range [1, 2]")
 
         if int(self.config["platform_width_min"]) < 96:
             raise ValueError("platform_width_min must be >= 96")
@@ -213,9 +213,11 @@ class LavaPitScenario(Scenario):
         green_plate_tag_base = 9300
         red_plate_tag_base = 9500
         outer_ceiling_height = 512
-        outer_ceiling_texture = "RROCK16"
-        platform_floor_texture = "FLOOR4_8"
-        platform_wall_texture = "METAL2"
+        outer_ceiling_texture = "CEIL5_2"
+        platform_floor_texture = "FLOOR5_1"
+        goal_floor_texture = "CEIL5_2"
+        bridge_floor_texture = "FLAT5_4"
+        platform_wall_texture = "STARTAN3"
 
         builder.add_area(
             name="LavaSea",
@@ -227,7 +229,7 @@ class LavaPitScenario(Scenario):
             wall_texture="ASHWALL2",
             lower_texture="ASHWALL2",
             upper_texture="ASHWALL2",
-            light_level=156,
+            light_level=200,
             tag=lava_tag,
             mode="overwrite",
         )
@@ -235,25 +237,27 @@ class LavaPitScenario(Scenario):
 
         for i, spec in enumerate(platform_specs):
             name = f"Platform_{i:02d}"
+            is_goal_platform = i == num_platforms - 1
             builder.add_area(
                 name=name,
                 shape=(spec["x"], spec["y"], spec["width"], spec["depth"]),
                 floor_height=platform_floor_height,
                 ceiling_height=outer_ceiling_height,
-                floor_texture=platform_floor_texture,
+                floor_texture=goal_floor_texture if is_goal_platform else platform_floor_texture,
                 ceiling_texture=outer_ceiling_texture,
                 wall_texture=platform_wall_texture,
                 lower_texture=platform_wall_texture,
                 upper_texture=platform_wall_texture,
-                light_level=188,
+                light_level=252 if is_goal_platform else 232,
                 tag=7000 + i,
                 mode="overwrite",
             )
             platform_names.append(name)
 
         bridge_tags: List[int] = []
-        green_plate_tags_for_bridge: List[int] = []
-        red_plate_tags_for_bridge: List[int] = []
+        green_plate_tags_for_bridge: List[List[int]] = []
+        red_plate_tags_for_bridge: List[List[int]] = []
+        plate_candidate_count = 4
 
         for i in range(num_platforms - 1):
             left = platform_specs[i]
@@ -277,49 +281,75 @@ class LavaPitScenario(Scenario):
                 wall_texture=platform_wall_texture,
                 lower_texture=platform_wall_texture,
                 upper_texture=platform_wall_texture,
-                light_level=156,
+                light_level=176,
                 tag=bridge_tag,
                 mode="overwrite",
             )
             bridge_tags.append(bridge_tag)
 
-            green_plate_tags_for_bridge.append(green_plate_tag_base + i)
-            red_plate_tags_for_bridge.append(red_plate_tag_base + i)
+            green_plate_tags_for_bridge.append(
+                [green_plate_tag_base + (i * plate_candidate_count) + variant for variant in range(plate_candidate_count)]
+            )
+            red_plate_tags_for_bridge.append(
+                [red_plate_tag_base + (i * plate_candidate_count) + variant for variant in range(plate_candidate_count)]
+            )
 
         plate_size = 72 if num_platforms >= 60 else 56
+        plate_y_spread_limit = 48
         for i, spec in enumerate(platform_specs):
             x = spec["x"]
             y = spec["y"]
-            x_offset = max(22, int(spec["width"] * 0.22))
-            y_offset = max(14, int(spec["depth"] * 0.14))
+            half_width = spec["width"] // 2
+            half_depth = spec["depth"] // 2
+            safe_x_margin = plate_size // 2 + 28
+            safe_y_margin = plate_size // 2 + 28
+            bridge_half_margin = plate_size // 2 + 20
+            right_inner_x = max(bridge_half_margin, int(spec["width"] * 0.12))
+            right_outer_x = max(right_inner_x, half_width - safe_x_margin)
+            y_extent = max(0, half_depth - safe_y_margin)
+            y_offset = min(plate_y_spread_limit, max(18, y_extent // 2))
+            green_positions = [
+                (x + right_inner_x, y - y_offset),
+                (x + right_inner_x, y + y_offset),
+                (x + right_outer_x, y - y_offset),
+                (x + right_outer_x, y + y_offset),
+            ]
+            red_positions = [
+                (x - right_inner_x, y - y_offset),
+                (x - right_inner_x, y + y_offset),
+                (x - right_outer_x, y - y_offset),
+                (x - right_outer_x, y + y_offset),
+            ]
 
             if i < num_platforms - 1:
-                builder.add_area(
-                    name=f"GreenPlate_{i:02d}",
-                    shape=(x + x_offset, y - y_offset, plate_size, plate_size),
-                    floor_height=platform_floor_height + 2,
-                    ceiling_height=outer_ceiling_height,
-                    floor_texture="CEIL5_1",
-                    ceiling_texture=outer_ceiling_texture,
-                    wall_texture="METAL2",
-                    light_level=220,
-                    tag=green_plate_tag_base + i,
-                    mode="overwrite",
-                )
+                for variant, (px, py) in enumerate(green_positions):
+                    builder.add_area(
+                        name=f"GreenPlate_{i:02d}_v{variant}",
+                        shape=(px, py, plate_size, plate_size),
+                        floor_height=platform_floor_height,
+                        ceiling_height=outer_ceiling_height,
+                        floor_texture=platform_floor_texture,
+                        ceiling_texture=outer_ceiling_texture,
+                        wall_texture=platform_wall_texture,
+                        light_level=232,
+                        tag=green_plate_tags_for_bridge[i][variant],
+                        mode="overwrite",
+                    )
 
             if i > 0:
-                builder.add_area(
-                    name=f"RedPlate_{i:02d}",
-                    shape=(x - x_offset, y + y_offset, plate_size, plate_size),
-                    floor_height=platform_floor_height + 2,
-                    ceiling_height=outer_ceiling_height,
-                    floor_texture="CEIL5_1",
-                    ceiling_texture=outer_ceiling_texture,
-                    wall_texture="METAL2",
-                    light_level=220,
-                    tag=red_plate_tag_base + (i - 1),
-                    mode="overwrite",
-                )
+                for variant, (px, py) in enumerate(red_positions):
+                    builder.add_area(
+                        name=f"RedPlate_{i:02d}_v{variant}",
+                        shape=(px, py, plate_size, plate_size),
+                        floor_height=platform_floor_height,
+                        ceiling_height=outer_ceiling_height,
+                        floor_texture=platform_floor_texture,
+                        ceiling_texture=outer_ceiling_texture,
+                        wall_texture=platform_wall_texture,
+                        light_level=232,
+                        tag=red_plate_tags_for_bridge[i - 1][variant],
+                        mode="overwrite",
+                    )
 
         self._auto_connect_touching_areas(builder)
 
@@ -375,12 +405,10 @@ class LavaPitScenario(Scenario):
 
         bridge_blocks: List[str] = []
         for i, bridge_tag in enumerate(bridge_tags):
-            green_tag = green_plate_tags_for_bridge[i]
-            red_tag = red_plate_tags_for_bridge[i]
             count_checks = "\n".join(
                 [
-                    f"hold_{i} += ThingCountSector(0, {1000 + p}, {green_tag});\n"
-                    f"hold_{i} += ThingCountSector(0, {1000 + p}, {red_tag});"
+                    f"hold_{i} += ThingCountSector(0, {1000 + p}, green_active_tag[{i}]);\n"
+                    f"hold_{i} += ThingCountSector(0, {1000 + p}, red_active_tag[{i}]);"
                     for p in range(max_players)
                 ]
             )
@@ -390,67 +418,185 @@ class LavaPitScenario(Scenario):
             {count_checks}
 
             if (hold_{i} > 0) {{
+                if (active_bridge < {i + 1}) active_bridge = {i + 1};
                 if (bridge_state[{i}] != 1) {{
                     bridge_state[{i}] = 1;
-                    int speed_up_{i} = 24 + Random(0, 10);
-                    Floor_MoveToValue({bridge_tag}, speed_up_{i}, {platform_floor_height}, 0);
-                    ChangeFloor({bridge_tag}, "{platform_floor_texture}");
+                    Floor_MoveToValue({bridge_tag}, 96, {platform_floor_height}, 0);
+                    ChangeFloor({bridge_tag}, "{bridge_floor_texture}");
                     Sector_SetDamage({bridge_tag}, 0, 0);
-                    Light_ChangeToValue({bridge_tag}, 208);
+                    Light_ChangeToValue({bridge_tag}, 248);
                 }}
             }} else {{
                 if (bridge_state[{i}] != 0) {{
                     bridge_state[{i}] = 0;
-                    int speed_down_{i} = 52 + Random(0, 20);
-                    Floor_MoveToValue({bridge_tag}, speed_down_{i}, {lava_height}, 0);
+                    Floor_MoveToValue({bridge_tag}, 160, {lava_height}, 0);
                     ChangeFloor({bridge_tag}, "LAVA1");
                     Sector_SetDamage({bridge_tag}, {lava_damage}, 14);
-                    Light_ChangeToValue({bridge_tag}, 156);
+                    Light_ChangeToValue({bridge_tag}, 176);
                 }}
             }}
             """
             bridge_blocks.append(block)
 
         green_color_lines = "\n".join(
-            [f"Sector_SetColor({tag}, 24, 180, 32);" for tag in green_plate_tags_for_bridge]
-        )
-        red_color_lines = "\n".join(
-            [f"Sector_SetColor({tag}, 200, 44, 44);" for tag in red_plate_tags_for_bridge]
-        )
-        platform_reached_lines = "\n".join(
             [
-                "int reached_platform = 1;",
-                *[
-                    (
-                        f"if (ThingCountSector(0, {1000 + p}, {7000 + i}) > 0 && reached_platform < {i + 1}) "
-                        f"reached_platform = {i + 1};"
-                    )
-                    for i in range(num_platforms)
-                    for p in range(max_players)
-                ],
-                "lavapit_platform_reached_global = reached_platform;",
+                "\n".join(
+                    [
+                        f"Floor_MoveToValue({tag}, 96, {platform_floor_height}, 0);"
+                        f"\nChangeFloor({tag}, \"{platform_floor_texture}\");"
+                        f"\nLight_ChangeToValue({tag}, 232);"
+                        for tag in tags
+                    ]
+                )
+                for tags in green_plate_tags_for_bridge
             ]
         )
+        red_color_lines = "\n".join(
+            [
+                "\n".join(
+                    [
+                        f"Floor_MoveToValue({tag}, 96, {platform_floor_height}, 0);"
+                        f'\nChangeFloor({tag}, "{platform_floor_texture}");'
+                        f"\nLight_ChangeToValue({tag}, 232);"
+                        for tag in tags
+                    ]
+                )
+                for tags in red_plate_tags_for_bridge
+            ]
+        )
+        goal_color_line = f"Sector_SetColor({7000 + num_platforms - 1}, 88, 156, 220);"
+        plate_randomization_lines: List[str] = []
+        for i in range(len(bridge_tags)):
+            green_tags = green_plate_tags_for_bridge[i]
+            red_tags = red_plate_tags_for_bridge[i]
+            green_branch = " ".join(
+                [
+                    f'if (green_roll_{i} == {variant}) green_active_tag[{i}] = {tag};'
+                    for variant, tag in enumerate(green_tags)
+                ]
+            )
+            red_branch = " ".join(
+                [
+                    f'if (red_roll_{i} == {variant}) red_active_tag[{i}] = {tag};'
+                    for variant, tag in enumerate(red_tags)
+                ]
+            )
+            green_active_visuals = " ".join(
+                [
+                    (
+                        f'if (green_active_tag[{i}] == {tag}) {{ Floor_MoveToValue({tag}, 64, {platform_floor_height + 2}, 0); '
+                        f'ChangeFloor({tag}, "FLAT23"); Sector_SetColor({tag}, 0, 255, 0); Light_ChangeToValue({tag}, 248); }}'
+                    )
+                    for tag in green_tags
+                ]
+            )
+            red_active_visuals = " ".join(
+                [
+                    (
+                        f'if (red_active_tag[{i}] == {tag}) {{ Floor_MoveToValue({tag}, 64, {platform_floor_height + 2}, 0); '
+                        f'ChangeFloor({tag}, "FLAT23"); Sector_SetColor({tag}, 255, 0, 0); Light_ChangeToValue({tag}, 248); }}'
+                    )
+                    for tag in red_tags
+                ]
+            )
+            plate_randomization_lines.append(
+                f"""
+                int green_roll_{i} = Random(0, {plate_candidate_count - 1});
+                int red_roll_{i} = Random(0, {plate_candidate_count - 1});
+                {green_branch}
+                {red_branch}
+                {green_active_visuals}
+                {red_active_visuals}
+                """
+            )
+        best_platform_update_lines: List[str] = []
+        best_var_names = [
+            "lavapit_p1_best_platform",
+            "lavapit_p2_best_platform",
+        ]
+        for p in range(max_players):
+            tid = 1000 + p
+            best_var = best_var_names[p]
+            current_platform_lines = [
+                f"int p{p}_platform = 0;",
+                f"if (PlayerInGame({p}) && ThingCount(T_NONE, {tid}) > 0) {{",
+            ]
+            current_platform_lines.extend(
+                [
+                    (
+                        f"    if (ThingCountSector(0, {tid}, {7000 + i}) > 0 && "
+                        f"p{p}_platform < {i + 1}) p{p}_platform = {i + 1};"
+                    )
+                    for i in range(num_platforms)
+                ]
+            )
+            current_platform_lines.extend(
+                [
+                    f"    if (p{p}_platform > {best_var}) {best_var} = p{p}_platform;",
+                    "    active_players += 1;",
+                    "    if (have_joint == 0) {",
+                    f"        joint_platform = {best_var};",
+                    "        have_joint = 1;",
+                    f"    }} else if ({best_var} < joint_platform) {{",
+                    f"        joint_platform = {best_var};",
+                    "    }",
+                    f"    if ({best_var} > lead_platform) lead_platform = {best_var};",
+                    "}",
+                ]
+            )
+            best_platform_update_lines.append("\n".join(current_platform_lines))
 
+        acs.add_global_var("lavapit_joint_best_platform", 57, "int")
         acs.add_global_var("lavapit_platform_reached_global", 58, "int")
+        acs.add_global_var("lavapit_active_bridge_global", 59, "int")
+        acs.add_global_var("lavapit_success_flag", 60, "int")
+        acs.add_global_var("lavapit_p1_best_platform", 61, "int")
+        acs.add_global_var("lavapit_p2_best_platform", 62, "int")
+        acs.add_global_var("lavapit_goal_platform", 63, "int")
 
         open_script = f"""
         int bridge_state[{len(bridge_tags)}];
+        int green_active_tag[{len(bridge_tags)}];
+        int red_active_tag[{len(bridge_tags)}];
         int i;
 
         for (i = 0; i < {len(bridge_tags)}; i++) {{
             bridge_state[i] = -1;
+            green_active_tag[i] = 0;
+            red_active_tag[i] = 0;
         }}
 
         Sector_SetDamage({lava_tag}, {lava_damage}, 14);
         {green_color_lines}
         {red_color_lines}
-        lavapit_platform_reached_global = 1;
+        {goal_color_line}
+        {' '.join(plate_randomization_lines)}
+        lavapit_joint_best_platform = 0;
+        lavapit_platform_reached_global = 0;
+        lavapit_active_bridge_global = 0;
+        lavapit_success_flag = 0;
+        lavapit_p1_best_platform = 0;
+        lavapit_p2_best_platform = 0;
+        lavapit_goal_platform = {num_platforms};
 
         while (TRUE)
         {{
+            int active_players = 0;
+            int joint_platform = 0;
+            int lead_platform = 0;
+            int have_joint = 0;
+            int active_bridge = 0;
             {' '.join(bridge_blocks)}
-            {platform_reached_lines}
+            {'\n'.join(best_platform_update_lines)}
+            if (have_joint == 0) joint_platform = 0;
+            lavapit_joint_best_platform = joint_platform;
+            lavapit_platform_reached_global = lead_platform;
+            lavapit_active_bridge_global = active_bridge;
+            if (lavapit_success_flag == 0 && active_players > 0 && joint_platform >= {num_platforms}) {{
+                lavapit_success_flag = 1;
+                Delay(1);
+                Exit_Normal(0);
+            }}
             Delay({poll_tics} + Random(0, {runtime_jitter_tics}));
         }}
         """
@@ -488,5 +634,5 @@ class LavaPitScenario(Scenario):
 if __name__ == "__main__":
     output = "examples/benchmark/output/lavapit.wad"
     os.makedirs(os.path.dirname(output), exist_ok=True)
-    scenario = LavaPitScenario(config={"seed": random.randint(0, 999999)})
+    scenario = LavaPitScenario()
     scenario.generate(output)

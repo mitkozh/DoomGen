@@ -589,10 +589,10 @@ while (true)
         print(f"WAD written to {output_path}")
 
 
-def create_coop_puzzle(num_zones: int = 10) -> None:
-    scenario = CoopPuzzleScenario(config={"num_zones": num_zones}, name="coop_puzzle")
+def create_coop_puzzle() -> None:
+    scenario = CoopPuzzleScenario(name="coop_puzzle")
     scenario.generate("examples/benchmark/output/coop_puzzle.wad")
 
 
 if __name__ == "__main__":
-    create_coop_puzzle(num_zones=10)
+    create_coop_puzzle()
