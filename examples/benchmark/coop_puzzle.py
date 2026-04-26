@@ -29,6 +29,7 @@ class CoopPuzzleScenario(Scenario):
             "plate_texture": "CEIL5_1",
             "highlight_texture_a": "AQF044",
             "highlight_texture_b": "AQF038",
+            "light_level": 224,
         }
 
     def validate_config(self) -> None:
@@ -437,6 +438,7 @@ while (true)
         door_texture = cfg["door_texture"]
         window_texture = cfg["window_texture"]
         plate_texture = cfg["plate_texture"]
+        light_level = int(cfg["light_level"])
 
         builder = self._make_builder(seed)
         acs = self._make_acs(num_zones)
@@ -457,6 +459,7 @@ while (true)
                     floor_texture=floor_texture,
                     ceiling_texture=ceiling_texture,
                     wall_texture=wall_texture,
+                    light_level=light_level,
                     tag=zone_tag,
                 )
                 metadata["zones"][zone_idx][lane] = zone_name
@@ -492,6 +495,7 @@ while (true)
                         floor_texture=sync_floor_texture,
                         ceiling_texture=ceiling_texture,
                         wall_texture=wall_texture,
+                        light_level=light_level,
                         tag=sync_tag,
                     )
                     builder.connect_adjacent(self._zone_name(zone_idx, lane), plate_name, ConnectionType.OPEN, silent=False)
@@ -518,6 +522,7 @@ while (true)
                             floor_texture=plate_texture,
                             ceiling_texture=ceiling_texture,
                             wall_texture=wall_texture,
+                            light_level=light_level,
                             tag=plate_tag,
                         )
                         builder.connect_adjacent(self._zone_name(zone_idx, lane), plate_name, ConnectionType.OPEN, silent=False)
@@ -545,6 +550,7 @@ while (true)
                     wall_texture=door_texture,
                     floor_texture=door_texture,
                     ceiling_texture=door_texture,
+                    light_level=light_level,
                 )
                 door_tag = self._lane_door_tag(pair_idx, lane)
                 builder.graph.get_area(door_id).config.tag = door_tag
