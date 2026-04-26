@@ -135,6 +135,9 @@ class CoopPuzzleScenario(Scenario):
         acs.add_global_var("zone", 1, "int")
         acs.add_global_var("plate_state", 2, "int")
         acs.add_global_var("room_type", 3, "int")
+        acs.add_global_var("zone_p1", 4, "int")
+        acs.add_global_var("zone_p2", 5, "int")
+        acs.add_global_var("zone_limit", 6, "int")
         acs.add_global_code(
             f"""
 int active_plate[{num_zones + 1}];
@@ -293,6 +296,8 @@ int door_pair;
 int plate_tag;
 int door_tag;
 int sync_active;
+int p1_zone;
+int p2_zone;
 
 Delay(5);
 
@@ -305,19 +310,25 @@ SetActivator(0, AAPTR_NULL);
 zone = 0;
 plate_state = 0;
 room_type = 0;
+zone_p1 = 0;
+zone_p2 = 0;
+zone_limit = {num_zones};
 
 while (true)
 {{
     new_zone = 0;
     plate = 0;
+    p1_zone = 0;
+    p2_zone = 0;
 
     for (z = 201; z <= {200 + num_zones}; z++)
     {{
-        if (ThingCountSector(T_NONE, 1, z) > 0 || ThingCountSector(T_NONE, 2, z) > 0)
-        {{
-            new_zone = z - 200;
-        }}
+        if (ThingCountSector(T_NONE, 1, z) > 0) p1_zone = z - 200;
+        if (ThingCountSector(T_NONE, 2, z) > 0) p2_zone = z - 200;
     }}
+
+    if (p1_zone > new_zone) new_zone = p1_zone;
+    if (p2_zone > new_zone) new_zone = p2_zone;
 
     for (i = 1; i <= {num_zones}; i++)
     {{
@@ -328,13 +339,14 @@ while (true)
             plate_tag = 100 + i;
             p1_on = ThingCountSector(T_NONE, 1, plate_tag) > 0;
             p2_on = ThingCountSector(T_NONE, 2, plate_tag) > 0;
+            if (p1_on && i > p1_zone) p1_zone = i;
+            if (p2_on && i > p2_zone) p2_zone = i;
             sync_active = (p1_on && p2_on);
 
             if (sync_active)
             {{
                 plate = 1;
                 sync_timer[i] = 105;
-                if (new_zone == 0) new_zone = i;
             }}
 
             if (sync_timer[i] > 0)
@@ -357,11 +369,12 @@ while (true)
 
         p1_on = ThingCountSector(T_NONE, 1, plate_tag) > 0;
         p2_on = ThingCountSector(T_NONE, 2, plate_tag) > 0;
+        if (p1_on && i > p1_zone) p1_zone = i;
+        if (p2_on && i > p2_zone) p2_zone = i;
 
         if (p1_on || p2_on)
         {{
             plate = 1;
-            if (new_zone == 0) new_zone = i;
         }}
 
         if (plate_in_b_zone[i] == 1)
@@ -382,6 +395,11 @@ while (true)
             Door_Close(door_tag, 64, 0);
         }}
     }}
+
+    if (p1_zone > zone_p1) zone_p1 = p1_zone;
+    if (p2_zone > zone_p2) zone_p2 = p2_zone;
+    if (zone_p1 > new_zone) new_zone = zone_p1;
+    if (zone_p2 > new_zone) new_zone = zone_p2;
 
     if (new_zone > 0)
     {{
