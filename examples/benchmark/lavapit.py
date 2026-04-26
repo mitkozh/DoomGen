@@ -546,13 +546,13 @@ class LavaPitScenario(Scenario):
             )
             best_platform_update_lines.append("\n".join(current_platform_lines))
 
-        acs.add_global_var("lavapit_joint_best_platform", 57, "int")
-        acs.add_global_var("lavapit_platform_reached_global", 58, "int")
-        acs.add_global_var("lavapit_active_bridge_global", 59, "int")
-        acs.add_global_var("lavapit_success_flag", 60, "int")
-        acs.add_global_var("lavapit_p1_best_platform", 61, "int")
-        acs.add_global_var("lavapit_p2_best_platform", 62, "int")
-        acs.add_global_var("lavapit_goal_platform", 63, "int")
+        acs.add_global_var("lavapit_joint_best_platform", 11, "int")
+        acs.add_global_var("lavapit_platform_reached_global", 12, "int")
+        acs.add_global_var("lavapit_active_bridge_global", 13, "int")
+        acs.add_global_var("lavapit_success_flag", 14, "int")
+        acs.add_global_var("lavapit_p1_best_platform", 15, "int")
+        acs.add_global_var("lavapit_p2_best_platform", 16, "int")
+        acs.add_global_var("lavapit_goal_platform", 17, "int")
 
         open_script = f"""
         int bridge_state[{len(bridge_tags)}];

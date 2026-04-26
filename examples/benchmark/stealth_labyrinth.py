@@ -15,10 +15,10 @@ class StealthLabyrinthScenario(Scenario):
             "hub_size": 448,
             "room_size": 384,
             "corridor_width": 4,
-            "num_relays": 3,
-            "relay_hold_tics": 36,
-            "extract_hold_tics": 44,
-            "guards_per_relay": 2,
+            "num_relays": 1,
+            "relay_hold_tics": 16,
+            "extract_hold_tics": 20,
+            "guards_per_relay": 1,
         }
 
     @staticmethod
@@ -42,7 +42,7 @@ class StealthLabyrinthScenario(Scenario):
         extract_hold_tics = int(cfg["extract_hold_tics"])
         guards_per_relay = int(cfg["guards_per_relay"])
 
-        room_gap = room_size + 288
+        room_gap = room_size + 160
         relay_gap = room_gap * 2
         bounds_half = relay_gap + room_size + 800
         builder = ProceduralMapBuilder(
@@ -53,7 +53,8 @@ class StealthLabyrinthScenario(Scenario):
 
         decorate_str = """
 ACTOR ShadowGuard : DoomImp 14001 {
-  Health 40
+  Health 30
+  Speed 6
   DropItem "None"
   States {
   Death:
@@ -70,17 +71,25 @@ ACTOR ShadowGuard : DoomImp 14001 {
 """
         builder.wad_writer.add_lump("DECORATE", decorate_str.encode("utf-8"))
 
+        wing_specs = [
+            ("North", (0, room_gap), (0, relay_gap), 101, 102),
+            ("West", (-room_gap, 0), (-relay_gap, 0), 103, 104),
+            ("East", (room_gap, 0), (relay_gap, 0), 105, 106),
+        ]
+        active_wings = wing_specs[:num_relays]
+
         room_specs: List[Tuple[str, Tuple[int, int], int, str, str, str]] = [
             ("Hub", (0, 0), 100, "FLOOR4_8", "CEIL3_5", "STONE2"),
-            ("North Approach", (0, room_gap), 101, "FLOOR4_8", "CEIL3_5", "METAL1"),
-            ("North Relay", (0, relay_gap), 102, "FLOOR5_2", "TLITE6_6", "STONE3"),
-            ("West Approach", (-room_gap, 0), 103, "FLOOR4_8", "CEIL3_5", "METAL1"),
-            ("West Relay", (-relay_gap, 0), 104, "FLOOR5_2", "TLITE6_6", "STONE3"),
-            ("East Approach", (room_gap, 0), 105, "FLOOR4_8", "CEIL3_5", "METAL1"),
-            ("East Relay", (relay_gap, 0), 106, "FLOOR5_2", "TLITE6_6", "STONE3"),
             ("Extraction Hall", (0, -room_gap), 107, "FLOOR4_8", "CEIL3_5", "COMPBLUE"),
             ("Extraction Chamber", (0, -relay_gap), 108, "FLOOR0_1", "TLITE6_5", "COMPBLUE"),
         ]
+        for wing_name, approach_center, relay_center, approach_tag, relay_tag in active_wings:
+            room_specs.extend(
+                [
+                    (f"{wing_name} Approach", approach_center, approach_tag, "FLOOR4_8", "CEIL3_5", "METAL1"),
+                    (f"{wing_name} Relay", relay_center, relay_tag, "FLOOR5_2", "TLITE6_6", "STONE3"),
+                ]
+            )
 
         area_centers: Dict[str, Tuple[int, int]] = {}
         room_tags: Dict[str, int] = {}
@@ -100,16 +109,13 @@ ACTOR ShadowGuard : DoomImp 14001 {
                 tag=tag,
             )
 
-        corridor_specs = [
-            ("Hub", "North Approach", 200),
-            ("North Approach", "North Relay", 201),
-            ("Hub", "West Approach", 202),
-            ("West Approach", "West Relay", 203),
-            ("Hub", "East Approach", 204),
-            ("East Approach", "East Relay", 205),
-            ("Hub", "Extraction Hall", 206),
-            ("Extraction Hall", "Extraction Chamber", 207),
-        ]
+        corridor_specs = [("Hub", "Extraction Hall", 206), ("Extraction Hall", "Extraction Chamber", 207)]
+        next_corridor_tag = 200
+        for wing_name, _, _, _, _ in active_wings:
+            corridor_specs.append(("Hub", f"{wing_name} Approach", next_corridor_tag))
+            next_corridor_tag += 1
+            corridor_specs.append((f"{wing_name} Approach", f"{wing_name} Relay", next_corridor_tag))
+            next_corridor_tag += 1
         corridor_centers: List[Tuple[int, int, int]] = []
         for room_a, room_b, tag in corridor_specs:
             corridor_name = builder.add_corridor(
@@ -132,7 +138,7 @@ ACTOR ShadowGuard : DoomImp 14001 {
         builder.add_thing(ThingType.PLAYER3_START, -40, 32, angle=90)
         builder.add_thing(ThingType.PLAYER4_START, 40, 32, angle=90)
 
-        relay_names = ["North Relay", "West Relay", "East Relay"][:num_relays]
+        relay_names = [f"{wing_name} Relay" for wing_name, _, _, _, _ in active_wings]
         relay_specs: List[Dict[str, Any]] = []
         for relay_idx, relay_name in enumerate(relay_names):
             cx, cy = area_centers[relay_name]
@@ -157,14 +163,10 @@ ACTOR ShadowGuard : DoomImp 14001 {
             builder.add_thing(ThingType.MEDIKIT, cx, cy + 80)
             builder.add_thing(ThingType.FLOOR_LAMP, cx, cy + 120)
 
-            for _ in range(max(1, guards_per_relay - 1)):
+            for _ in range(max(0, guards_per_relay)):
                 pt = builder.get_random_point_in_area(relay["name"], safe=False)
                 if pt is not None:
                     builder.add_thing(14001, pt[0], pt[1])
-
-            pt = builder.get_random_point_in_area(relay["approach"], safe=False)
-            if pt is not None:
-                builder.add_thing(14001, pt[0], pt[1])
 
         builder.add_thing(ThingType.TECH_LAMP, extraction_center[0] - 96, extraction_center[1] + 24)
         builder.add_thing(ThingType.TECH_LAMP, extraction_center[0] + 96, extraction_center[1] + 24)
@@ -196,13 +198,37 @@ ACTOR ShadowGuard : DoomImp 14001 {
         script_enter = """
         int pn = PlayerNumber();
         Thing_ChangeTID(0, 1000 + pn);
+        if (pn == 0) {
+            sl_relay_done_0 = 0;
+            sl_relay_done_1 = 0;
+            sl_relay_done_2 = 0;
+            sl_relay_progress_0 = 0;
+            sl_relay_progress_1 = 0;
+            sl_relay_progress_2 = 0;
+            sl_extract_progress = 0;
+            sl_extract_progress_user = 0;
+            sl_team_kills = 0;
+            sl_p1_alive = 0;
+            sl_p2_alive = 0;
+            sl_distance = 0;
+            sl_relays_done = 0;
+            sl_active_objective = -1;
+            sl_objective_progress = 0;
+            sl_extraction_unlocked = 0;
+            sl_sync_state = 0;
+            sl_extract_progress_flag = 0;
+        }
         SetActorProperty(0, APROP_Health, 100);
         ClearInventory();
         if (pn == 1) {
             GiveInventory("Shotgun", 1);
-            GiveInventory("Shell", 40);
+            GiveInventory("Shell", 60);
             SetWeapon("Shotgun");
         }
+        SetHudSize(320, 240, 1);
+        SetFont("SMALLFONT");
+        HudMessage(s:"\\cG--------------------"; HUDMSG_PLAIN, 1, CR_WHITE, 160.0, 6.0, 0.0);
+        HudMessage(s:"\\cG--------------------"; HUDMSG_PLAIN, 2, CR_WHITE, 160.0, 200.0, 0.0);
         ACS_ExecuteAlways(10, 0, 0, 0, 0);
         """
         acs.add_script(ScriptType.ENTER, script_enter, number=1)
