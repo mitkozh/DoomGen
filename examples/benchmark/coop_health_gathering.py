@@ -466,6 +466,7 @@ ACTOR ChainNodeHot {
         chg_total_spawned_kits_global = 0;
         chg_chain_stretches_global = 0;
         chg_dragged_links_flash_global = 0;
+        chg_total_pickups_global = 0;
         
         while (TRUE) {{
             {chain_block}
