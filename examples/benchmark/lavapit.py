@@ -86,6 +86,7 @@ class LavaPitScenario(Scenario):
             "first_handoff_platform_depth": 360,
             "first_handoff_gap": 160,
             "first_handoff_plate_scale": 1.9,
+            "bridge0_support_latch_tics": 105,
             "platform_width_min": 360,
             "platform_width_max": 460,
             "platform_depth_min": 240,
@@ -148,6 +149,8 @@ class LavaPitScenario(Scenario):
             raise ValueError("first_handoff_gap must be >= 112")
         if float(self.config["first_handoff_plate_scale"]) < 1.0:
             raise ValueError("first_handoff_plate_scale must be >= 1.0")
+        if int(self.config["bridge0_support_latch_tics"]) < 0:
+            raise ValueError("bridge0_support_latch_tics must be >= 0")
 
     def _choose_seed(self) -> int:
         cfg = self.config
@@ -207,6 +210,7 @@ class LavaPitScenario(Scenario):
         first_handoff_platform_depth = int(cfg["first_handoff_platform_depth"])
         first_handoff_gap = int(cfg["first_handoff_gap"])
         first_handoff_plate_scale = float(cfg["first_handoff_plate_scale"])
+        bridge0_support_latch_tics = int(cfg["bridge0_support_latch_tics"])
         lane_jitter = int(cfg["lane_jitter"])
         lane_span = int(cfg["lane_span"])
         curve_amplitude = int(cfg["curve_amplitude"])
@@ -366,6 +370,8 @@ class LavaPitScenario(Scenario):
         red_plate_positions_for_bridge: List[List[Tuple[int, int]]] = []
         green_plate_tags_for_bridge: List[List[int]] = []
         red_plate_tags_for_bridge: List[List[int]] = []
+        green_plate_sizes_for_bridge: List[int] = []
+        red_plate_sizes_for_bridge: List[int] = []
         max_plate_candidate_count = 4
 
         for i in range(num_platforms - 1):
@@ -426,6 +432,8 @@ class LavaPitScenario(Scenario):
             bootstrap_only = i < bootstrap_bridges
             green_plate_size = first_handoff_green_plate_size if i == 0 else plate_size
             red_plate_size = first_handoff_red_plate_size if i == 0 else plate_size
+            green_plate_sizes_for_bridge.append(green_plate_size)
+            red_plate_sizes_for_bridge.append(red_plate_size)
             _, green_positions = self._plate_layout_for_platform(
                 platform_specs[i],
                 plate_size=green_plate_size,
@@ -458,6 +466,7 @@ class LavaPitScenario(Scenario):
             y = spec["y"]
 
             if i < num_platforms - 1:
+                green_plate_size = green_plate_sizes_for_bridge[i]
                 for variant, ((offset_x, offset_y), tag) in enumerate(
                     zip(green_plate_positions_for_bridge[i], green_plate_tags_for_bridge[i])
                 ):
@@ -465,7 +474,7 @@ class LavaPitScenario(Scenario):
                     py = y + offset_y
                     builder.add_area(
                         name=f"GreenPlate_{i:02d}_v{variant}",
-                        shape=(px, py, plate_size, plate_size),
+                        shape=(px, py, green_plate_size, green_plate_size),
                         floor_height=platform_floor_height,
                         ceiling_height=outer_ceiling_height,
                         floor_texture=platform_floor_texture,
@@ -477,6 +486,7 @@ class LavaPitScenario(Scenario):
                     )
 
             if i > 0:
+                red_plate_size = red_plate_sizes_for_bridge[i - 1]
                 for variant, ((offset_x, offset_y), tag) in enumerate(
                     zip(red_plate_positions_for_bridge[i - 1], red_plate_tags_for_bridge[i - 1])
                 ):
@@ -484,7 +494,7 @@ class LavaPitScenario(Scenario):
                     py = y + offset_y
                     builder.add_area(
                         name=f"RedPlate_{i:02d}_v{variant}",
-                        shape=(px, py, plate_size, plate_size),
+                        shape=(px, py, red_plate_size, red_plate_size),
                         floor_height=platform_floor_height,
                         ceiling_height=outer_ceiling_height,
                         floor_texture=platform_floor_texture,
@@ -564,9 +574,22 @@ class LavaPitScenario(Scenario):
                 ]
             )
 
+            if i == 0 and bridge0_support_latch_tics > 0:
+                support_logic = f"""
+                if (hold_{i} > 0) {{
+                    bridge_support_timer[{i}] = {bridge0_support_latch_tics};
+                }} else if (bridge_support_timer[{i}] > 0) {{
+                    bridge_support_timer[{i}]--;
+                    hold_{i} = 1;
+                }}
+                """
+            else:
+                support_logic = ""
+
             block = f"""
             int hold_{i} = 0;
             {count_checks}
+            {support_logic}
 
             if (hold_{i} > 0) {{
                 if (active_bridge < {i + 1}) active_bridge = {i + 1};
@@ -736,15 +759,18 @@ class LavaPitScenario(Scenario):
         acs.add_global_var("lavapit_frontier_hold", 20, "int")
         acs.add_global_var("lavapit_frontier_bridge_occ", 21, "int")
         acs.add_global_var("lavapit_frontier_exit_hold", 22, "int")
+        acs.add_global_var("lavapit_frontier_bridge_on", 23, "int")
 
         open_script = f"""
         int bridge_state[{len(bridge_tags)}];
+        int bridge_support_timer[{len(bridge_tags)}];
         int green_active_tag[{len(bridge_tags)}];
         int red_active_tag[{len(bridge_tags)}];
         int i;
 
         for (i = 0; i < {len(bridge_tags)}; i++) {{
             bridge_state[i] = -1;
+            bridge_support_timer[i] = 0;
             green_active_tag[i] = 0;
             red_active_tag[i] = 0;
         }}
@@ -766,6 +792,7 @@ class LavaPitScenario(Scenario):
         lavapit_frontier_hold = 0;
         lavapit_frontier_bridge_occ = 0;
         lavapit_frontier_exit_hold = 0;
+        lavapit_frontier_bridge_on = 0;
 
         while (TRUE)
         {{
@@ -776,6 +803,7 @@ class LavaPitScenario(Scenario):
             int active_bridge = 0;
             int frontier_entry_held = 0;
             int frontier_exit_held = 0;
+            int frontier_bridge_on = 0;
             int frontier_bridge_occupied = 0;
             {' '.join(bridge_blocks)}
             {'\n'.join(best_platform_update_lines)}
@@ -785,6 +813,7 @@ class LavaPitScenario(Scenario):
                 {frontier_probe_lines}
                 if (frontier_entry_held > 0) frontier_entry_held = 1;
                 if (frontier_exit_held > 0) frontier_exit_held = 1;
+                if (bridge_state[frontier_idx] == 1) frontier_bridge_on = 1;
                 if (frontier_bridge_occupied > 0) frontier_bridge_occupied = 1;
             }}
             lavapit_joint_best_platform = joint_platform;
@@ -793,6 +822,7 @@ class LavaPitScenario(Scenario):
             lavapit_frontier_hold = frontier_entry_held;
             lavapit_frontier_bridge_occ = frontier_bridge_occupied;
             lavapit_frontier_exit_hold = frontier_exit_held;
+            lavapit_frontier_bridge_on = frontier_bridge_on;
             if (lavapit_success_flag == 0 && active_players > 0 && joint_platform >= {num_platforms}) {{
                 lavapit_success_flag = 1;
                 Delay(1);
