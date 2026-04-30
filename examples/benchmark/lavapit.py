@@ -10,22 +10,92 @@ from doomgen.logic.acs_builder import ACSBuilder, ScriptType
 
 
 class LavaPitScenario(Scenario):
+    @staticmethod
+    def _max_plate_size_for_platform(spec: Dict[str, int], fallback: int) -> int:
+        return max(
+            fallback,
+            min(
+                spec["width"] // 2 - 20,
+                spec["depth"] - 24,
+            ),
+        )
+
+    @staticmethod
+    def _plate_layout_for_platform(
+        spec: Dict[str, int],
+        plate_size: int,
+        bootstrap_only: bool,
+        max_candidate_count: int = 4,
+    ) -> Tuple[List[Tuple[int, int]], List[Tuple[int, int]]]:
+        half_width = spec["width"] // 2
+        half_depth = spec["depth"] // 2
+
+        center_pad_x = 8
+        edge_pad_x = 12
+        edge_pad_y = 12
+        min_vertical_gap = 4
+
+        min_x = (plate_size // 2) + center_pad_x
+        max_x = half_width - (plate_size // 2) - edge_pad_x
+        if max_x < min_x:
+            fallback_x = max(plate_size // 2, half_width - (plate_size // 2))
+            x_centers = [fallback_x]
+        elif max_x - min_x >= plate_size:
+            x_centers = [min_x, max_x]
+        else:
+            x_centers = [(min_x + max_x) // 2]
+
+        max_y = half_depth - (plate_size // 2) - edge_pad_y
+        min_row_offset = (plate_size // 2) + min_vertical_gap
+        if max_y >= min_row_offset:
+            row_offset = min(max_y, max(min_row_offset, int(spec["depth"] * 0.18)))
+            y_centers = [-row_offset, row_offset]
+        else:
+            y_centers = [0]
+
+        bootstrap_positions = [(x_centers[-1], 0)]
+
+        if bootstrap_only:
+            return bootstrap_positions, bootstrap_positions
+
+        randomized_positions: List[Tuple[int, int]] = []
+        if len(x_centers) == 2 and len(y_centers) == 2:
+            randomized_positions = [
+                (x_centers[0], y_centers[0]),
+                (x_centers[1], y_centers[0]),
+                (x_centers[0], y_centers[1]),
+                (x_centers[1], y_centers[1]),
+            ]
+        elif len(x_centers) == 2:
+            randomized_positions = [(x_centers[0], 0), (x_centers[1], 0)]
+        elif len(y_centers) == 2:
+            randomized_positions = [(x_centers[0], y_centers[0]), (x_centers[0], y_centers[1])]
+        else:
+            randomized_positions = bootstrap_positions
+
+        return bootstrap_positions, randomized_positions[:max_candidate_count]
+
     def get_default_config(self) -> Dict[str, Any]:
         return {
             "seed": 42,
             "random_seed_on_generate": True,
-            "num_platforms": 20,
+            "num_platforms": 12,
             "max_players": 2,
-            "platform_width_min": 320,
-            "platform_width_max": 420,
-            "platform_depth_min": 220,
-            "platform_depth_max": 300,
-            "gap_min": 280,
-            "gap_max": 420,
-            "lane_jitter": 86,
-            "lane_span": 560,
-            "curve_amplitude": 420,
-            "curve_waves": 2,
+            "bootstrap_bridges": 3,
+            "first_handoff_platform_width": 560,
+            "first_handoff_platform_depth": 360,
+            "first_handoff_gap": 160,
+            "first_handoff_plate_scale": 1.9,
+            "platform_width_min": 360,
+            "platform_width_max": 460,
+            "platform_depth_min": 240,
+            "platform_depth_max": 320,
+            "gap_min": 260,
+            "gap_max": 360,
+            "lane_jitter": 48,
+            "lane_span": 360,
+            "curve_amplitude": 220,
+            "curve_waves": 1,
             "platform_floor_height": 0,
             "lava_height": -80,
             "lava_damage": 100,
@@ -68,6 +138,16 @@ class LavaPitScenario(Scenario):
             raise ValueError("runtime_jitter_tics must be >= 0")
         if int(self.config["seeds_per_platform"]) < 300:
             raise ValueError("seeds_per_platform must be >= 300")
+        if int(self.config["bootstrap_bridges"]) < 0:
+            raise ValueError("bootstrap_bridges must be >= 0")
+        if int(self.config["first_handoff_platform_width"]) < 128:
+            raise ValueError("first_handoff_platform_width must be >= 128")
+        if int(self.config["first_handoff_platform_depth"]) < 120:
+            raise ValueError("first_handoff_platform_depth must be >= 120")
+        if int(self.config["first_handoff_gap"]) < 112:
+            raise ValueError("first_handoff_gap must be >= 112")
+        if float(self.config["first_handoff_plate_scale"]) < 1.0:
+            raise ValueError("first_handoff_plate_scale must be >= 1.0")
 
     def _choose_seed(self) -> int:
         cfg = self.config
@@ -110,6 +190,7 @@ class LavaPitScenario(Scenario):
 
         num_platforms = int(cfg["num_platforms"])
         max_players = int(cfg["max_players"])
+        bootstrap_bridges = min(max(0, int(cfg.get("bootstrap_bridges", 0))), max(0, num_platforms - 1))
         platform_floor_height = int(cfg["platform_floor_height"])
         lava_height = int(cfg["lava_height"])
         lava_damage = int(cfg["lava_damage"])
@@ -122,6 +203,10 @@ class LavaPitScenario(Scenario):
         platform_depth_max = int(cfg["platform_depth_max"])
         gap_min = int(cfg["gap_min"])
         gap_max = int(cfg["gap_max"])
+        first_handoff_platform_width = int(cfg["first_handoff_platform_width"])
+        first_handoff_platform_depth = int(cfg["first_handoff_platform_depth"])
+        first_handoff_gap = int(cfg["first_handoff_gap"])
+        first_handoff_plate_scale = float(cfg["first_handoff_plate_scale"])
         lane_jitter = int(cfg["lane_jitter"])
         lane_span = int(cfg["lane_span"])
         curve_amplitude = int(cfg["curve_amplitude"])
@@ -148,16 +233,33 @@ class LavaPitScenario(Scenario):
         )
         eff_gap_min = max(112, int(round(gap_min * gap_scale)))
         eff_gap_max = max(eff_gap_min, int(round(gap_max * gap_scale)))
+        eff_first_handoff_platform_width = max(
+            eff_platform_width_min, int(round(first_handoff_platform_width * size_scale))
+        )
+        eff_first_handoff_platform_depth = max(
+            eff_platform_depth_min, int(round(first_handoff_platform_depth * size_scale))
+        )
+        eff_first_handoff_gap = max(112, int(round(first_handoff_gap * gap_scale)))
         eff_lane_jitter = max(0, int(round(lane_jitter * lane_scale)))
         eff_lane_span = max(120, int(round(lane_span * lane_scale)))
         eff_curve_amplitude = max(0, int(round(curve_amplitude * lane_scale)))
 
         platform_specs: List[Dict[str, int]] = []
         gaps = [rng.randint(eff_gap_min, eff_gap_max) for _ in range(num_platforms - 1)]
+        if gaps:
+            gaps[0] = min(gaps[0], eff_first_handoff_gap)
+        if bootstrap_bridges > 0:
+            easy_gap_max = min(eff_gap_max, eff_gap_min + 48)
+            for i in range(min(bootstrap_bridges, len(gaps))):
+                gaps[i] = rng.randint(eff_gap_min, easy_gap_max)
+            gaps[0] = min(gaps[0], eff_first_handoff_gap)
 
         for i in range(num_platforms):
             width = rng.randint(eff_platform_width_min, eff_platform_width_max)
             depth = rng.randint(eff_platform_depth_min, eff_platform_depth_max)
+            if i < 2:
+                width = max(width, eff_first_handoff_platform_width)
+                depth = max(depth, eff_first_handoff_platform_depth)
 
             if i == 0:
                 x = 0
@@ -165,11 +267,16 @@ class LavaPitScenario(Scenario):
             else:
                 prev = platform_specs[i - 1]
                 x = int(prev["x"] + (prev["width"] // 2) + gaps[i - 1] + (width // 2))
-                t = i / max(1, num_platforms - 1)
-                curve_offset = int(
-                    math.sin(t * 2.0 * math.pi * curve_waves) * eff_curve_amplitude
-                )
-                random_walk_y = prev["y"] + rng.randint(-eff_lane_jitter, eff_lane_jitter)
+                if i <= bootstrap_bridges:
+                    curve_offset = 0
+                    early_jitter = min(eff_lane_jitter, 24)
+                    random_walk_y = prev["y"] + rng.randint(-early_jitter, early_jitter)
+                else:
+                    t = i / max(1, num_platforms - 1)
+                    curve_offset = int(
+                        math.sin(t * 2.0 * math.pi * curve_waves) * eff_curve_amplitude
+                    )
+                    random_walk_y = prev["y"] + rng.randint(-eff_lane_jitter, eff_lane_jitter)
                 y = int((2 * random_walk_y + curve_offset) / 3)
                 y = max(-eff_lane_span, min(eff_lane_span, y))
 
@@ -255,9 +362,11 @@ class LavaPitScenario(Scenario):
             platform_names.append(name)
 
         bridge_tags: List[int] = []
+        green_plate_positions_for_bridge: List[List[Tuple[int, int]]] = []
+        red_plate_positions_for_bridge: List[List[Tuple[int, int]]] = []
         green_plate_tags_for_bridge: List[List[int]] = []
         red_plate_tags_for_bridge: List[List[int]] = []
-        plate_candidate_count = 4
+        max_plate_candidate_count = 4
 
         for i in range(num_platforms - 1):
             left = platform_specs[i]
@@ -287,42 +396,73 @@ class LavaPitScenario(Scenario):
             )
             bridge_tags.append(bridge_tag)
 
+        base_plate_size = 72 if num_platforms >= 60 else 80
+        min_half_width = min(spec["width"] // 2 for spec in platform_specs)
+        min_depth = min(spec["depth"] for spec in platform_specs)
+        plate_size = max(
+            24,
+            min(
+                base_plate_size,
+                min_half_width - 8,
+                min_depth - 24,
+            ),
+        )
+        green_plate_positions_for_bridge = []
+        red_plate_positions_for_bridge = []
+        green_plate_tags_for_bridge = []
+        red_plate_tags_for_bridge = []
+        first_handoff_green_plate_size = plate_size
+        first_handoff_red_plate_size = plate_size
+        if num_platforms > 1:
+            first_handoff_green_plate_size = min(
+                int(round(plate_size * first_handoff_plate_scale)),
+                self._max_plate_size_for_platform(platform_specs[0], plate_size),
+            )
+            first_handoff_red_plate_size = min(
+                int(round(plate_size * first_handoff_plate_scale)),
+                self._max_plate_size_for_platform(platform_specs[1], plate_size),
+            )
+        for i in range(num_platforms - 1):
+            bootstrap_only = i < bootstrap_bridges
+            green_plate_size = first_handoff_green_plate_size if i == 0 else plate_size
+            red_plate_size = first_handoff_red_plate_size if i == 0 else plate_size
+            _, green_positions = self._plate_layout_for_platform(
+                platform_specs[i],
+                plate_size=green_plate_size,
+                bootstrap_only=bootstrap_only,
+                max_candidate_count=max_plate_candidate_count,
+            )
+            _, red_positions = self._plate_layout_for_platform(
+                platform_specs[i + 1],
+                plate_size=red_plate_size,
+                bootstrap_only=bootstrap_only,
+                max_candidate_count=max_plate_candidate_count,
+            )
+            green_plate_positions_for_bridge.append(green_positions)
+            red_plate_positions_for_bridge.append(red_positions)
             green_plate_tags_for_bridge.append(
-                [green_plate_tag_base + (i * plate_candidate_count) + variant for variant in range(plate_candidate_count)]
+                [
+                    green_plate_tag_base + (i * max_plate_candidate_count) + variant
+                    for variant in range(len(green_positions))
+                ]
             )
             red_plate_tags_for_bridge.append(
-                [red_plate_tag_base + (i * plate_candidate_count) + variant for variant in range(plate_candidate_count)]
+                [
+                    red_plate_tag_base + (i * max_plate_candidate_count) + variant
+                    for variant in range(len(red_positions))
+                ]
             )
 
-        plate_size = 72 if num_platforms >= 60 else 56
-        plate_y_spread_limit = 48
         for i, spec in enumerate(platform_specs):
             x = spec["x"]
             y = spec["y"]
-            half_width = spec["width"] // 2
-            half_depth = spec["depth"] // 2
-            safe_x_margin = plate_size // 2 + 28
-            safe_y_margin = plate_size // 2 + 28
-            bridge_half_margin = plate_size // 2 + 20
-            right_inner_x = max(bridge_half_margin, int(spec["width"] * 0.12))
-            right_outer_x = max(right_inner_x, half_width - safe_x_margin)
-            y_extent = max(0, half_depth - safe_y_margin)
-            y_offset = min(plate_y_spread_limit, max(18, y_extent // 2))
-            green_positions = [
-                (x + right_inner_x, y - y_offset),
-                (x + right_inner_x, y + y_offset),
-                (x + right_outer_x, y - y_offset),
-                (x + right_outer_x, y + y_offset),
-            ]
-            red_positions = [
-                (x - right_inner_x, y - y_offset),
-                (x - right_inner_x, y + y_offset),
-                (x - right_outer_x, y - y_offset),
-                (x - right_outer_x, y + y_offset),
-            ]
 
             if i < num_platforms - 1:
-                for variant, (px, py) in enumerate(green_positions):
+                for variant, ((offset_x, offset_y), tag) in enumerate(
+                    zip(green_plate_positions_for_bridge[i], green_plate_tags_for_bridge[i])
+                ):
+                    px = x + offset_x
+                    py = y + offset_y
                     builder.add_area(
                         name=f"GreenPlate_{i:02d}_v{variant}",
                         shape=(px, py, plate_size, plate_size),
@@ -332,12 +472,16 @@ class LavaPitScenario(Scenario):
                         ceiling_texture=outer_ceiling_texture,
                         wall_texture=platform_wall_texture,
                         light_level=232,
-                        tag=green_plate_tags_for_bridge[i][variant],
+                        tag=tag,
                         mode="overwrite",
                     )
 
             if i > 0:
-                for variant, (px, py) in enumerate(red_positions):
+                for variant, ((offset_x, offset_y), tag) in enumerate(
+                    zip(red_plate_positions_for_bridge[i - 1], red_plate_tags_for_bridge[i - 1])
+                ):
+                    px = x - offset_x
+                    py = y + offset_y
                     builder.add_area(
                         name=f"RedPlate_{i:02d}_v{variant}",
                         shape=(px, py, plate_size, plate_size),
@@ -347,7 +491,7 @@ class LavaPitScenario(Scenario):
                         ceiling_texture=outer_ceiling_texture,
                         wall_texture=platform_wall_texture,
                         light_level=232,
-                        tag=red_plate_tags_for_bridge[i - 1][variant],
+                        tag=tag,
                         mode="overwrite",
                     )
 
@@ -360,10 +504,17 @@ class LavaPitScenario(Scenario):
             dx, dy = spawn_offsets[i]
             builder.add_thing("MAP_SPOT", sx + dx, sy + dy, tid=100 + i)
 
-        builder.add_thing("PLAYER1_START", sx - 28, sy - 18, angle=0)
-        builder.add_thing("PLAYER2_START", sx + 28, sy + 18, angle=0)
-        builder.add_thing("PLAYER3_START", sx - 28, sy + 18, angle=0)
-        builder.add_thing("PLAYER4_START", sx + 28, sy - 18, angle=0)
+        if num_platforms > 1:
+            next_dx = platform_specs[1]["x"] - platform_specs[0]["x"]
+            next_dy = platform_specs[1]["y"] - platform_specs[0]["y"]
+            spawn_angle = int(round(math.degrees(math.atan2(next_dy, next_dx)))) % 360
+        else:
+            spawn_angle = 0
+
+        builder.add_thing("PLAYER1_START", sx - 28, sy - 18, angle=spawn_angle)
+        builder.add_thing("PLAYER2_START", sx + 28, sy + 18, angle=spawn_angle)
+        builder.add_thing("PLAYER3_START", sx - 28, sy + 18, angle=spawn_angle)
+        builder.add_thing("PLAYER4_START", sx + 28, sy - 18, angle=spawn_angle)
 
         acs = ACSBuilder()
         acs.add_include("zcommon.acs")
@@ -481,6 +632,19 @@ class LavaPitScenario(Scenario):
                     for variant, tag in enumerate(red_tags)
                 ]
             )
+            if len(green_tags) == 1:
+                plate_assignment_lines = (
+                    f"green_active_tag[{i}] = {green_tags[0]};\n"
+                    f"red_active_tag[{i}] = {red_tags[0]};"
+                )
+            else:
+                roll_max = len(green_tags) - 1
+                plate_assignment_lines = (
+                    f"int green_roll_{i} = Random(0, {roll_max});\n"
+                    f"int red_roll_{i} = Random(0, {roll_max});\n"
+                    f"{green_branch}\n"
+                    f"{red_branch}"
+                )
             green_active_visuals = " ".join(
                 [
                     (
@@ -501,10 +665,7 @@ class LavaPitScenario(Scenario):
             )
             plate_randomization_lines.append(
                 f"""
-                int green_roll_{i} = Random(0, {plate_candidate_count - 1});
-                int red_roll_{i} = Random(0, {plate_candidate_count - 1});
-                {green_branch}
-                {red_branch}
+                {plate_assignment_lines}
                 {green_active_visuals}
                 {red_active_visuals}
                 """
@@ -514,9 +675,14 @@ class LavaPitScenario(Scenario):
             "lavapit_p1_best_platform",
             "lavapit_p2_best_platform",
         ]
+        current_var_names = [
+            "lavapit_p1_current_platform",
+            "lavapit_p2_current_platform",
+        ]
         for p in range(max_players):
             tid = 1000 + p
             best_var = best_var_names[p]
+            current_var = current_var_names[p]
             current_platform_lines = [
                 f"int p{p}_platform = 0;",
                 f"if (PlayerInGame({p}) && ThingCount(T_NONE, {tid}) > 0) {{",
@@ -532,6 +698,7 @@ class LavaPitScenario(Scenario):
             )
             current_platform_lines.extend(
                 [
+                    f"    {current_var} = p{p}_platform;",
                     f"    if (p{p}_platform > {best_var}) {best_var} = p{p}_platform;",
                     "    active_players += 1;",
                     "    if (have_joint == 0) {",
@@ -544,7 +711,18 @@ class LavaPitScenario(Scenario):
                     "}",
                 ]
             )
+            current_platform_lines.append(f"else {{ {current_var} = 0; }}")
             best_platform_update_lines.append("\n".join(current_platform_lines))
+        frontier_probe_lines = "\n".join(
+            [
+                (
+                    f"frontier_entry_held += ThingCountSector(0, {1000 + p}, green_active_tag[frontier_idx]);\n"
+                    f"frontier_exit_held += ThingCountSector(0, {1000 + p}, red_active_tag[frontier_idx]);\n"
+                    f"frontier_bridge_occupied += ThingCountSector(0, {1000 + p}, {bridge_tag_base} + frontier_idx);"
+                )
+                for p in range(max_players)
+            ]
+        )
 
         acs.add_global_var("lavapit_joint_best_platform", 11, "int")
         acs.add_global_var("lavapit_platform_reached_global", 12, "int")
@@ -553,6 +731,11 @@ class LavaPitScenario(Scenario):
         acs.add_global_var("lavapit_p1_best_platform", 15, "int")
         acs.add_global_var("lavapit_p2_best_platform", 16, "int")
         acs.add_global_var("lavapit_goal_platform", 17, "int")
+        acs.add_global_var("lavapit_p1_current_platform", 18, "int")
+        acs.add_global_var("lavapit_p2_current_platform", 19, "int")
+        acs.add_global_var("lavapit_frontier_hold", 20, "int")
+        acs.add_global_var("lavapit_frontier_bridge_occ", 21, "int")
+        acs.add_global_var("lavapit_frontier_exit_hold", 22, "int")
 
         open_script = f"""
         int bridge_state[{len(bridge_tags)}];
@@ -578,6 +761,11 @@ class LavaPitScenario(Scenario):
         lavapit_p1_best_platform = 0;
         lavapit_p2_best_platform = 0;
         lavapit_goal_platform = {num_platforms};
+        lavapit_p1_current_platform = 0;
+        lavapit_p2_current_platform = 0;
+        lavapit_frontier_hold = 0;
+        lavapit_frontier_bridge_occ = 0;
+        lavapit_frontier_exit_hold = 0;
 
         while (TRUE)
         {{
@@ -586,12 +774,25 @@ class LavaPitScenario(Scenario):
             int lead_platform = 0;
             int have_joint = 0;
             int active_bridge = 0;
+            int frontier_entry_held = 0;
+            int frontier_exit_held = 0;
+            int frontier_bridge_occupied = 0;
             {' '.join(bridge_blocks)}
             {'\n'.join(best_platform_update_lines)}
             if (have_joint == 0) joint_platform = 0;
+            if (joint_platform > 0 && joint_platform < {num_platforms}) {{
+                int frontier_idx = joint_platform - 1;
+                {frontier_probe_lines}
+                if (frontier_entry_held > 0) frontier_entry_held = 1;
+                if (frontier_exit_held > 0) frontier_exit_held = 1;
+                if (frontier_bridge_occupied > 0) frontier_bridge_occupied = 1;
+            }}
             lavapit_joint_best_platform = joint_platform;
             lavapit_platform_reached_global = lead_platform;
             lavapit_active_bridge_global = active_bridge;
+            lavapit_frontier_hold = frontier_entry_held;
+            lavapit_frontier_bridge_occ = frontier_bridge_occupied;
+            lavapit_frontier_exit_hold = frontier_exit_held;
             if (lavapit_success_flag == 0 && active_players > 0 && joint_platform >= {num_platforms}) {{
                 lavapit_success_flag = 1;
                 Delay(1);

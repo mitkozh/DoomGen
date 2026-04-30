@@ -79,3 +79,6 @@ doomgen = { workspace = true, editable = true }
 dev = [
     "doomgen[dev]",
 ]
+
+[tool.ruff]
+target-version = "py312"
