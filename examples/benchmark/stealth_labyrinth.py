@@ -12,20 +12,64 @@ class StealthLabyrinthScenario(Scenario):
     def get_default_config(self) -> Dict[str, Any]:
         return {
             "seed": 42,
+            "start_room_size": 320,
             "hub_size": 448,
-            "room_size": 384,
+            "num_branches": 3,
+            "rooms_per_branch": 2,
+            "branch_room_width": 416,
+            "branch_room_length": 896,
+            "start_center_y": -560,
+            "branch_offset": 980,
+            "turret_wall_margin": 144,
             "corridor_width": 4,
-            "num_relays": 1,
-            "relay_hold_tics": 16,
-            "extract_hold_tics": 20,
-            "guards_per_relay": 1,
+            "min_enemies_per_room": 1,
+            "max_enemies_per_room": 2,
+            "turret_health": 140,
+            "turret_damage": 2,
         }
+
+    def validate_config(self) -> None:
+        if int(self.config["start_room_size"]) < 192:
+            raise ValueError("start_room_size must be >= 192")
+        if int(self.config["hub_size"]) < 256:
+            raise ValueError("hub_size must be >= 256")
+        if int(self.config["num_branches"]) < 1 or int(self.config["num_branches"]) > 3:
+            raise ValueError("num_branches must be in [1, 3]")
+        if int(self.config["rooms_per_branch"]) < 1:
+            raise ValueError("rooms_per_branch must be >= 1")
+        if int(self.config["branch_room_width"]) < 256:
+            raise ValueError("branch_room_width must be >= 256")
+        if int(self.config["branch_room_length"]) < 512:
+            raise ValueError("branch_room_length must be >= 512")
+        if int(self.config["start_center_y"]) > -192:
+            raise ValueError("start_center_y must stay below the hub")
+        if int(self.config["branch_offset"]) < 640:
+            raise ValueError("branch_offset must be >= 640")
+        if int(self.config["turret_wall_margin"]) < 64:
+            raise ValueError("turret_wall_margin must be >= 64")
+        if int(self.config["corridor_width"]) < 3:
+            raise ValueError("corridor_width must be >= 3")
+        if int(self.config["min_enemies_per_room"]) < 1:
+            raise ValueError("min_enemies_per_room must be >= 1")
+        if int(self.config["max_enemies_per_room"]) < int(self.config["min_enemies_per_room"]):
+            raise ValueError("max_enemies_per_room must be >= min_enemies_per_room")
+        if int(self.config["max_enemies_per_room"]) > 2:
+            raise ValueError("max_enemies_per_room must be <= 2")
+        if int(self.config["turret_health"]) < 40:
+            raise ValueError("turret_health must be >= 40")
+        if int(self.config["turret_damage"]) < 1:
+            raise ValueError("turret_damage must be >= 1")
 
     @staticmethod
     def _square_check(px: str, py: str, cx: int, cy: int, radius: int) -> str:
+        return StealthLabyrinthScenario._rect_check(px, py, cx, cy, radius, radius)
+
+    @staticmethod
+    def _rect_check(px: str, py: str, cx: int, cy: int, half_w: int, half_h: int) -> str:
+        scale = 1 << 16
         return (
-            f"{px} >= {cx - radius} && {px} <= {cx + radius} && "
-            f"{py} >= {cy - radius} && {py} <= {cy + radius}"
+            f"{px} >= {(cx - half_w) * scale} && {px} <= {(cx + half_w) * scale} && "
+            f"{py} >= {(cy - half_h) * scale} && {py} <= {(cy + half_h) * scale}"
         )
 
     def generate(self, output_path: str) -> None:
@@ -34,72 +78,164 @@ class StealthLabyrinthScenario(Scenario):
         random.seed(seed)
         print(f"seed: {seed}")
 
+        start_room_size = int(cfg["start_room_size"])
         hub_size = int(cfg["hub_size"])
-        room_size = cfg["room_size"]
+        num_branches = int(cfg["num_branches"])
+        rooms_per_branch = int(cfg["rooms_per_branch"])
+        branch_room_width = int(cfg["branch_room_width"])
+        branch_room_length = int(cfg["branch_room_length"])
+        start_center_y = int(cfg["start_center_y"])
+        branch_offset = int(cfg["branch_offset"])
+        turret_wall_margin = int(cfg["turret_wall_margin"])
         corridor_width = int(cfg["corridor_width"])
-        num_relays = int(cfg["num_relays"])
-        relay_hold_tics = int(cfg["relay_hold_tics"])
-        extract_hold_tics = int(cfg["extract_hold_tics"])
-        guards_per_relay = int(cfg["guards_per_relay"])
+        min_enemies_per_room = int(cfg["min_enemies_per_room"])
+        max_enemies_per_room = int(cfg["max_enemies_per_room"])
+        turret_health = int(cfg["turret_health"])
+        turret_damage = int(cfg["turret_damage"])
 
-        room_gap = room_size + 160
-        relay_gap = room_gap * 2
-        bounds_half = relay_gap + room_size + 800
+        start_center = (0, start_center_y)
+        hub_center = (0, 0)
+        branch_templates = [
+            {"label": "North", "axis": "y", "sign": 1},
+            {"label": "West", "axis": "x", "sign": -1},
+            {"label": "East", "axis": "x", "sign": 1},
+        ]
+        active_branches = branch_templates[:num_branches]
+        room_step = branch_room_length + 128
+        furthest_branch_extent = branch_offset + (rooms_per_branch - 1) * room_step + branch_room_length
+        bounds_half = max(
+            abs(start_center_y) + start_room_size,
+            furthest_branch_extent,
+            branch_offset + branch_room_width,
+        ) + 512
+
         builder = ProceduralMapBuilder(
             bounds=(-bounds_half, -bounds_half, bounds_half, bounds_half),
-            num_seeds=18000,
+            num_seeds=16000,
             seed=seed,
         )
 
-        decorate_str = """
-ACTOR ShadowGuard : DoomImp 14001 {
-  Health 30
-  Speed 6
-  DropItem "None"
-  States {
+        decorate_str = f"""
+ACTOR SLTurretBolt 16001 {{
+  Radius 6
+  Height 8
+  Speed 18
+  Damage {turret_damage}
+  Projectile
+  +NOGRAVITY
+  +BLOODLESSIMPACT
+  RenderStyle Add
+  Alpha 0.85
+  States {{
+  Spawn:
+    BAL1 AB 4 Bright
+    Loop
   Death:
-    TROO H 8
-    TROO I 8 A_Scream
-    TROO J 6
-    TROO K 6 A_NoBlocking
-    TROO K 0 ACS_ExecuteAlways(998, 0)
-    TROO L 4
-    TROO M 1 A_FadeOut(0.10)
+    BAL1 CDE 4 Bright
+    Stop
+  }}
+}}
+
+ACTOR SLTurretGuard : DoomImp 16000 {{
+  Health {turret_health}
+  Speed 0
+  Radius 24
+  Height 56
+  PainChance 0
+  DropItem "None"
+  +DONTTHRUST
+  +LOOKALLAROUND
+  +MISSILEMORE
+  +MISSILEEVENMORE
+  States {{
+  Spawn:
+    TROO AB 5 A_Look
+    Loop
+  See:
+    TROO A 2 A_Chase
+    Loop
+  Missile:
+    TROO E 0 A_FaceTarget
+    TROO F 0 A_CustomMissile("SLTurretBolt", 32, 0, 0, 0, 0)
+    TROO F 2 Bright
+    TROO F 0 A_CustomMissile("SLTurretBolt", 32, 0, 0, 0, 0)
+    TROO F 2 Bright
+    TROO F 0 A_CustomMissile("SLTurretBolt", 32, 0, 0, 0, 0)
+    TROO G 8
+    Goto See
+  Pain:
+    TROO H 2
+    Goto See
+  Death:
+    TROO I 8
+    TROO J 8 A_Scream
+    TROO K 6
+    TROO L 6 A_NoBlocking
+    TROO M 4
+    TROO N 1 A_FadeOut(0.10)
     Wait
-  }
-}
+  }}
+}}
 """
         builder.wad_writer.add_lump("DECORATE", decorate_str.encode("utf-8"))
 
-        wing_specs = [
-            ("North", (0, room_gap), (0, relay_gap), 101, 102),
-            ("West", (-room_gap, 0), (-relay_gap, 0), 103, 104),
-            ("East", (room_gap, 0), (relay_gap, 0), 105, 106),
+        room_specs: List[Tuple[str, Tuple[int, int], int, int, int, str, str, str]] = [
+            ("Start", start_center, 100, start_room_size, start_room_size, "FLOOR4_8", "CEIL3_5", "STONE2"),
+            ("Hub", hub_center, 101, hub_size, hub_size, "FLOOR4_8", "CEIL3_5", "STONE2"),
         ]
-        active_wings = wing_specs[:num_relays]
+        branch_specs: List[Dict[str, Any]] = []
+        next_room_tag = 102
+        for branch_idx, branch in enumerate(active_branches):
+            room_names: List[str] = []
+            room_tags: List[int] = []
+            room_centers: List[Tuple[int, int]] = []
+            room_dims: List[Tuple[int, int]] = []
+            room_enemy_counts: List[int] = []
 
-        room_specs: List[Tuple[str, Tuple[int, int], int, str, str, str]] = [
-            ("Hub", (0, 0), 100, "FLOOR4_8", "CEIL3_5", "STONE2"),
-            ("Extraction Hall", (0, -room_gap), 107, "FLOOR4_8", "CEIL3_5", "COMPBLUE"),
-            ("Extraction Chamber", (0, -relay_gap), 108, "FLOOR0_1", "TLITE6_5", "COMPBLUE"),
-        ]
-        for wing_name, approach_center, relay_center, approach_tag, relay_tag in active_wings:
-            room_specs.extend(
-                [
-                    (f"{wing_name} Approach", approach_center, approach_tag, "FLOOR4_8", "CEIL3_5", "METAL1"),
-                    (f"{wing_name} Relay", relay_center, relay_tag, "FLOOR5_2", "TLITE6_6", "STONE3"),
-                ]
+            for room_idx in range(rooms_per_branch):
+                offset = branch_offset + room_idx * room_step
+                if branch["axis"] == "y":
+                    center = (0, branch["sign"] * offset)
+                    dims = (branch_room_width, branch_room_length)
+                else:
+                    center = (branch["sign"] * offset, 0)
+                    dims = (branch_room_length, branch_room_width)
+
+                room_name = f'{branch["label"]} Room {room_idx + 1}'
+                room_tag = next_room_tag
+                next_room_tag += 1
+                room_specs.append(
+                    (room_name, center, room_tag, dims[0], dims[1], "FLOOR5_2", "CEIL3_5", "METAL1")
+                )
+                room_names.append(room_name)
+                room_tags.append(room_tag)
+                room_centers.append(center)
+                room_dims.append(dims)
+                if rooms_per_branch == 1:
+                    room_enemy_counts.append(1)
+                else:
+                    room_enemy_counts.append(random.randint(min_enemies_per_room, max_enemies_per_room))
+
+            branch_specs.append(
+                {
+                    "label": branch["label"],
+                    "axis": branch["axis"],
+                    "sign": branch["sign"],
+                    "room_names": room_names,
+                    "room_tags": room_tags,
+                    "room_centers": room_centers,
+                    "room_dims": room_dims,
+                    "room_enemy_counts": room_enemy_counts,
+                    "corr_tags": [],
+                }
             )
 
         area_centers: Dict[str, Tuple[int, int]] = {}
-        room_tags: Dict[str, int] = {}
-        for name, (cx, cy), tag, floor_tex, ceil_tex, wall_tex in room_specs:
+        for name, (cx, cy), tag, width, height, floor_tex, ceil_tex, wall_tex in room_specs:
             area_centers[name] = (cx, cy)
-            room_tags[name] = tag
-            is_hub = name == "Hub"
             builder.add_area(
                 name=name,
-                shape=(cx, cy, hub_size if is_hub else room_size, hub_size if is_hub else room_size),
+                shape=(cx, cy, width, height),
                 floor_height=0,
                 ceiling_height=192,
                 floor_texture=floor_tex,
@@ -109,14 +245,23 @@ ACTOR ShadowGuard : DoomImp 14001 {
                 tag=tag,
             )
 
-        corridor_specs = [("Hub", "Extraction Hall", 206), ("Extraction Hall", "Extraction Chamber", 207)]
-        next_corridor_tag = 200
-        for wing_name, _, _, _, _ in active_wings:
-            corridor_specs.append(("Hub", f"{wing_name} Approach", next_corridor_tag))
-            next_corridor_tag += 1
-            corridor_specs.append((f"{wing_name} Approach", f"{wing_name} Relay", next_corridor_tag))
-            next_corridor_tag += 1
-        corridor_centers: List[Tuple[int, int, int]] = []
+        corridor_specs = [
+            ("Start", "Hub", 200),
+        ]
+        next_corr_tag = 201
+        for branch in branch_specs:
+            corridor_specs.append(("Hub", branch["room_names"][0], next_corr_tag))
+            branch["corr_tags"].append(next_corr_tag)
+            next_corr_tag += 1
+
+            for room_idx in range(1, rooms_per_branch):
+                corridor_specs.append(
+                    (branch["room_names"][room_idx - 1], branch["room_names"][room_idx], next_corr_tag)
+                )
+                branch["corr_tags"].append(next_corr_tag)
+                next_corr_tag += 1
+
+        corridor_centers: Dict[int, Tuple[int, int]] = {}
         for room_a, room_b, tag in corridor_specs:
             corridor_name = builder.add_corridor(
                 room_a,
@@ -128,321 +273,499 @@ ACTOR ShadowGuard : DoomImp 14001 {
                 light_level=0,
             )
             builder.graph.get_area(corridor_name).config.tag = tag
-
             ax, ay = area_centers[room_a]
             bx, by = area_centers[room_b]
-            corridor_centers.append((tag, (ax + bx) // 2, (ay + by) // 2))
+            corridor_centers[tag] = ((ax + bx) // 2, (ay + by) // 2)
 
-        builder.add_thing(ThingType.PLAYER1_START, -40, -48, angle=90)
-        builder.add_thing(ThingType.PLAYER2_START, 40, -48, angle=90)
-        builder.add_thing(ThingType.PLAYER3_START, -40, 32, angle=90)
-        builder.add_thing(ThingType.PLAYER4_START, 40, 32, angle=90)
+        builder.add_thing(ThingType.PLAYER1_START, -40, start_center[1] - 32, angle=90)
+        builder.add_thing(ThingType.PLAYER2_START, 40, start_center[1] - 32, angle=90)
+        builder.add_thing(ThingType.PLAYER3_START, -40, start_center[1] + 32, angle=90)
+        builder.add_thing(ThingType.PLAYER4_START, 40, start_center[1] + 32, angle=90)
 
-        relay_names = [f"{wing_name} Relay" for wing_name, _, _, _, _ in active_wings]
-        relay_specs: List[Dict[str, Any]] = []
-        for relay_idx, relay_name in enumerate(relay_names):
-            cx, cy = area_centers[relay_name]
-            approach_name = relay_name.replace("Relay", "Approach")
-            relay_specs.append(
-                {
-                    "name": relay_name,
-                    "approach": approach_name,
-                    "room_tag": room_tags[relay_name],
-                    "center": (cx, cy),
-                }
-            )
+        # enemy_specs: List[Dict[str, Any]] = []
+        total_enemy_count = 0
+        next_enemy_tid = 3000
+        next_spot_tid = 5000
+        for branch_idx, branch in enumerate(branch_specs):
+            room_checks = []
+            for (cx, cy), (width, height) in zip(branch["room_centers"], branch["room_dims"]):
+                room_checks.append(
+                    self._rect_check("p1x", "p1y", cx, cy, width // 2 + 64, height // 2 + 64)
+                )
 
-        extraction_center = area_centers["Extraction Chamber"]
-        extraction_pad = (extraction_center[0], extraction_center[1] - 96)
+            corr_checks = []
+            for corr_tag in branch["corr_tags"]:
+                corr_center = corridor_centers[corr_tag]
+                corr_checks.append(self._square_check("p1x", "p1y", corr_center[0], corr_center[1], 240))
 
-        for relay in relay_specs:
-            cx, cy = relay["center"]
-            builder.add_thing(ThingType.TECH_LAMP2, cx - 96, cy)
-            builder.add_thing(ThingType.TECH_LAMP2, cx + 96, cy)
-            builder.add_thing(ThingType.BOX_OF_SHELLS, cx, cy - 80)
-            builder.add_thing(ThingType.MEDIKIT, cx, cy + 80)
-            builder.add_thing(ThingType.FLOOR_LAMP, cx, cy + 120)
+            room_enemy_specs: List[List[Dict[str, Any]]] = []
+            for room_idx, ((cx, cy), (width, height), enemy_count) in enumerate(
+                zip(branch["room_centers"], branch["room_dims"], branch["room_enemy_counts"])
+            ):
+                room_enemies: List[Dict[str, Any]] = []
+                if branch["axis"] == "y":
+                    enemy_positions = [
+                        (cx, cy + branch["sign"] * (height // 2 - turret_wall_margin)),
+                        (cx - width // 4, cy + branch["sign"] * (height // 2 - turret_wall_margin - 96)),
+                    ]
+                else:
+                    enemy_positions = [
+                        (cx + branch["sign"] * (width // 2 - turret_wall_margin), cy),
+                        (cx + branch["sign"] * (width // 2 - turret_wall_margin - 96), cy - height // 4),
+                    ]
 
-            for _ in range(max(0, guards_per_relay)):
-                pt = builder.get_random_point_in_area(relay["name"], safe=False)
-                if pt is not None:
-                    builder.add_thing(14001, pt[0], pt[1])
+                for enemy_slot in range(enemy_count):
+                    spot_tid = next_spot_tid
+                    tid = next_enemy_tid
+                    next_spot_tid += 1
+                    next_enemy_tid += 1
+                    total_enemy_count += 1
+                    pos = enemy_positions[min(enemy_slot, len(enemy_positions) - 1)]
+                    builder.add_thing("MAP_SPOT", pos[0], pos[1], tid=spot_tid)
+                    room_enemies.append(
+                        {
+                            "spot_tid": spot_tid,
+                            "tid": tid,
+                            "aim": (cx << 16, cy << 16),
+                            "room_idx": room_idx,
+                        }
+                    )
 
-        builder.add_thing(ThingType.TECH_LAMP, extraction_center[0] - 96, extraction_center[1] + 24)
-        builder.add_thing(ThingType.TECH_LAMP, extraction_center[0] + 96, extraction_center[1] + 24)
-        builder.add_thing(ThingType.TALL_RED_PILLAR, extraction_pad[0], extraction_pad[1])
+                room_enemy_specs.append(room_enemies)
+
+            branch["room_checks"] = room_checks
+            branch["corr_checks"] = corr_checks
+            branch["room_enemy_specs"] = room_enemy_specs
+
+        builder.add_thing(ThingType.TECH_LAMP, start_center[0] - 96, start_center[1] - 32)
+        builder.add_thing(ThingType.TECH_LAMP, start_center[0] + 96, start_center[1] - 32)
+        builder.add_thing(ThingType.TALL_RED_PILLAR, hub_center[0], hub_center[1])
+        for branch in branch_specs:
+            for room_idx, ((cx, cy), (width, height)) in enumerate(zip(branch["room_centers"], branch["room_dims"])):
+                if branch["axis"] == "y":
+                    lamp_a = (cx - min(120, width // 4), cy - min(220, height // 4))
+                    lamp_b = (cx + min(120, width // 4), cy + min(60, height // 6))
+                else:
+                    lamp_a = (cx + min(220, width // 4), cy - min(120, height // 4))
+                    lamp_b = (cx - min(60, width // 6), cy + min(120, height // 4))
+                builder.add_thing(ThingType.FLOOR_LAMP, lamp_a[0], lamp_a[1])
+                builder.add_thing(ThingType.FLOOR_LAMP, lamp_b[0], lamp_b[1])
 
         acs = ACSBuilder()
         acs.add_include("zcommon.acs")
-        acs.add_global_var("sl_relay_done_0", 1, "int")
-        acs.add_global_var("sl_relay_done_1", 2, "int")
-        acs.add_global_var("sl_relay_done_2", 3, "int")
-        acs.add_global_var("sl_relay_progress_0", 4, "int")
-        acs.add_global_var("sl_relay_progress_1", 5, "int")
-        acs.add_global_var("sl_relay_progress_2", 6, "int")
-        acs.add_global_var("sl_extract_progress", 7, "int")
-        acs.add_global_var("sl_extract_progress_user", 8, "int")
-        acs.add_global_var("sl_team_kills", 9, "int")
-        acs.add_global_var("sl_unused_10", 10, "int")
-
+        acs.add_global_var("sl_started", 1, "int")
         acs.add_global_var("sl_p1_alive", 41, "int")
         acs.add_global_var("sl_p2_alive", 42, "int")
-        acs.add_global_var("sl_distance", 43, "int")
-        acs.add_global_var("sl_relays_done", 44, "int")
-        acs.add_global_var("sl_active_objective", 45, "int")
-        acs.add_global_var("sl_objective_progress", 46, "int")
-        acs.add_global_var("sl_extraction_unlocked", 47, "int")
-        acs.add_global_var("sl_sync_state", 48, "int")
-        acs.add_global_var("sl_extract_progress_flag", 49, "int")
+        acs.add_global_var("sl_team_dist", 43, "int")
+        acs.add_global_var("sl_enemies_left", 44, "int")
+        acs.add_global_var("sl_target_lit", 45, "int")
+        acs.add_global_var("sl_enemies_dead", 46, "int")
+        acs.add_global_var("sl_total_enemies", 47, "int")
+        acs.add_global_var("sl_rooms_seen", 48, "int")
+        acs.add_global_var("sl_total_rooms", 49, "int")
+        acs.add_global_var("sl_team_hp", 50, "int")
 
-        script_enter = """
+        enemy_state_init_lines = []
+        branch_light_lines = []
+        branch_logic_lines = []
+        room_seen_init_lines = []
+        for branch_idx, branch in enumerate(branch_specs):
+            lit_var = f"branch_attack_lit_{branch_idx}"
+            active_room_var = f"branch_active_room_{branch_idx}"
+            room_light_lines = []
+            room_seen_case_lines = []
+            room_pending_lines = []
+            room_spawn_lines = []
+            for room_idx, (room_tag, room_check) in enumerate(zip(branch["room_tags"], branch["room_checks"])):
+                seen_var = f"branch_room_seen_{branch_idx}_{room_idx}"
+                room_seen_init_lines.append(f"    int {seen_var} = 0;\n")
+                room_seen_case_lines.append(
+                    f"""
+            if (!{seen_var} && {active_room_var} == {room_idx} && sl_p1_alive && sl_p2_alive && ({room_check})) {{
+                {seen_var} = 1;
+                rooms_seen_count++;
+            }}"""
+                )
+                room_var = f"branch_room_lit_{branch_idx}_{room_idx}"
+                room_light_lines.append(
+                    f"""
+            int {room_var} = 0;
+            if (sl_p1_alive && ({room_check})) {{
+                {room_var} = 1;
+            }}
+            if ({room_var}) {{
+                Light_ChangeToValue({room_tag}, 224);
+            }} else {{
+                Light_ChangeToValue({room_tag}, 0);
+            }}"""
+                )
+            corridor_light_lines = []
+            for corr_idx, (corr_tag, corr_check) in enumerate(zip(branch["corr_tags"], branch["corr_checks"])):
+                corr_var = f"branch_corr_lit_{branch_idx}_{corr_idx}"
+                corridor_light_lines.append(
+                    f"""
+            int {corr_var} = 0;
+            if (sl_p1_alive && ({corr_check})) {{
+                {corr_var} = 1;
+            }}
+            if ({corr_var}) {{
+                Light_ChangeToValue({corr_tag}, 176);
+            }} else {{
+                    Light_ChangeToValue({corr_tag}, 0);
+            }}"""
+                )
+            for room_idx, room_enemies in enumerate(branch["room_enemy_specs"]):
+                room_pending_lines.append(f"\n            int branch_room_pending_{branch_idx}_{room_idx} = 0;")
+                for enemy in room_enemies:
+                    temp_tid = 7000 + enemy["tid"]
+                    spawned_var = f"enemy_spawned_{enemy['tid']}"
+                    dead_var = f"enemy_dead_{enemy['tid']}"
+                    enemy_state_init_lines.append(f"    int {spawned_var} = 0;\n")
+                    enemy_state_init_lines.append(f"    int {dead_var} = 0;\n")
+                    room_pending_lines.append(
+                        f"""
+            if ({spawned_var} && !{dead_var}) {{
+                if (ThingCount(T_NONE, {enemy["tid"]}) <= 0) {{
+                    {dead_var} = 1;
+                }} else if (GetActorProperty({enemy["tid"]}, APROP_Health) <= 0) {{
+                    {dead_var} = 1;
+                }}
+            }}
+            if (!{dead_var}) {{
+                branch_room_pending_{branch_idx}_{room_idx} = 1;
+            }}"""
+                    )
+                    room_spawn_lines.append(
+                        f"""
+            if ({active_room_var} == {room_idx} && !{spawned_var} && !{dead_var}) {{
+                int spawn_ok_{enemy["tid"]} = SpawnSpotFacing("SLTurretGuard", {enemy["spot_tid"]}, {temp_tid});
+                if (spawn_ok_{enemy["tid"]} && ThingCount(T_NONE, {temp_tid}) > 0) {{
+                    Thing_ChangeTID({temp_tid}, {enemy["tid"]});
+                    SetActorProperty({enemy["tid"]}, APROP_Invulnerable, 1);
+                    {spawned_var} = 1;
+                }}
+            }}"""
+                    )
+            branch_light_lines.append(
+                f"""
+            {"".join(room_light_lines)}
+            {"".join(corridor_light_lines)}
+            {"".join(room_pending_lines)}
+            int {active_room_var} = -1;
+"""
+            )
+            for room_idx, _room_enemies in enumerate(branch["room_enemy_specs"]):
+                branch_light_lines.append(
+                    f"""
+            if ({active_room_var} < 0 && branch_room_pending_{branch_idx}_{room_idx}) {{
+                {active_room_var} = {room_idx};
+            }}"""
+                )
+            lit_case_lines = []
+            for room_idx, (room_check, corr_check) in enumerate(zip(branch["room_checks"], branch["corr_checks"])):
+                lit_case_lines.append(
+                    f"""
+            if ({active_room_var} == {room_idx} && sl_p1_alive && (({room_check}) || ({corr_check}))) {{
+                {lit_var} = 1;
+            }}"""
+                )
+            branch_light_lines.append(
+                f"""
+            int {lit_var} = 0;
+            {"".join(room_spawn_lines)}
+            {"".join(room_seen_case_lines)}
+            {"".join(lit_case_lines)}"""
+            )
+            room_logic_lines = []
+            for room_idx, room_enemies in enumerate(branch["room_enemy_specs"]):
+                for enemy in room_enemies:
+                    spawned_var = f"enemy_spawned_{enemy['tid']}"
+                    dead_var = f"enemy_dead_{enemy['tid']}"
+                    room_logic_lines.append(
+                        f"""
+            if (!{dead_var}) {{
+                enemies_left++;
+            }}
+            if ({spawned_var} && !{dead_var}) {{
+                if (ThingCount(T_NONE, {enemy["tid"]}) <= 0) {{
+                    {dead_var} = 1;
+                }} else if (GetActorProperty({enemy["tid"]}, APROP_Health) <= 0) {{
+                    {dead_var} = 1;
+                }}
+            }}
+            if ({spawned_var} && !{dead_var}) {{
+                if ({active_room_var} == {room_idx} && {lit_var}) {{
+                    SetActorProperty({enemy["tid"]}, APROP_Invulnerable, 0);
+                    sl_target_lit = 1;
+
+                    target_tid = 0;
+                    if (sl_p1_alive && sl_p2_alive) {{
+                        int d1_{enemy["tid"]} = SLDist({enemy["aim"][0]}, {enemy["aim"][1]}, p1x, p1y);
+                        int d2_{enemy["tid"]} = SLDist({enemy["aim"][0]}, {enemy["aim"][1]}, p2x, p2y);
+                        if (d2_{enemy["tid"]} < d1_{enemy["tid"]}) {{
+                            target_tid = 1001;
+                        }} else {{
+                            target_tid = 1000;
+                        }}
+                    }} else if (sl_p1_alive) {{
+                        target_tid = 1000;
+                    }} else if (sl_p2_alive) {{
+                        target_tid = 1001;
+                    }}
+
+                    if (target_tid > 0) {{
+                        Thing_Hate({enemy["tid"]}, target_tid, 6);
+                    }}
+                }} else {{
+                    SetActorProperty({enemy["tid"]}, APROP_Invulnerable, 1);
+                }}
+            }}"""
+                    )
+            branch_logic_lines.append("".join(room_logic_lines))
+
+        start_room_check = self._square_check(
+            "p1x", "p1y", start_center[0], start_center[1], start_room_size // 2 + 72
+        )
+        hub_room_check = self._square_check(
+            "p1x", "p1y", hub_center[0], hub_center[1], hub_size // 2 + 72
+        )
+        start_corr_check = self._square_check(
+            "p1x", "p1y", corridor_centers[200][0], corridor_centers[200][1], 220
+        )
+
+        script_setup = """
         int pn = PlayerNumber();
-        Thing_ChangeTID(0, 1000 + pn);
+        int tid = 1000 + pn;
+        Thing_ChangeTID(0, tid);
+
+        SetActorProperty(0, APROP_Health, 100);
+        SetActorProperty(0, APROP_SpawnHealth, 100);
+        SetActorProperty(0, APROP_Speed, 1.0);
+        ClearInventory();
+
         if (pn == 0) {
-            sl_relay_done_0 = 0;
-            sl_relay_done_1 = 0;
-            sl_relay_done_2 = 0;
-            sl_relay_progress_0 = 0;
-            sl_relay_progress_1 = 0;
-            sl_relay_progress_2 = 0;
-            sl_extract_progress = 0;
-            sl_extract_progress_user = 0;
-            sl_team_kills = 0;
+            sl_started = 0;
             sl_p1_alive = 0;
             sl_p2_alive = 0;
-            sl_distance = 0;
-            sl_relays_done = 0;
-            sl_active_objective = -1;
-            sl_objective_progress = 0;
-            sl_extraction_unlocked = 0;
-            sl_sync_state = 0;
-            sl_extract_progress_flag = 0;
+            sl_team_dist = 0;
+            sl_enemies_left = __ENEMY_COUNT__;
+            sl_target_lit = 0;
+            sl_enemies_dead = 0;
+            sl_total_enemies = __ENEMY_COUNT__;
+            sl_rooms_seen = 0;
+            sl_total_rooms = __ROOM_COUNT__;
+            sl_team_hp = 200;
+
+            GiveInventory("Fist", 1);
+            SetWeapon("Fist");
+        } else if (pn == 1) {
+            SetAmmoCapacity("Clip", 10000);
+            GiveInventory("Chaingun", 1);
+            GiveInventory("Clip", 240);
+            SetWeapon("Chaingun");
         }
-        SetActorProperty(0, APROP_Health, 100);
-        ClearInventory();
-        if (pn == 1) {
-            GiveInventory("Shotgun", 1);
-            GiveInventory("Shell", 60);
-            SetWeapon("Shotgun");
-        }
-        SetHudSize(320, 240, 1);
-        SetFont("SMALLFONT");
-        HudMessage(s:"\\cG--------------------"; HUDMSG_PLAIN, 1, CR_WHITE, 160.0, 6.0, 0.0);
-        HudMessage(s:"\\cG--------------------"; HUDMSG_PLAIN, 2, CR_WHITE, 160.0, 200.0, 0.0);
-        ACS_ExecuteAlways(10, 0, 0, 0, 0);
+
+        ACS_ExecuteAlways(10, 0);
         """
-        acs.add_script(ScriptType.ENTER, script_enter, number=1)
+        script_setup = script_setup.replace("__ENEMY_COUNT__", str(total_enemy_count))
+        script_setup = script_setup.replace("__ROOM_COUNT__", str(num_branches * rooms_per_branch))
+        acs.add_script(ScriptType.ENTER, script_setup, number=1)
+        acs.add_script(ScriptType.RESPAWN, script_setup, number=3)
 
-        room_light_checks: List[str] = []
-        room_bright_dist = room_size // 2 + 64
-        hub_bright_dist = hub_size // 2 + 64
-        for name, (cx, cy), tag, _, _, _ in room_specs:
-            bright_dist = hub_bright_dist if name == "Hub" else room_bright_dist
-            room_light_checks.append(
-                f"""
-            dx = p1x - {cx};
-            if (dx < 0) dx = -dx;
-            dy = p1y - {cy};
-            if (dy < 0) dy = -dy;
-            dist = dx;
-            if (dy > dist) dist = dy;
-            if (dist < {bright_dist}) {{
-                Light_ChangeToValue({tag}, 208);
-            }} else {{
-                Light_ChangeToValue({tag}, 0);
-            }}"""
-            )
+        script_open = f"""
+#define TOTAL_ENEMIES __ENEMY_COUNT__
+#define TOTAL_ROOMS __ROOM_COUNT__
 
-        corridor_light_checks: List[str] = []
-        for corr_tag, cx, cy in corridor_centers:
-            corridor_light_checks.append(
-                f"""
-            dx = p1x - {cx};
-            if (dx < 0) dx = -dx;
-            dy = p1y - {cy};
-            if (dy < 0) dy = -dy;
-            dist = dx;
-            if (dy > dist) dist = dy;
-            if (dist < 300) {{
-                Light_ChangeToValue({corr_tag}, 192);
-            }} else {{
-                Light_ChangeToValue({corr_tag}, 0);
-            }}"""
-            )
+function int SLAlive(int tid)
+{{
+    if (tid <= 0) return 0;
+    if (ThingCount(T_NONE, tid) <= 0) return 0;
+    return GetActorProperty(tid, APROP_Health) > 0;
+}}
 
-        script_light = f"""
-        int p1x;
-        int p1y;
-        int dx;
-        int dy;
-        int dist;
+function int SLDist(int ax, int ay, int bx, int by)
+{{
+    int dx = ax - bx;
+    int dy = ay - by;
+    if (dx < 0) dx = -dx;
+    if (dy < 0) dy = -dy;
+    if (dy > dx) dx = dy;
+    return dx >> 16;
+}}
 
-        while (TRUE) {{
-            if (ThingCount(T_NONE, 1000) > 0) {{
-                p1x = GetActorX(1000) >> 16;
-                p1y = GetActorY(1000) >> 16;
-{"".join(room_light_checks)}
-{"".join(corridor_light_checks)}
-            }}
-            Delay(4);
+script 2 OPEN
+{{
+    int p1x, p1y, p2x, p2y;
+    int p1hp, p2hp;
+    int enemies_left;
+    int target_tid;
+    int rooms_seen_count = 0;
+    int startup_ready_loops = 0;
+{"".join(room_seen_init_lines)}
+{"".join(enemy_state_init_lines)}
+
+    sl_started = 0;
+    sl_total_enemies = TOTAL_ENEMIES;
+    sl_total_rooms = TOTAL_ROOMS;
+    sl_p1_alive = 0;
+    sl_p2_alive = 0;
+    sl_team_dist = 0;
+    sl_enemies_left = TOTAL_ENEMIES;
+    sl_target_lit = 0;
+    sl_enemies_dead = 0;
+    sl_rooms_seen = 0;
+    sl_team_hp = 200;
+
+    while (TRUE)
+    {{
+        sl_p1_alive = SLAlive(1000);
+        sl_p2_alive = SLAlive(1001);
+
+        if (sl_p1_alive)
+        {{
+            p1x = GetActorX(1000);
+            p1y = GetActorY(1000);
         }}
-        """
-        acs.add_script(ScriptType.OPEN, script_light, number=3)
+        else
+        {{
+            p1x = 0;
+            p1y = 0;
+        }}
 
-        relay_blocks: List[str] = []
-        for relay_idx, relay in enumerate(relay_specs):
-            room_check_p1 = self._square_check("px1", "py1", relay["center"][0], relay["center"][1], room_size // 2 - 12)
-            room_check_p2 = self._square_check("px2", "py2", relay["center"][0], relay["center"][1], room_size // 2 - 12)
-            relay_blocks.append(
-                f"""
-                if (sl_relay_done_{relay_idx} == 0) {{
-                    if ({room_check_p1} && {room_check_p2}) {{
-                        sl_sync_state = 1;
-                        sl_active_objective = {relay_idx};
-                        sl_relay_progress_{relay_idx}++;
-                        sl_objective_progress = sl_relay_progress_{relay_idx};
-                        if (sl_relay_progress_{relay_idx} >= {relay_hold_tics}) {{
-                            sl_relay_done_{relay_idx} = 1;
-                            sl_relay_progress_{relay_idx} = 0;
-                            sl_relays_done++;
-                            Light_ChangeToValue({relay["room_tag"]}, 255);
-                        }}
-                    }} else {{
-                        sl_relay_progress_{relay_idx} = 0;
-                    }}
-                }}"""
-            )
+        if (sl_p2_alive)
+        {{
+            p2x = GetActorX(1001);
+            p2y = GetActorY(1001);
+        }}
+        else
+        {{
+            p2x = 0;
+            p2y = 0;
+        }}
 
-        extract_room_check_p1 = self._square_check("px1", "py1", extraction_center[0], extraction_center[1], room_size // 2 - 12)
-        extract_room_check_p2 = self._square_check("px2", "py2", extraction_center[0], extraction_center[1], room_size // 2 - 12)
-
-        script_logic = f"""
-        int px1;
-        int py1;
-        int px2;
-        int py2;
-        int adx;
-        int ady;
-
-        while (TRUE) {{
-            sl_p1_alive = ThingCount(T_NONE, 1000) > 0;
-            sl_p2_alive = ThingCount(T_NONE, 1001) > 0;
-            sl_extract_progress_flag = sl_extract_progress;
-            sl_active_objective = -1;
-            sl_objective_progress = 0;
-            sl_sync_state = 0;
-            sl_extraction_unlocked = sl_relays_done >= {num_relays};
-            sl_distance = 0;
-            if (sl_p1_alive && sl_p2_alive) {{
-                px1 = GetActorX(1000) >> 16;
-                py1 = GetActorY(1000) >> 16;
-                px2 = GetActorX(1001) >> 16;
-                py2 = GetActorY(1001) >> 16;
-                adx = px1 - px2;
-                if (adx < 0) adx = -adx;
-                ady = py1 - py2;
-                if (ady < 0) ady = -ady;
-                sl_distance = adx + ady;
-
-{"".join(relay_blocks)}
-
-                if (sl_relays_done >= {num_relays}) {{
-                    if ({extract_room_check_p1} && {extract_room_check_p2}) {{
-                        sl_sync_state = 1;
-                        sl_active_objective = {num_relays};
-                        sl_extract_progress++;
-                        sl_extract_progress_user = sl_extract_progress;
-                        sl_objective_progress = sl_extract_progress;
-                        if (sl_extract_progress >= {extract_hold_tics}) {{
-                            Delay(1);
-                            Exit_Normal(0);
-                        }}
-                    }} else {{
-                        sl_extract_progress = 0;
-                        sl_extract_progress_user = 0;
-                    }}
+        if (!sl_started)
+        {{
+            if (sl_p1_alive && sl_p2_alive)
+            {{
+                startup_ready_loops++;
+                if (startup_ready_loops >= 4)
+                {{
+                    sl_started = 1;
                 }}
-            }} else {{
-                sl_extract_progress = 0;
-                sl_extract_progress_user = 0;
-                sl_relay_progress_0 = 0;
-                sl_relay_progress_1 = 0;
-                sl_relay_progress_2 = 0;
             }}
-
-            Delay(4);
+            else
+            {{
+                startup_ready_loops = 0;
+            }}
         }}
-        """
-        acs.add_script(ScriptType.OPEN, script_logic, number=4)
 
-        acs.add_script(ScriptType.DEATH, """
-        Delay(1);
-        Exit_Normal(0);
-        """, number=8)
-
-        acs.add_script(ScriptType.VOID, """
-        sl_team_kills++;
-        """, number=998)
-
-        top_bar_cases = []
-        for i in range(21):
-            filled = "=" * i
-            empty = "-" * (20 - i)
-            top_bar_cases.append(
-                f'case {i}: top_bar_gfx = "\\cD{filled}\\cG{empty}"; break;'
-            )
-        top_bar_switch = "\n                ".join(top_bar_cases)
-
-        bottom_bar_cases = []
-        for i in range(21):
-            filled = "=" * i
-            empty = "-" * (20 - i)
-            bottom_bar_cases.append(
-                f'case {i}: bottom_bar_gfx = "\\cB{filled}\\cG{empty}"; break;'
-            )
-        bottom_bar_switch = "\n                ".join(bottom_bar_cases)
-
-        script_hud = f"""
-        int top_idx;
-        int bottom_idx;
-        int p;
-        str top_bar_gfx;
-        str bottom_bar_gfx;
-
-        while (TRUE) {{
-            SetHudSize(320, 240, 1);
-            SetFont("SMALLFONT");
-
-            top_idx = sl_relays_done * 20 / {num_relays};
-            if (top_idx < 0) top_idx = 0;
-            if (top_idx > 20) top_idx = 20;
-
-            p = sl_objective_progress;
-            if (sl_extraction_unlocked) {{
-                bottom_idx = p * 20 / {extract_hold_tics};
-            }} else {{
-                bottom_idx = p * 20 / {relay_hold_tics};
-            }}
-            if (bottom_idx < 0) bottom_idx = 0;
-            if (bottom_idx > 20) bottom_idx = 20;
-
-            top_bar_gfx = "";
-            bottom_bar_gfx = "";
-
-            switch (top_idx) {{
-                {top_bar_switch}
-            }}
-            switch (bottom_idx) {{
-                {bottom_bar_switch}
-            }}
-
-            HudMessage(s:top_bar_gfx; HUDMSG_PLAIN, 1, CR_WHITE, 160.0, 6.0, 0.0);
-            HudMessage(s:bottom_bar_gfx; HUDMSG_PLAIN, 2, CR_WHITE, 160.0, 200.0, 0.0);
-            Delay(4);
+        if (sl_p1_alive && sl_p2_alive)
+        {{
+            sl_team_dist = SLDist(p1x, p1y, p2x, p2y);
         }}
+        else
+        {{
+            sl_team_dist = 0;
+        }}
+
+        p1hp = 0;
+        p2hp = 0;
+        if (sl_p1_alive)
+        {{
+            p1hp = GetActorProperty(1000, APROP_Health);
+            if (p1hp < 0) p1hp = 0;
+        }}
+        if (sl_p2_alive)
+        {{
+            p2hp = GetActorProperty(1001, APROP_Health);
+            if (p2hp < 0) p2hp = 0;
+        }}
+        sl_team_hp = p1hp + p2hp;
+
+        if (sl_p1_alive && (({start_room_check}) || ({start_corr_check})))
+        {{
+            Light_ChangeToValue(100, 224);
+        }}
+        else
+        {{
+            Light_ChangeToValue(100, 0);
+        }}
+
+        if (sl_p1_alive && ({hub_room_check}))
+        {{
+            Light_ChangeToValue(101, 160);
+        }}
+        else
+        {{
+            Light_ChangeToValue(101, 0);
+        }}
+
+        if (sl_p1_alive && ({start_corr_check}))
+        {{
+            Light_ChangeToValue(200, 160);
+        }}
+        else
+        {{
+            Light_ChangeToValue(200, 0);
+        }}
+
+        sl_target_lit = 0;
+        {"".join(branch_light_lines)}
+        sl_rooms_seen = rooms_seen_count;
+
+        enemies_left = 0;
+        {"".join(branch_logic_lines)}
+        sl_enemies_left = enemies_left;
+        sl_enemies_dead = TOTAL_ENEMIES - enemies_left;
+
+        if (sl_started && (!sl_p1_alive || !sl_p2_alive))
+        {{
+            Delay(1);
+            Exit_Normal(0);
+        }}
+        if (sl_started && sl_enemies_dead >= TOTAL_ENEMIES)
+        {{
+            Delay(1);
+            Exit_Normal(0);
+        }}
+
+        Delay(2);
+    }}
+}}
+"""
+        script_open = script_open.replace("__ENEMY_COUNT__", str(total_enemy_count))
+        script_open = script_open.replace("__ROOM_COUNT__", str(num_branches * rooms_per_branch))
+        acs.add_global_code(script_open)
+
+        script_hud = """
+        int self_tid = ActivatorTID();
+        while (TRUE) {
+            if (self_tid > 0 && ThingCount(T_NONE, self_tid) <= 0) {
+                break;
+            }
+
+            SetHudSize(320, 200, 1);
+            HudMessage(
+                d:sl_enemies_left;
+                HUDMSG_PLAIN, 30, CR_WHITE, 160.0, 12.0, 0.0
+            );
+            if (sl_target_lit) {
+                HudMessage(
+                    s:"LIT";
+                    HUDMSG_PLAIN, 31, CR_GOLD, 160.0, 24.0, 0.0
+                );
+            } else {
+                HudMessage(
+                    s:"DARK";
+                    HUDMSG_PLAIN, 31, CR_WHITE, 160.0, 24.0, 0.0
+                );
+            }
+            Delay(1);
+        }
         """
         acs.add_script(ScriptType.VOID, script_hud, number=10)
 
+        builder.map_data.scripts = acs.to_code()
         try:
             builder.map_data.behavior = acs.compile()
         except Exception as e:
