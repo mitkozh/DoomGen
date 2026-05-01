@@ -556,8 +556,19 @@ ACTOR SLTurretGuard : DoomImp 16000 {{
             sl_total_rooms = __ROOM_COUNT__;
             sl_team_hp = 200;
 
-            GiveInventory("Fist", 1);
-            SetWeapon("Fist");
+            TakeInventory("Fist", 999);
+            TakeInventory("Chainsaw", 999);
+            TakeInventory("Pistol", 999);
+            TakeInventory("Shotgun", 999);
+            TakeInventory("SuperShotgun", 999);
+            TakeInventory("Chaingun", 999);
+            TakeInventory("RocketLauncher", 999);
+            TakeInventory("PlasmaRifle", 999);
+            TakeInventory("BFG9000", 999);
+            TakeInventory("Clip", 9999);
+            TakeInventory("Shell", 9999);
+            TakeInventory("RocketAmmo", 9999);
+            TakeInventory("Cell", 9999);
         } else if (pn == 1) {
             SetAmmoCapacity("Clip", 10000);
             GiveInventory("Chaingun", 1);
@@ -625,6 +636,19 @@ script 2 OPEN
         {{
             p1x = GetActorX(1000);
             p1y = GetActorY(1000);
+            TakeActorInventory(1000, "Fist", 999);
+            TakeActorInventory(1000, "Chainsaw", 999);
+            TakeActorInventory(1000, "Pistol", 999);
+            TakeActorInventory(1000, "Shotgun", 999);
+            TakeActorInventory(1000, "SuperShotgun", 999);
+            TakeActorInventory(1000, "Chaingun", 999);
+            TakeActorInventory(1000, "RocketLauncher", 999);
+            TakeActorInventory(1000, "PlasmaRifle", 999);
+            TakeActorInventory(1000, "BFG9000", 999);
+            TakeActorInventory(1000, "Clip", 9999);
+            TakeActorInventory(1000, "Shell", 9999);
+            TakeActorInventory(1000, "RocketAmmo", 9999);
+            TakeActorInventory(1000, "Cell", 9999);
         }}
         else
         {{
