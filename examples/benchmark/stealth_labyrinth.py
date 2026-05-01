@@ -14,18 +14,23 @@ class StealthLabyrinthScenario(Scenario):
             "seed": 42,
             "start_room_size": 320,
             "hub_size": 448,
-            "num_branches": 3,
+            "num_branches": 1,
             "rooms_per_branch": 2,
             "branch_room_width": 416,
             "branch_room_length": 896,
             "start_center_y": -560,
             "branch_offset": 980,
             "turret_wall_margin": 144,
+            "first_room_turret_wall_margin": 320,
             "corridor_width": 4,
             "min_enemies_per_room": 1,
-            "max_enemies_per_room": 2,
+            "max_enemies_per_room": 1,
             "turret_health": 140,
+            "first_room_turret_health": 90,
             "turret_damage": 2,
+            "turret_projectile_speed": 14, # hard is 18
+            "turret_burst_count": 2,
+            "turret_refire_tics": 14,
         }
 
     def validate_config(self) -> None:
@@ -47,6 +52,8 @@ class StealthLabyrinthScenario(Scenario):
             raise ValueError("branch_offset must be >= 640")
         if int(self.config["turret_wall_margin"]) < 64:
             raise ValueError("turret_wall_margin must be >= 64")
+        if int(self.config["first_room_turret_wall_margin"]) < int(self.config["turret_wall_margin"]):
+            raise ValueError("first_room_turret_wall_margin must be >= turret_wall_margin")
         if int(self.config["corridor_width"]) < 3:
             raise ValueError("corridor_width must be >= 3")
         if int(self.config["min_enemies_per_room"]) < 1:
@@ -57,8 +64,18 @@ class StealthLabyrinthScenario(Scenario):
             raise ValueError("max_enemies_per_room must be <= 2")
         if int(self.config["turret_health"]) < 40:
             raise ValueError("turret_health must be >= 40")
+        if int(self.config["first_room_turret_health"]) < 20:
+            raise ValueError("first_room_turret_health must be >= 20")
+        if int(self.config["first_room_turret_health"]) > int(self.config["turret_health"]):
+            raise ValueError("first_room_turret_health must be <= turret_health")
         if int(self.config["turret_damage"]) < 1:
             raise ValueError("turret_damage must be >= 1")
+        if int(self.config["turret_projectile_speed"]) < 8:
+            raise ValueError("turret_projectile_speed must be >= 8")
+        if int(self.config["turret_burst_count"]) < 1:
+            raise ValueError("turret_burst_count must be >= 1")
+        if int(self.config["turret_refire_tics"]) < 4:
+            raise ValueError("turret_refire_tics must be >= 4")
 
     @staticmethod
     def _square_check(px: str, py: str, cx: int, cy: int, radius: int) -> str:
@@ -87,11 +104,16 @@ class StealthLabyrinthScenario(Scenario):
         start_center_y = int(cfg["start_center_y"])
         branch_offset = int(cfg["branch_offset"])
         turret_wall_margin = int(cfg["turret_wall_margin"])
+        first_room_turret_wall_margin = int(cfg["first_room_turret_wall_margin"])
         corridor_width = int(cfg["corridor_width"])
         min_enemies_per_room = int(cfg["min_enemies_per_room"])
         max_enemies_per_room = int(cfg["max_enemies_per_room"])
         turret_health = int(cfg["turret_health"])
+        first_room_turret_health = int(cfg["first_room_turret_health"])
         turret_damage = int(cfg["turret_damage"])
+        turret_projectile_speed = int(cfg["turret_projectile_speed"])
+        turret_burst_count = int(cfg["turret_burst_count"])
+        turret_refire_tics = int(cfg["turret_refire_tics"])
 
         start_center = (0, start_center_y)
         hub_center = (0, 0)
@@ -115,11 +137,15 @@ class StealthLabyrinthScenario(Scenario):
             seed=seed,
         )
 
+        missile_burst_lines = []
+        for _ in range(turret_burst_count):
+            missile_burst_lines.append('    TROO F 0 A_CustomMissile("SLTurretBolt", 32, 0, 0, 0, 0)')
+            missile_burst_lines.append("    TROO F 2 Bright")
         decorate_str = f"""
 ACTOR SLTurretBolt 16001 {{
   Radius 6
   Height 8
-  Speed 18
+  Speed {turret_projectile_speed}
   Damage {turret_damage}
   Projectile
   +NOGRAVITY
@@ -156,12 +182,8 @@ ACTOR SLTurretGuard : DoomImp 16000 {{
     Loop
   Missile:
     TROO E 0 A_FaceTarget
-    TROO F 0 A_CustomMissile("SLTurretBolt", 32, 0, 0, 0, 0)
-    TROO F 2 Bright
-    TROO F 0 A_CustomMissile("SLTurretBolt", 32, 0, 0, 0, 0)
-    TROO F 2 Bright
-    TROO F 0 A_CustomMissile("SLTurretBolt", 32, 0, 0, 0, 0)
-    TROO G 8
+{os.linesep.join(missile_burst_lines)}
+    TROO G {turret_refire_tics}
     Goto See
   Pain:
     TROO H 2
@@ -303,15 +325,18 @@ ACTOR SLTurretGuard : DoomImp 16000 {{
                 zip(branch["room_centers"], branch["room_dims"], branch["room_enemy_counts"])
             ):
                 room_enemies: List[Dict[str, Any]] = []
+                wall_margin = turret_wall_margin
+                if room_idx == 0:
+                    wall_margin = first_room_turret_wall_margin
                 if branch["axis"] == "y":
                     enemy_positions = [
-                        (cx, cy + branch["sign"] * (height // 2 - turret_wall_margin)),
-                        (cx - width // 4, cy + branch["sign"] * (height // 2 - turret_wall_margin - 96)),
+                        (cx, cy + branch["sign"] * (height // 2 - wall_margin)),
+                        (cx - width // 4, cy + branch["sign"] * (height // 2 - wall_margin - 96)),
                     ]
                 else:
                     enemy_positions = [
-                        (cx + branch["sign"] * (width // 2 - turret_wall_margin), cy),
-                        (cx + branch["sign"] * (width // 2 - turret_wall_margin - 96), cy - height // 4),
+                        (cx + branch["sign"] * (width // 2 - wall_margin), cy),
+                        (cx + branch["sign"] * (width // 2 - wall_margin - 96), cy - height // 4),
                     ]
 
                 for enemy_slot in range(enemy_count):
@@ -328,6 +353,7 @@ ACTOR SLTurretGuard : DoomImp 16000 {{
                             "tid": tid,
                             "aim": (cx << 16, cy << 16),
                             "room_idx": room_idx,
+                            "spawn_health": first_room_turret_health if room_idx == 0 else turret_health,
                         }
                     )
 
@@ -441,6 +467,7 @@ ACTOR SLTurretGuard : DoomImp 16000 {{
                 int spawn_ok_{enemy["tid"]} = SpawnSpotFacing("SLTurretGuard", {enemy["spot_tid"]}, {temp_tid});
                 if (spawn_ok_{enemy["tid"]} && ThingCount(T_NONE, {temp_tid}) > 0) {{
                     Thing_ChangeTID({temp_tid}, {enemy["tid"]});
+                    SetActorProperty({enemy["tid"]}, APROP_Health, {enemy["spawn_health"]});
                     SetActorProperty({enemy["tid"]}, APROP_Invulnerable, 1);
                     {spawned_var} = 1;
                 }}
