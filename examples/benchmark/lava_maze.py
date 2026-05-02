@@ -21,10 +21,10 @@ class LavaMazeScenario(Scenario):
 
     def get_default_config(self) -> Dict[str, Any]:
         return {
-            "physical_size": 6,
+            "physical_size": 8,
             "cell_size": 128,
-            "initial_maze_size": 2,
-            "max_maze_size": 10,
+            "initial_maze_size": 8,
+            "max_maze_size": 20,
             "lava_damage": 35,
             "seed": 42,
         }
@@ -34,7 +34,7 @@ class LavaMazeScenario(Scenario):
         PHYSICAL_SIZE = int(cfg["physical_size"])
         CELL_SIZE = int(cfg["cell_size"])
         INITIAL_MAZE_SIZE = int(cfg["initial_maze_size"])
-        MAX_MAZE_SIZE = int(cfg.get("max_maze_size", 10))
+        MAX_MAZE_SIZE = int(cfg.get("max_maze_size", 20))
         LAVA_DAMAGE = int(cfg["lava_damage"])
         seed = cfg["seed"] if cfg["seed"] is not None else random.randint(0, 999999)
 

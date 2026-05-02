@@ -39,9 +39,6 @@ def main() -> None:
         }
         registry.append(meta)
 
-        with open(wad_path.replace(".wad", ".json"), "w", encoding="utf-8") as handle:
-            json.dump(meta, handle, indent=2)
-
     with open(os.path.join(output_dir, "batch_registry.json"), "w", encoding="utf-8") as handle:
         json.dump(registry, handle, indent=2)
 

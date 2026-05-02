@@ -11,10 +11,11 @@ from examples.benchmark.lava_maze import LavaMazeScenario
 
 def main():
     param_grid = {
-        "physical_size":     [9, 11], #11 doesn't work because of fixed positions. will adjust later
+        "physical_size":     [8],
         "cell_size":         [128],
-        "initial_maze_size": [4, 6],
-        "lava_damage":       [10, 20], #doesn't make a lot of sense, but just an initial version
+        "initial_maze_size": [6, 8, 10],
+        "max_maze_size":     [20, 25],
+        "lava_damage":       [35],
         "seed":              list(range(4)),
     }
 
@@ -36,9 +37,6 @@ def main():
 
             meta = {"id": scenario.name, "filename": filename, "config": scenario.config}
             batch_metadata.append(meta)
-
-            with open(path.replace(".wad", ".json"), "w") as f:
-                json.dump(meta, f, indent=4)
 
         except Exception as e:
             print(f"Failed to generate {filename}: {e}")

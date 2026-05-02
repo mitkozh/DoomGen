@@ -53,11 +53,6 @@ def main():
                 'config': scenario.config
             }
             batch_metadata.append(meta)
-            
-            # Save individual JSON
-            json_path = path.replace('.wad', '.json')
-            with open(json_path, 'w') as f:
-                json.dump(meta, f, indent=4)
                 
         except Exception as e:
             print(f"Failed to generate {filename}: {e}")
