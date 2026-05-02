@@ -62,6 +62,9 @@ class LavaMazeScenario(Scenario):
             "S_YELLOW":(255, 255, 0),
             "S_BLUE":  (0, 0, 255),
             "S_BLACK": (0, 0, 0),
+            "S_WALL":  (200, 200, 200),
+            "F_START": (0, 255, 255),  # Cyan
+            "F_END":   (255, 0, 255),  # Magenta
         }
         builder.wad_writer.add_lump("TX_START", b"")
         for lump_name, color in lump_files.items():
@@ -226,26 +229,26 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
             "LavaPit",
             shape=(0, 0, 2400, 2400),
             floor_height=-64,
-            ceiling_height=512,
+            ceiling_height=800,
             floor_texture="LAVA1",
             mode="overwrite",
             light_level=255,
             tag=99,
         )
 
-        STANDS_HEIGHT = 224
+        STANDS_HEIGHT = 350
         STANDS_THICKNESS = 100
         STANDS_INNER = (MAZE_WIDTH_UNITS // 2) + 64
 
         pos_y = STANDS_INNER + STANDS_THICKNESS / 2
         stands_width = 2 * STANDS_INNER + 2 * STANDS_THICKNESS
-        builder.add_area("Stands_N", shape=(0, pos_y, stands_width, STANDS_THICKNESS),   floor_height=STANDS_HEIGHT, ceiling_height=512, mode="overwrite", tag=201, wall_texture="S_YELLOW",  light_level=255)
-        builder.add_area("Stands_S", shape=(0, -pos_y, stands_width, STANDS_THICKNESS),  floor_height=STANDS_HEIGHT, ceiling_height=512, mode="overwrite", tag=203, wall_texture="S_BLUE", light_level=255)
+        builder.add_area("Stands_N", shape=(0, pos_y, stands_width, STANDS_THICKNESS),   floor_height=STANDS_HEIGHT, ceiling_height=1024, mode="overwrite", tag=201, wall_texture="S_YELLOW",  light_level=255)
+        builder.add_area("Stands_S", shape=(0, -pos_y, stands_width, STANDS_THICKNESS),  floor_height=STANDS_HEIGHT, ceiling_height=1024, mode="overwrite", tag=203, wall_texture="S_BLUE", light_level=255)
 
         pos_x = STANDS_INNER + STANDS_THICKNESS / 2
         h_span = 2 * STANDS_INNER + 2 * STANDS_THICKNESS
-        builder.add_area("Stands_E", shape=( pos_x, 0, STANDS_THICKNESS, h_span), floor_height=STANDS_HEIGHT, ceiling_height=512, mode="overwrite", tag=200, wall_texture="S_GREEN", light_level=255)
-        builder.add_area("Stands_W", shape=(-pos_x, 0, STANDS_THICKNESS, h_span), floor_height=STANDS_HEIGHT, ceiling_height=512, mode="overwrite", tag=202, wall_texture="S_RED",  light_level=255)
+        builder.add_area("Stands_E", shape=( pos_x, 0, STANDS_THICKNESS, h_span), floor_height=STANDS_HEIGHT, ceiling_height=1024, mode="overwrite", tag=200, wall_texture="S_GREEN", light_level=255)
+        builder.add_area("Stands_W", shape=(-pos_x, 0, STANDS_THICKNESS, h_span), floor_height=STANDS_HEIGHT, ceiling_height=1024, mode="overwrite", tag=202, wall_texture="S_RED",  light_level=255)
 
         base_tag = 100
         for py in range(PHYSICAL_SIZE):
@@ -261,11 +264,11 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
                     f"Grid_{px}_{py}",
                     shape=(cx, cy, CELL_SIZE, CELL_SIZE),
                     floor_height=f_h,
-                    ceiling_height=512,
+                    ceiling_height=1024,
                     tag=tag,
                     mode="overwrite",
                     floor_texture=f_tex,
-                    wall_texture="ASHWALL2",
+                    wall_texture="S_WALL",
                     light_level=255,
                 )
 
@@ -491,7 +494,10 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
         for (i = 0; i < 3; i++) maze_bits_chunk[i] = 0;
 
         carve(sx, sy);
-        Sector_SetColor(start_tag, 0, 255, 0);
+        ChangeFloor(start_tag, "F_START");
+        Sector_SetColor(start_tag, 255, 255, 255);
+        Light_ChangeToValue(start_tag, 255);
+        Sector_SetFade(start_tag, 0, 0, 0);
 
         for (i = 0; i < MAP_WIDTH * MAP_WIDTH; i++) visited[i] = 0;
 
@@ -558,7 +564,10 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
         lm_maze_bits_1_global      = maze_bits_chunk[1];
         lm_maze_bits_2_global      = maze_bits_chunk[2];
 
-        Sector_SetColor(current_end_tag, 0, 0, 255);
+        ChangeFloor(current_end_tag, "F_END");
+        Sector_SetColor(current_end_tag, 255, 255, 255);
+        Light_ChangeToValue(current_end_tag, 255);
+        Sector_SetFade(current_end_tag, 0, 0, 0);
         //Print(s:"Level Up! Size: ", d:size);
     }}
 
@@ -583,7 +592,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
         int wy = get_world_y(g_start_y) << 16;
 
         SetActorPosition(0, wx, wy, 0, 0);
-        SetActorProperty(0, APROP_ViewHeight, 45.0);
+        SetActorProperty(0, APROP_ViewHeight, 70.0);
         SetActorProperty(0, APROP_Mass, 0x7FFFFFFF);
         SetActorProperty(0, APROP_ScaleX, 3.5);
         SetActorProperty(0, APROP_ScaleY, 3.5);
