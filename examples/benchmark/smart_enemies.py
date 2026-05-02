@@ -27,8 +27,8 @@ class SmartEnemiesScenario(Scenario):
 
     def get_default_config(self) -> Dict[str, Any]:
         return {
-            "arena_radius": 1000,    # Radius of the circular arena
-            "num_enemies": 10,       # Max concurrent enemies
+            "arena_radius": 800,    # Radius of the circular arena
+            "num_enemies": 4,       # Max concurrent enemies
             "spawn_interval": 3,     # Seconds between spawn checks
             "player_count": 2,       # Number of player starts
             "proximity_radius": 512, # Distance to trigger "smart" behavior
