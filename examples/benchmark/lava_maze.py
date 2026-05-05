@@ -26,6 +26,7 @@ class LavaMazeScenario(Scenario):
             "initial_maze_size": 8,
             "max_maze_size": 20,
             "lava_damage": 35,
+            "lava_depth": 64,
             "seed": 42,
         }
 
@@ -36,6 +37,7 @@ class LavaMazeScenario(Scenario):
         INITIAL_MAZE_SIZE = int(cfg["initial_maze_size"])
         MAX_MAZE_SIZE = int(cfg.get("max_maze_size", 20))
         LAVA_DAMAGE = int(cfg["lava_damage"])
+        LAVA_DEPTH = int(cfg.get("lava_depth", 64))
         seed = cfg["seed"] if cfg["seed"] is not None else random.randint(0, 999999)
 
         MAZE_WIDTH_UNITS = PHYSICAL_SIZE * CELL_SIZE
@@ -100,7 +102,7 @@ ACTOR LMPistol : Pistol replaces Pistol
     PISG A 1 A_Lower
     Loop
   Fire:
-    PISG A 4 
+    PISG A 4
     PISG B 6 A_FirePistol
     PISG C 4
     PISG B 5
@@ -228,7 +230,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
         builder.add_area(
             "LavaPit",
             shape=(0, 0, 2400, 2400),
-            floor_height=-64,
+            floor_height=-LAVA_DEPTH,
             ceiling_height=800,
             floor_texture="LAVA1",
             mode="overwrite",
@@ -259,7 +261,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
                 if px == 1 and py == 1:
                     f_tex, f_h = "FLOOR4_8", 0
                 else:
-                    f_tex, f_h = "LAVA1", -64
+                    f_tex, f_h = "LAVA1", -LAVA_DEPTH
                 builder.add_area(
                     f"Grid_{px}_{py}",
                     shape=(cx, cy, CELL_SIZE, CELL_SIZE),
@@ -363,7 +365,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
         for (i = 0; i < MAP_WIDTH * MAP_WIDTH; i++) {{
             t = BASE_TAG + i;
             if (t != keep_tag) {{
-                Floor_MoveToValue(t, 2048, -64, 0);
+                Floor_MoveToValue(t, 2048, -{LAVA_DEPTH}, 0);
                 ChangeFloor(t, "LAVA1");
                 Sector_SetDamage(t, {LAVA_DAMAGE}, 14);
                 Sector_SetColor(t, 255, 255, 255);
@@ -412,7 +414,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
         // Get 3D Coordinates (Adjusting for camera eye level and target center)
         int dx = GetActorX(target) - GetActorX(observer);
         int dy = GetActorY(target) - GetActorY(observer);
-        
+
         int obsZ = GetActorZ(observer) + GetActorViewHeight(observer);
         int targZ = GetActorZ(target) + (GetActorProperty(target, APROP_Height) / 2);
         int dz = targZ - obsZ;
@@ -428,14 +430,14 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
 
         // 0.125 fixed point = 45 degrees (90-degree horizontal FOV total)
         if (yawDiff > 0.125) {{
-            return FALSE; 
+            return FALSE;
         }}
 
         // Vertical Pitch Check
         int xy_dist = VectorLength(dx, dy);
         int pitchToTarget = VectorAngle(xy_dist, dz);
 
-        // VectorAngle returns standard math angles. We must invert it to match 
+        // VectorAngle returns standard math angles. We must invert it to match
         // ZDoom's pitch system where looking down is positive.
         if (pitchToTarget > 0.5) {{
             pitchToTarget -= 1.0;
@@ -449,7 +451,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
         while (pitchDiff > 0.5) pitchDiff -= 1.0;
         if (pitchDiff < 0) pitchDiff = -pitchDiff;
 
-        // Vertical FOV cone check. (0.10 roughly equals ~72 degrees vertical FOV, 
+        // Vertical FOV cone check. (0.10 roughly equals ~72 degrees vertical FOV,
         // which matches standard 4:3 displays with 90 horizontal FOV).
         if (pitchDiff > 0.10) {{
             return FALSE;
@@ -592,10 +594,10 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
         int wy = get_world_y(g_start_y) << 16;
 
         SetActorPosition(0, wx, wy, 0, 0);
-        SetActorProperty(0, APROP_ViewHeight, 70.0);
+        SetActorProperty(0, APROP_ViewHeight, 110.0);
         SetActorProperty(0, APROP_Mass, 0x7FFFFFFF);
-        SetActorProperty(0, APROP_ScaleX, 3.5);
-        SetActorProperty(0, APROP_ScaleY, 3.5);
+        SetActorProperty(0, APROP_ScaleX, 5.5);
+        SetActorProperty(0, APROP_ScaleY, 5.5);
         SetActorProperty(0, 21, 0);
 
         SetHudSize(320, 200, 1);
@@ -689,7 +691,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
             GiveInventory("Clip",  1);
             GiveInventory("Shell", 1);
             GiveInventory("Cell",  1);
-            
+
             // Calculate optimal target on the square ring (opposite to player 1)
             int px = GetActorX(1000);
             int py = GetActorY(1000);
@@ -697,17 +699,17 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
             int ty = -py;
             int abs_tx = tx; if (abs_tx < 0) abs_tx = -abs_tx;
             int abs_ty = ty; if (abs_ty < 0) abs_ty = -abs_ty;
-            
+
             int target_s = current_s; // fallback if centered
-            
+
             if (abs_tx > 655360 || abs_ty > 655360) {{ // > 10 units away from center
                 if (abs_tx > abs_ty) {{
                     ty = FixedMul(ty, FixedDiv(r_fix, abs_tx));
-                    if (tx > 0) {{ target_s = r_fix + ty + 6 * r_fix; }} 
+                    if (tx > 0) {{ target_s = r_fix + ty + 6 * r_fix; }}
                     else        {{ target_s = r_fix - ty + 2 * r_fix; }}
                 }} else {{
                     tx = FixedMul(tx, FixedDiv(r_fix, abs_ty));
-                    if (ty > 0) {{ target_s = r_fix - tx; }} 
+                    if (ty > 0) {{ target_s = r_fix - tx; }}
                     else        {{ target_s = tx + r_fix + 4 * r_fix; }}
                 }}
             }}
@@ -716,15 +718,15 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
             int diff = (target_s - current_s) % p_len;
             if (diff < 0) diff += p_len;
             if (diff > p_len / 2) diff -= p_len;
-            
+
             int max_speed = 32 << 16; // maximum orbital units per tic
             int move_amt = diff / 10; // smooth ease-in/ease-out
             if (move_amt > max_speed) move_amt = max_speed;
             if (move_amt < -max_speed) move_amt = -max_speed;
-            
+
             current_s = (current_s + move_amt) % p_len;
             if (current_s < 0) current_s += p_len;
-            
+
             int obs_x = RingDistToX(current_s, r_fix);
             int obs_y = RingDistToY(current_s, r_fix);
             int obs_z = GetActorZ(0); // stay grounded
@@ -735,16 +737,16 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
             int dx = GetActorX(1000) - GetActorX(0);
             int dy = GetActorY(1000) - GetActorY(0);
             int dz = (GetActorZ(1000) + (GetActorProperty(1000, APROP_Height) / 2)) - (GetActorZ(0) + GetActorViewHeight(0));
-            
+
             int target_angle = VectorAngle(dx, dy);
             int xy_dist = VectorLength(dx, dy);
             int target_pitch = VectorAngle(xy_dist, dz);
-            
+
             if (target_pitch > 0.5) {{
                 target_pitch -= 1.0;
             }}
             target_pitch = -target_pitch;
-            
+
             SetActorAngle(0, target_angle);
             SetActorPitch(0, target_pitch);
 
