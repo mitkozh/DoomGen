@@ -16,6 +16,10 @@ class ThingType(IntEnum):
     PLAYER2_START = 2
     PLAYER3_START = 3
     PLAYER4_START = 4
+    PLAYER5_START = 4001
+    PLAYER6_START = 4002
+    PLAYER7_START = 4003
+    PLAYER8_START = 4004
     DEATHMATCH_START = 11
     
     # Enemies - Easy/Medium
@@ -125,6 +129,10 @@ PLAYER_STARTS = [
     ThingType.PLAYER2_START,
     ThingType.PLAYER3_START,
     ThingType.PLAYER4_START,
+    ThingType.PLAYER5_START,
+    ThingType.PLAYER6_START,
+    ThingType.PLAYER7_START,
+    ThingType.PLAYER8_START,
 ]
 
 EASY_ENEMIES = [

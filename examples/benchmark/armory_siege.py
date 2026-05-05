@@ -17,6 +17,7 @@ class ArmorySiegeScenario(Scenario):
             'door_timer': 300,           # Door open duration (tics) (Longer = Easier access)
             'core_health': 1000,         # Health of the defense core (Higher = Easier)
             'enemy_difficulty': 0.5,     # Multiplier for enemy counts (Lower = Easier)
+            'max_players': 8,          # Number of cooperative player starts to emit
             'seed': 42,                # Random seed
         }
         
@@ -28,6 +29,10 @@ class ArmorySiegeScenario(Scenario):
         dist = int(cfg['distance']) # Ensure int
         bound = dist + 1000 # Enough padding
         
+        max_players = int(cfg.get('max_players', 8))
+        if max_players < 1 or max_players > 8:
+            raise ValueError(f"max_players must be in range [1, 8], got {max_players}")
+
         # 1. Initialize Builder
         builder = ProceduralMapBuilder(
             bounds=(-bound, -bound, bound, bound), 
@@ -270,10 +275,20 @@ ACTOR SiegeLostSoul : LostSoul 15007
         builder.graph.get_area(door_c_id).config.tag = TAG_DOOR_C
         
         # 5. Add Things (Spawners)
-        # Players
-        builder.add_thing("PLAYER1_START", -64, -64, angle=45)
-        builder.add_thing("PLAYER2_START", 64, -64, angle=135)
-        builder.add_thing("PLAYER3_START", 0, 64, angle=270)
+        # Players. ZDoom supports dedicated cooperative start thing types for
+        # players 5-8 (4001-4004), so emit the full set when requested.
+        player_starts = [
+            ("PLAYER1_START", -128, -128, 45),
+            ("PLAYER2_START", 0, -128, 90),
+            ("PLAYER3_START", 128, -128, 135),
+            ("PLAYER4_START", 128, 0, 180),
+            ("PLAYER5_START", 128, 128, 225),
+            ("PLAYER6_START", 0, 128, 270),
+            ("PLAYER7_START", -128, 128, 315),
+            ("PLAYER8_START", -128, 0, 0),
+        ]
+        for thing_type, x, y, angle in player_starts[:max_players]:
+            builder.add_thing(thing_type, x, y, angle=angle)
         
         def place_spawn_cluster(area_name, base_tid, count=5):
             for i in range(count):
