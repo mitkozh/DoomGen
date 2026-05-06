@@ -23,7 +23,7 @@ class LavaMazeSimpleScenario(Scenario):
         return {
             "physical_size": 18,
             "cell_size": 128,
-            "initial_maze_size": 6,
+            "initial_maze_size": 4,
             "max_maze_size": 14,
             "lava_damage": 35,
             "lava_depth": 64,
@@ -310,30 +310,16 @@ ACTOR LMShotgun : Shotgun replaces Shotgun
         Sector_SetDamage(tag, 0, 0);
         Light_ChangeToValue(tag, 255);
         if (x >= 0 && x < MAP_WIDTH && y >= 0 && y < MAP_WIDTH) {{
-            int bit_idx = y * MAP_WIDTH + x;
+            // Since this is a 1D maze, we only encode the X-axis presence 
+            // so it fits properly within the 3 available 27-bit global variables.
+            int bit_idx = x;
             int chunk = bit_idx / 27;
             int shift = bit_idx % 27;
             if (chunk < 3) maze_bits_chunk[chunk] = maze_bits_chunk[chunk] | (1 << shift);
         }}
     }}
 
-    function int RingDistToX(int s_fix, int r_fix) {{
-        while (s_fix < 0) s_fix += 8 * r_fix;
-        s_fix = s_fix % (8 * r_fix);
-        if (s_fix < 2 * r_fix) return r_fix - s_fix;
-        if (s_fix < 4 * r_fix) return -r_fix;
-        if (s_fix < 6 * r_fix) return (s_fix - 4 * r_fix) - r_fix;
-        return r_fix;
-    }}
-
-    function int RingDistToY(int s_fix, int r_fix) {{
-        while (s_fix < 0) s_fix += 8 * r_fix;
-        s_fix = s_fix % (8 * r_fix);
-        if (s_fix < 2 * r_fix) return r_fix;
-        if (s_fix < 4 * r_fix) return r_fix - (s_fix - 2 * r_fix);
-        if (s_fix < 6 * r_fix) return -r_fix;
-        return (s_fix - 6 * r_fix) - r_fix;
-    }}
+    // Unused helper functions removed for simplicity
 
     function int IsInFOV(int observer, int target) {{
         if (!CheckSight(observer, target, 0)) return FALSE;
@@ -376,8 +362,8 @@ ACTOR LMShotgun : Shotgun replaces Shotgun
     script 1 OPEN {{
         Sector_SetDamage(99, {LAVA_DAMAGE}, 14);
 
-        g_start_x = MAP_WIDTH / 2;
-        g_start_y = MAP_WIDTH / 2;
+        g_start_x = Random(0, MAP_WIDTH - 1);
+        g_start_y = Random(0, MAP_WIDTH - 1);
 
         current_start_tag = get_tag(g_start_x, g_start_y);
         lm_maze_size_global        = current_maze_size;
@@ -415,20 +401,25 @@ ACTOR LMShotgun : Shotgun replaces Shotgun
         Sector_SetFade(start_tag, 0, 0, 0);
 
         // Simple straight line generation (1D in X-axis direction)
-        int dir = (Random(0, 1) * 2) - 1; // +1 or -1
+        int dir = 1;
+        int can_pos = (sx + size - 1 < MAP_WIDTH);
+        int can_neg = (sx - size + 1 >= 0);
+
+        if (can_pos && can_neg) {{
+            dir = (Random(0, 1) * 2) - 1; // +1 or -1
+        }} else if (can_pos) {{
+            dir = 1;
+        }} else {{
+            dir = -1;
+        }}
+
         int current_x = sx;
         int last_visited_tag = start_tag;
 
         for (i = 1; i < size; i++) {{
             current_x = current_x + dir;
-            if (current_x >= 0 && current_x < MAP_WIDTH) {{
-                carve(current_x, sy);
-                last_visited_tag = get_tag(current_x, sy);
-            }} else {{
-                // Out of bounds, abort further carving
-                current_x = current_x - dir; // step back to valid
-                break;
-            }}
+            carve(current_x, sy);
+            last_visited_tag = get_tag(current_x, sy);
         }} // END FOR
 
         current_end_tag = last_visited_tag;
@@ -554,7 +545,6 @@ ACTOR LMShotgun : Shotgun replaces Shotgun
 
         int btns, old_btns;
         int r_fix = PLATFORM_RADIUS << 16;
-        int current_s = 5 * r_fix;
         int attack_cooldown = 0;
 
         while(TRUE) {{
@@ -565,41 +555,19 @@ ACTOR LMShotgun : Shotgun replaces Shotgun
 
             int px = GetActorX(1000);
             int py = GetActorY(1000);
-            int tx = -px;
-            int ty = -py;
-            int abs_tx = tx; if (abs_tx < 0) abs_tx = -abs_tx;
-            int abs_ty = ty; if (abs_ty < 0) abs_ty = -abs_ty;
 
-            int target_s = current_s;
-
-            if (abs_tx > 655360 || abs_ty > 655360) {{ 
-                if (abs_tx > abs_ty) {{
-                    ty = FixedMul(ty, FixedDiv(r_fix, abs_tx));
-                    if (tx > 0) {{ target_s = r_fix + ty + 6 * r_fix; }}
-                    else        {{ target_s = r_fix - ty + 2 * r_fix; }}
-                }} else {{
-                    tx = FixedMul(tx, FixedDiv(r_fix, abs_ty));
-                    if (ty > 0) {{ target_s = r_fix - tx; }}
-                    else        {{ target_s = tx + r_fix + 4 * r_fix; }}
-                }}
+            // Move parallel on the further stand (North or South)
+            int obs_x = px;
+            int obs_y = -r_fix;
+            if (py <= 0) {{
+                obs_y = r_fix;
             }}
-
-            int p_len = 8 * r_fix;
-            int diff = (target_s - current_s) % p_len;
-            if (diff < 0) diff += p_len;
-            if (diff > p_len / 2) diff -= p_len;
-
-            int max_speed = 32 << 16; 
-            int move_amt = diff / 10; 
-            if (move_amt > max_speed) move_amt = max_speed;
-            if (move_amt < -max_speed) move_amt = -max_speed;
-
-            current_s = (current_s + move_amt) % p_len;
-            if (current_s < 0) current_s += p_len;
-
-            int obs_x = RingDistToX(current_s, r_fix);
-            int obs_y = RingDistToY(current_s, r_fix);
             int obs_z = GetActorZ(0);
+
+            // Keep observer smoothly clamped within the actual stand endpoints length
+            int bound = r_fix - (128 << 16);
+            if (obs_x > bound) obs_x = bound;
+            if (obs_x < -bound) obs_x = -bound;
 
             SetActorPosition(0, obs_x, obs_y, obs_z, 0);
 
