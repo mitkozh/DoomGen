@@ -114,6 +114,7 @@ Desktop.ini
 # vizdoom
 _vizdoom.ini
 vizdoom*.ini
+vizdoom*.log
 
 # ACS compilation artifacts
 *.o
