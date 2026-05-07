@@ -1,7 +1,4 @@
-"""
-Seed generation engine for Voronoi-first map generation.
-Implements Lloyd's relaxation for organic point distribution.
-"""
+"""Seed generation for Voronoi-first map generation."""
 
 from __future__ import annotations
 from dataclasses import dataclass
@@ -25,31 +22,19 @@ def generate_relaxed_seeds(
     iterations: int = 5,
     seed: Optional[int] = None
 ) -> List[Seed]:
-    """
-    Generates a set of seeds distributed organically using Lloyd's relaxation.
-    
-    Args:
-        bounds: (minx, miny, maxx, maxy)
-        num_seeds: Target number of seeds
-        iterations: Number of relaxation steps
-        seed: Random seed
-    """
+    """Generate seeds using Lloyd relaxation plus a boundary ring."""
     rng = np.random.default_rng(seed)
     minx, miny, maxx, maxy = bounds
     width = maxx - minx
     height = maxy - miny
     
-    # Initial random distribution
     points = rng.uniform(
         low=[minx, miny],
         high=[maxx, maxy],
         size=(num_seeds, 2)
     )
     
-    # Lloyd's Relaxation
     for _ in range(iterations):
-        # Add dummy points to constrain the diagram
-        # We place points far away in 4 directions
         dummy_points = np.array([
             [minx - width, miny - height],
             [minx - width, maxy + height],
@@ -70,18 +55,13 @@ def generate_relaxed_seeds(
             region = vor.regions[region_idx]
             
             if -1 in region or not region:
-                # Should not happen for inner points with dummy points around
                 new_points.append(points[i])
                 continue
-                
-            # Get vertices of the region
+
             vertices = vor.vertices[region]
             
-            # Compute centroid
-            # Polygon centroid formula is better, but mean of vertices is a good approximation for relaxation
             centroid = np.mean(vertices, axis=0)
             
-            # Clamp to bounds to ensure we don't drift out
             centroid[0] = np.clip(centroid[0], minx, maxx)
             centroid[1] = np.clip(centroid[1], miny, maxy)
             
@@ -89,11 +69,8 @@ def generate_relaxed_seeds(
             
         points = np.array(new_points)
 
-    # Convert to Seed objects
     seeds = [Seed(p[0], p[1]) for p in points]
     
-    # Add boundary seeds to ensure finite Voronoi cells for all inner seeds
-    # Calculate dynamic step based on density to match inner cells
     area = width * height
     if num_seeds > 0:
         avg_area_per_seed = area / num_seeds
@@ -101,8 +78,6 @@ def generate_relaxed_seeds(
     else:
         avg_spacing = 32.0
         
-    # Use a margin slightly larger than spacing to avoid interference with edge relaxation
-    # but close enough to prevent elongation
     step = avg_spacing
     margin = avg_spacing * 1.5
     
@@ -111,12 +86,10 @@ def generate_relaxed_seeds(
     by_min = miny - margin
     by_max = maxy + margin
     
-    # Top and Bottom
     for x in np.arange(bx_min, bx_max + step, step):
         seeds.append(Seed(x, by_min, is_boundary=True))
         seeds.append(Seed(x, by_max, is_boundary=True))
         
-    # Left and Right
     for y in np.arange(by_min + step, by_max, step):
         seeds.append(Seed(bx_min, y, is_boundary=True))
         seeds.append(Seed(bx_max, y, is_boundary=True))

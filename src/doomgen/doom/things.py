@@ -4,12 +4,7 @@ from enum import IntEnum
 
 
 class ThingType(IntEnum):
-    """
-    Doom 2 thing type IDs.
-    
-    These are the standard Doom 2 thing types used for placing
-    entities in maps.
-    """
+    """Standard Doom 2 thing type IDs."""
     
     # Player starts
     PLAYER1_START = 1
@@ -120,7 +115,7 @@ class ThingType(IntEnum):
     TELEPORT_LANDING = 14
     
     # ZDoom/GZDoom special actors
-    MAP_SPOT = 9001  # MapSpot - invisible spawn point for SpawnSpot() ACS function
+    MAP_SPOT = 9001  # Invisible spawn point used by ACS SpawnSpot.
 
 
 # Convenience groupings
@@ -199,22 +194,7 @@ ARMOR_ITEMS = [
 
 
 def get_thing_radius(thing_type: ThingType) -> int:
-    """
-    Get the collision radius of a thing type.
-    
-    Used for placement validation to ensure things don't spawn
-    inside walls.
-    
-    Args:
-        thing_type: The thing type.
-    
-    Returns:
-        Collision radius in map units.
-    """
-    # Player and most items: 16
-    # Large enemies: 20-40
-    # Decorations: varies
-    
+    """Return an approximate collision radius in map units."""
     large_enemies = [
         ThingType.MANCUBUS,
         ThingType.ARACHNOTRON,
@@ -237,4 +217,4 @@ def get_thing_radius(thing_type: ThingType) -> int:
     elif thing_type in [ThingType.DEMON, ThingType.SPECTRE]:
         return 30
     else:
-        return 16  # Default radius
+        return 16

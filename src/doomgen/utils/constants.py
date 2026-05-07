@@ -1,9 +1,5 @@
 """Doom engine constants and scale factors."""
 
-# =============================================================================
-# SCALE AND GRID
-# =============================================================================
-
 # Doom units per real-world meter (approximately)
 UNITS_PER_METER = 32
 
@@ -16,10 +12,6 @@ GRID_SIZE_HUGE = 64
 
 # Default grid for snapping
 DEFAULT_GRID_SIZE = 8
-
-# =============================================================================
-# MAP LIMITS
-# =============================================================================
 
 # Coordinate limits (Doom uses signed 16-bit for vanilla)
 MAP_MIN_COORD = -32768
@@ -36,10 +28,6 @@ MAX_SIDEDEFS = 65535
 MAX_SECTORS = 65535
 MAX_THINGS = 65535
 
-# =============================================================================
-# HEIGHTS
-# =============================================================================
-
 # Standard heights
 DEFAULT_FLOOR_HEIGHT = 0
 DEFAULT_CEILING_HEIGHT = 128
@@ -53,10 +41,6 @@ MIN_PASSABLE_HEIGHT = 56
 # Step-up height (maximum step player can climb)
 MAX_STEP_HEIGHT = 24
 
-# =============================================================================
-# SIZES
-# =============================================================================
-
 # Minimum corridor width (player diameter is ~32)
 MIN_CORRIDOR_WIDTH = 64
 
@@ -68,10 +52,6 @@ PLAYER_RADIUS = 16
 
 # Minimum sector area (avoid degenerate sectors)
 MIN_SECTOR_AREA = 64
-
-# =============================================================================
-# LIGHT LEVELS
-# =============================================================================
 
 # Light level range
 MIN_LIGHT_LEVEL = 0
@@ -86,10 +66,6 @@ LIGHT_NORMAL = 160
 LIGHT_BRIGHT = 192
 LIGHT_VERY_BRIGHT = 224
 LIGHT_FULLBRIGHT = 255
-
-# =============================================================================
-# LINEDEF FLAGS
-# =============================================================================
 
 # Linedef flag bits
 LF_BLOCKING = 1          # Blocks players and monsters
@@ -110,10 +86,6 @@ FLAGS_TWO_SIDED = LF_TWOSIDED
 FLAGS_TWO_SIDED_PASSABLE = LF_TWOSIDED  # No LF_BLOCKING
 FLAGS_SECRET_WALL = LF_SECRET | LF_BLOCKING
 
-# =============================================================================
-# THING FLAGS
-# =============================================================================
-
 # Thing skill appearance flags
 TF_SKILL_EASY = 1        # Appears on skills 1-2
 TF_SKILL_MEDIUM = 2      # Appears on skill 3
@@ -126,10 +98,6 @@ THING_ALL_SKILLS = TF_SKILL_EASY | TF_SKILL_MEDIUM | TF_SKILL_HARD
 THING_HARD_ONLY = TF_SKILL_HARD
 THING_EASY_MEDIUM = TF_SKILL_EASY | TF_SKILL_MEDIUM
 THING_AMBUSH = TF_SKILL_EASY | TF_SKILL_MEDIUM | TF_SKILL_HARD | TF_DEAF
-
-# =============================================================================
-# TEXTURES (Common defaults)
-# =============================================================================
 
 # Wall textures (Doom 2)
 TEX_STARTAN2 = "STARTAN2"
@@ -152,10 +120,6 @@ TEX_CEIL3_5 = "CEIL3_5"
 TEX_FLAT1 = "FLAT1"
 TEX_F_SKY1 = "F_SKY1"
 
-# =============================================================================
-# TIMING
-# =============================================================================
-
 # Game tics per second
 TICS_PER_SECOND = 35
 
@@ -164,10 +128,6 @@ DOOR_WAIT_TICS = 150      # ~4.3 seconds
 DOOR_SPEED = 16
 LIFT_WAIT_TICS = 105      # ~3 seconds
 LIFT_SPEED = 32
-
-# =============================================================================
-# ACS SCRIPT NUMBERS
-# =============================================================================
 
 # Reserved script number ranges
 SCRIPT_MIN = 1

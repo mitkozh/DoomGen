@@ -37,9 +37,7 @@ class VariableScope(Enum):
 
 @dataclass
 class ACSVariable:
-    """
-    Represents a variable in ACS.
-    """
+    """An ACS variable declaration."""
     name: str
     var_type: str
     scope: VariableScope
@@ -47,22 +45,19 @@ class ACSVariable:
     index: int | None = None
 
     def to_code(self) -> str:
-        """Generate ACS code for this variable declaration."""
+        """Render the ACS declaration."""
         if self.scope == VariableScope.MAP:
-            # int map_var = 0;
             line = f"{self.var_type} {self.name}"
             if self.initial is not None:
                 line += f" = {self.initial}"
             return line + ";"
 
         elif self.scope == VariableScope.WORLD:
-            # world int 1:world_var;
             if self.index is None:
                 raise ValueError(f"World variable '{self.name}' must have an index.")
             return f"world {self.var_type} {self.index}:{self.name};"
 
         elif self.scope == VariableScope.GLOBAL:
-            # global int 1:global_var;
             if self.index is None:
                 raise ValueError(f"Global variable '{self.name}' must have an index.")
             return f"global {self.var_type} {self.index}:{self.name};"
@@ -72,15 +67,7 @@ class ACSVariable:
 
 @dataclass
 class ACSScript:
-    """
-    Represents a single ACS script.
-    
-    Attributes:
-        number: Script number (1-999).
-        script_type: Type of script trigger.
-        body: C-style script body code.
-        args: Script arguments (for ENTER scripts).
-    """
+    """A single ACS script body with its trigger metadata."""
     number: int
     script_type: ScriptType
     body: str
@@ -122,21 +109,10 @@ class ACSScript:
 
 
 class ACSBuilder:
-    """
-    Builder for ACS scripts.
-    
-    Provides a Pythonic interface for constructing ACS scripts
-    that can be compiled and inserted into WAD files.
-    
-    Attributes:
-        scripts: List of ACS scripts.
-        includes: List of include directives.
-        defines: Dictionary of #define macros.
-        global_vars: List of global variables.
-    """
+    """Builds ACS source and compiles it with ACC."""
 
     def __init__(self):
-        """Initialize the ACS builder."""
+        """Create an empty ACS builder."""
         self.scripts: list[ACSScript] = []
         self.includes: list[str] = []
         self.defines: dict[str, Any] = {}
@@ -145,36 +121,17 @@ class ACSBuilder:
         self._next_script_num = 1
 
     def add_global_code(self, code: str) -> ACSBuilder:
-        """
-        Add a block of raw global code (e.g. function definitions).
-        """
+        """Add a raw top-level ACS block."""
         self.global_code_blocks.append(code)
         return self
 
     def add_include(self, filename: str) -> ACSBuilder:
-        """
-        Add an include directive.
-        
-        Args:
-            filename: File to include (e.g., "zcommon.acs").
-        
-        Returns:
-            Self for chaining.
-        """
+        """Add an ACS include."""
         self.includes.append(filename)
         return self
 
     def add_define(self, name: str, value: Any) -> ACSBuilder:
-        """
-        Add a #define macro.
-        
-        Args:
-            name: Macro name.
-            value: Macro value.
-        
-        Returns:
-            Self for chaining.
-        """
+        """Add a `#define` macro."""
         self.defines[name] = value
         return self
 
@@ -184,15 +141,7 @@ class ACSBuilder:
         var_type: str = "int",
         initial: Any = None
     ) -> ACSBuilder:
-        """
-        Add a map-scope variable.
-        Visible to all scripts in the current map.
-        
-        Args:
-            name: Variable name.
-            var_type: Variable type ("int", "str", "bool").
-            initial: Initial value.
-        """
+        """Add a map-scope ACS variable."""
         self.variables.append(ACSVariable(name, var_type, VariableScope.MAP, initial=initial))
         return self
 
@@ -202,15 +151,7 @@ class ACSBuilder:
         index: int,
         var_type: str = "int"
     ) -> ACSBuilder:
-        """
-        Add a world-scope variable.
-        Visible across a hub of maps. Reset when entering a new hub.
-        
-        Args:
-            name: Variable name.
-            index: Unique index (1-256).
-            var_type: Variable type.
-        """
+        """Add a world-scope ACS variable."""
         self.variables.append(ACSVariable(name, var_type, VariableScope.WORLD, index=index))
         return self
 
@@ -220,15 +161,7 @@ class ACSBuilder:
         index: int,
         var_type: str = "int"
     ) -> ACSBuilder:
-        """
-        Add a global-scope variable.
-        Visible across all maps and persistent.
-        
-        Args:
-            name: Variable name.
-            index: Unique index (1-64).
-            var_type: Variable type.
-        """
+        """Add a global-scope ACS variable."""
         self.variables.append(ACSVariable(name, var_type, VariableScope.GLOBAL, index=index))
         return self
 
@@ -239,18 +172,7 @@ class ACSBuilder:
         number: int | None = None,
         args: list[str] | None = None
     ) -> int:
-        """
-        Add a new script.
-        
-        Args:
-            script_type: Type of script trigger.
-            body: Script body (C-style code).
-            number: Script number (auto-assigned if None).
-            args: Script arguments.
-        
-        Returns:
-            The script number.
-        """
+        """Add a script and return its script number."""
         if number is None:
             number = self._next_script_num
             self._next_script_num += 1
@@ -274,18 +196,7 @@ class ACSBuilder:
         close_time: int = 105,  # Tics until auto-close
         speed: int = 16
     ) -> int:
-        """
-        Create a door open/close script.
-        
-        Args:
-            tag: Sector tag for the door.
-            open_time: Time to stay open (in tics, 35 = 1 second).
-            close_time: Time until auto-close.
-            speed: Door movement speed.
-        
-        Returns:
-            Script number.
-        """
+        """Create a door open/close script."""
         body = f"""
 Door_Open({tag}, {speed});
 Delay({open_time});
@@ -298,16 +209,7 @@ Door_Close({tag}, {speed});
         source_tag: int,
         dest_tag: int
     ) -> int:
-        """
-        Create a teleporter script.
-        
-        Args:
-            source_tag: Source sector tag.
-            dest_tag: Destination thing tag.
-        
-        Returns:
-            Script number.
-        """
+        """Create a teleporter script."""
         body = f"""
 Teleport({dest_tag}, 0, 0);
 """
@@ -320,18 +222,7 @@ Teleport({dest_tag}, 0, 0);
         count: int = 1,
         delay: int = 35
     ) -> int:
-        """
-        Create an enemy spawn script.
-        
-        Args:
-            thing_type: Doom thing type to spawn.
-            spawn_tag: Thing tag for spawn location.
-            count: Number to spawn.
-            delay: Delay between spawns (tics).
-        
-        Returns:
-            Script number.
-        """
+        """Create a repeated enemy spawn script."""
         body = f"""
 for (int i = 0; i < {count}; i++)
 {{
@@ -346,17 +237,7 @@ for (int i = 0; i < {count}; i++)
         message: str,
         script_type: ScriptType = ScriptType.ENTER
     ) -> int:
-        """
-        Create a message display script.
-        
-        Args:
-            message: Message to display.
-            script_type: When to trigger.
-        
-        Returns:
-            Script number.
-        """
-        # Escape quotes in message
+        """Create a message display script."""
         escaped = message.replace('"', '\\"')
         body = f'Print(s:"{escaped}");'
         return self.add_script(script_type, body)
@@ -368,18 +249,7 @@ for (int i = 0; i < {count}; i++)
         max_light: int = 255,
         pulse_time: int = 35
     ) -> int:
-        """
-        Create a pulsing light effect.
-        
-        Args:
-            tag: Sector tag.
-            min_light: Minimum light level.
-            max_light: Maximum light level.
-            pulse_time: Pulse duration (tics).
-        
-        Returns:
-            Script number.
-        """
+        """Create a pulsing light effect."""
         body = f"""
 while (true)
 {{
@@ -392,41 +262,31 @@ while (true)
         return self.add_script(ScriptType.OPEN, body.strip())
 
     def to_code(self) -> str:
-        """
-        Generate complete ACS source code.
-        
-        Returns:
-            ACS source code as a string.
-        """
+        """Render the complete ACS source file."""
         lines = []
 
-        # Includes
         for inc in self.includes:
             lines.append(f'#include "{inc}"')
 
         if self.includes:
             lines.append("")
 
-        # Defines
         for name, value in self.defines.items():
             lines.append(f"#define {name} {value}")
 
         if self.defines:
             lines.append("")
 
-        # Variables
         for var in self.variables:
             lines.append(var.to_code())
 
         if self.variables:
             lines.append("")
 
-        # Global Code Blocks
         for block in self.global_code_blocks:
             lines.append(block)
             lines.append("")
 
-        # Scripts
         for script in self.scripts:
             lines.append(script.to_code())
             lines.append("")
@@ -438,49 +298,29 @@ while (true)
         output_path: str | Path | None = None,
         acc_path: str | None = None
     ) -> bytes | None:
-        """
-        Compile the ACS scripts to bytecode.
-
-        Requires the ACC compiler to be installed and accessible.
-        If no acc_path is provided, uses ACC compiler in ./acc/
-
-        Args:
-            output_path: Path for compiled output (temporary if None).
-            acc_path: Path to ACC compiler executable.
-        
-        Returns:
-            Compiled bytecode as bytes, or None if compilation fails.
-
-        Raises:
-            FileNotFoundError: If ACC compiler is not found.
-            subprocess.CalledProcessError: If compilation fails.
-        """
+        """Compile the scripts with ACC and return the bytecode."""
         if acc_path is None:
             acc_path = get_bundled_compiler("acc")
 
         source_code = self.to_code()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            # Write source
             source_file = Path(tmpdir) / "script.acs"
             source_file.write_text(source_code)
 
-            # Output file
             if output_path:
                 obj_file = Path(output_path)
             else:
                 obj_file = Path(tmpdir) / "script.o"
 
-            # Validate ACC executable exists
             if not validate_executable(acc_path):
                 raise FileNotFoundError(
                     f"ACC compiler not found at '{acc_path}'. "
                     "Ensure ACC is installed or available via bundled ./acc directory."
                 )
 
-            # Compile
             try:
-                result = subprocess.run(
+                subprocess.run(
                     [acc_path, str(source_file), str(obj_file)],
                     capture_output=True,
                     text=True,
@@ -492,17 +332,11 @@ while (true)
                     "Please install ACC and add it to your PATH."
                 )
 
-            # Read bytecode
             if obj_file.exists():
                 return obj_file.read_bytes()
 
             return None
 
     def save_source(self, filepath: str | Path) -> None:
-        """
-        Save ACS source code to a file.
-        
-        Args:
-            filepath: Output file path.
-        """
+        """Write the rendered ACS source to disk."""
         Path(filepath).write_text(self.to_code())
