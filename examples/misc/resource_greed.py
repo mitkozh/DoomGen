@@ -1,31 +1,3 @@
-"""
-Common Harvest Doom - MARL Benchmark Scenario
-=============================================
-Inspired by MeltingPot 2.0's "Common Harvest" scenario.
-
-Two agents share an ammo pool in a combat arena connected to four
-separate ammo rooms:
-
-- Enemies spawn continuously in the arena           -> kill = +reward
-- Ammo ONLY spawns inside a room when a player is present there
-- Ammo pickups benefit BOTH agents (shared/equalized pool)
-
-Social dilemma
---------------
-To collect ammo an agent must leave the arena, walk through a corridor
-(blocking line-of-sight to enemies) and stand in the ammo room.
-An agent cannot shoot enemies and collect ammo at the same time.
-If both agents keep shooting, the shared pool depletes and kills stop.
-At least one must sacrifice combat time to restock — analogous to
-cleaning the river in Common Harvest.
-
-Global ACS variables (for RL observation):
-  51  ch_kills_global        - cumulative kills (both agents)
-  52  ch_shared_ammo_global  - total ammo held by P1+P2
-  53  ch_world_ammo_global   - ammo items currently on the ground
-  54  ch_enemy_count_global  - live enemy count
-"""
-
 import math
 import os
 import random

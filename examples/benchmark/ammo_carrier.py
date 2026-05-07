@@ -22,6 +22,14 @@ class AmmoCarrierScenario(Scenario):
             'enemy_density': 1.0,
             'seed': 42,
         }
+
+    def validate_config(self) -> None:
+        if int(self.config["map_radius"]) < 600:
+            raise ValueError("map_radius must be >= 600")
+        if int(self.config["num_depots"]) < 1:
+            raise ValueError("num_depots must be >= 1")
+        if float(self.config["enemy_density"]) <= 0.0:
+            raise ValueError("enemy_density must be > 0")
         
     def generate(self, output_path: str) -> None:
         cfg = self.config
@@ -30,6 +38,7 @@ class AmmoCarrierScenario(Scenario):
         
         radius = cfg['map_radius']
         num_depots = cfg['num_depots']
+        enemy_density = float(cfg['enemy_density'])
         bounds_pad = 512
         bounds = (-(radius+bounds_pad), -(radius+bounds_pad), (radius+bounds_pad), (radius+bounds_pad))
         
@@ -217,6 +226,9 @@ class AmmoCarrierScenario(Scenario):
         
         carrier_bar_cases = []
         carrier_bar_max_ammo = 200
+        initial_wave_roll_max = max(1, int(round(2.0 / enemy_density)) - 1)
+        wave_spawn_roll_max = max(1, int(round(3.0 / enemy_density)))
+        wave_delay_tics = max(35 * 2, int(round((35 * 5) / enemy_density)))
         for i in range(21):
             filled = "=" * i
             empty = "-" * (20 - i)
@@ -291,7 +303,7 @@ class AmmoCarrierScenario(Scenario):
 
         // Seed an early contact wave near the hub before outer spawns arrive through corridors.
         for (i={num_depots}; i<max_spots; i++) {{
-            if (Random(0, 1) == 0) {{
+            if (Random(0, {initial_wave_roll_max}) == 0) {{
                 spot_tid = spot_tid_base + i;
                 if (ThingCount(T_NONE, spot_tid) > 0) {{
                     if (Random(0, 2) == 0) {{
@@ -306,11 +318,11 @@ class AmmoCarrierScenario(Scenario):
         
         while (TRUE) {{
             // Wave Logic
-            Delay(35 * 5); // Wait 5 seconds
+            Delay({wave_delay_tics});
             
             spawned = 0;
             for (i=0; i<max_spots; i++) {{
-                 if (Random(0, 3) == 0) {{ // 25% chance per spot
+                 if (Random(0, {wave_spawn_roll_max}) == 0) {{
                      spot_tid = spot_tid_base + i; 
                      r = Random(0, 10);
                      spawn_success = 0;

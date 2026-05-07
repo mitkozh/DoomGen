@@ -30,6 +30,7 @@ from examples.benchmark.platform_chain_easy import PlatformChainScenario as Plat
 
 
 BATCH_DIR = REPO_ROOT / "comrad" / "scenarios" / "batch_platform_chain_curriculum"
+INTERESTINGNESS_FILENAME = "platform_chain_interestingness.json"
 
 
 @dataclass(frozen=True)
@@ -234,6 +235,17 @@ def _generate_task(output_dir: Path, task: CurriculumTask) -> dict:
     }
 
 
+def _interestingness_graph(tasks: list[CurriculumTask]) -> dict[str, dict[str, bool]]:
+    ordered_ids = [task.name for task in tasks]
+    graph: dict[str, dict[str, bool]] = {}
+    for idx, task_id in enumerate(ordered_ids):
+        graph[task_id] = {
+            other_id: other_idx > idx
+            for other_idx, other_id in enumerate(ordered_ids)
+        }
+    return graph
+
+
 def main() -> None:
     output_dir = BATCH_DIR
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -242,6 +254,9 @@ def main() -> None:
     registry_path = output_dir / "batch_registry.json"
     if registry_path.exists():
         registry_path.unlink()
+    interestingness_path = output_dir / INTERESTINGNESS_FILENAME
+    if interestingness_path.exists():
+        interestingness_path.unlink()
 
     tasks = curriculum_tasks()
     print(f"Generating {len(tasks)} Platform Chain curriculum scenarios into {output_dir}...")
@@ -252,6 +267,7 @@ def main() -> None:
         registry.append(_generate_task(output_dir, task))
 
     registry_path.write_text(json.dumps(registry, indent=2), encoding="utf-8")
+    interestingness_path.write_text(json.dumps(_interestingness_graph(tasks), indent=2), encoding="utf-8")
     print(f"Platform Chain curriculum batch generation complete: {registry_path}")
 
 
