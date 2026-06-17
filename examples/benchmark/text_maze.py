@@ -255,12 +255,170 @@ class TextMazeScenario(Scenario):
     }}
 
     // Script placeholders -- filled in Tasks 2-4
-    script 1 OPEN {{ }}
-    script "GenerateMaze" (int sx, int sy, int size) {{ }}
+    script 1 OPEN {{
+        Sector_SetDamage(99, {LAVA_DAMAGE}, 14);
+
+        g_start_x = MAP_WIDTH / 2;
+        g_start_y = MAP_WIDTH / 2;
+
+        current_start_tag = get_tag(g_start_x, g_start_y);
+        tm_p1_grid_x         = -1;
+        tm_p1_grid_y         = -1;
+        tm_goal_grid_x       = -1;
+        tm_goal_grid_y       = -1;
+        tm_maze_size         = MAP_WIDTH;
+        tm_level             = 0;
+        tm_direction_count   = 2;
+        tm_can_see           = 0;
+        direction_bits       = 3;    // bits 0+1 = LEFT,RIGHT
+        level_clear_lock     = 1;
+
+        init_direction_tokens();
+
+        ACS_NamedExecute("GenerateMaze", 0, g_start_x, g_start_y, current_maze_size);
+
+        while (TRUE) {{
+            tm_can_see = CheckSight(1001, 1000);
+            Delay(5);
+        }}
+    }}
+    script "GenerateMaze" (int sx, int sy, int size) {{
+        int start_tag = get_tag(sx, sy);
+        int i;
+        reset_map(start_tag);
+        Delay(1);
+
+        for (i = 0; i < 3; i++) maze_bits_chunk[i] = 0;
+
+        carve(sx, sy);
+        ChangeFloor(start_tag, "F_START");
+        Sector_SetColor(start_tag, 255, 255, 255);
+        Light_ChangeToValue(start_tag, 255);
+        Sector_SetFade(start_tag, 0, 0, 0);
+
+        // Determine which directions are active based on tm_level
+        int dir_count = 2;
+        direction_bits = 3;  // LEFT | RIGHT
+        if (tm_level >= DIR_2_LEVELS + DIR_3_LEVELS) {{
+            // Stage 3: full 4 directions
+            direction_bits = 15;  // LEFT | RIGHT | SOUTH | NORTH
+            dir_count = 4;
+        }} else if (tm_level >= DIR_2_LEVELS) {{
+            // Stage 2: 3 directions -- randomly exclude one axis
+            int exclude_axis = Random(0, 1);
+            if (exclude_axis == 0) {{
+                direction_bits = 11;  // exclude SOUTH (bit 2)
+            }} else {{
+                direction_bits = 7;   // exclude NORTH (bit 3)
+            }}
+            dir_count = 3;
+        }}
+        tm_direction_count = dir_count;
+
+        // Stage 0 (2 directions): use simple 1D line generation
+        if (dir_count == 2) {{
+            int dir = 1;
+            int can_pos = (sx + size - 1 < MAP_WIDTH);
+            int can_neg = (sx - size + 1 >= 0);
+            if (can_pos && can_neg) {{
+                dir = (Random(0, 1) * 2) - 1;
+            }} else if (can_pos) {{
+                dir = 1;
+            }} else {{
+                dir = -1;
+            }}
+
+            int current_x = sx;
+            for (i = 1; i < size; i++) {{
+                current_x = current_x + dir;
+                carve(current_x, sy);
+            }}
+            current_end_tag = get_tag(current_x, sy);
+            tm_goal_grid_x = current_x;
+            tm_goal_grid_y = sy;
+        }} else {{
+            // Stage 1+ (3 or 4 directions): 2D DFS carve
+            int visited[MAP_WIDTH * MAP_WIDTH];
+            int stack[100];
+            for (i = 0; i < MAP_WIDTH * MAP_WIDTH; i++) visited[i] = 0;
+
+            int stack_ptr = 0;
+            int cx = sx;
+            int cy = sy;
+            int count_carved = 1;
+
+            visited[cy * MAP_WIDTH + cx] = 1;
+            stack[stack_ptr++] = (cx << 8) | cy;
+
+            int neighbors[4];
+            int n_count;
+            int nx, ny;
+            int last_x = sx;
+            int last_y = sy;
+
+            while (count_carved < size && stack_ptr > 0) {{
+                int packed = stack[stack_ptr - 1];
+                cx = packed >> 8;
+                cy = packed & 0xFF;
+
+                n_count = 0;
+
+                // Check NORTH (bit 3)
+                if ((direction_bits & 8) && (cy + 2 < MAP_WIDTH) && visited[(cy + 2) * MAP_WIDTH + cx] == 0)
+                    neighbors[n_count++] = (cx << 8) | (cy + 2);
+                // Check SOUTH (bit 2)
+                if ((direction_bits & 4) && (cy - 2 >= 0) && visited[(cy - 2) * MAP_WIDTH + cx] == 0)
+                    neighbors[n_count++] = (cx << 8) | (cy - 2);
+                // Check EAST (bit 1)
+                if ((direction_bits & 2) && (cx + 2 < MAP_WIDTH) && visited[cy * MAP_WIDTH + (cx + 2)] == 0)
+                    neighbors[n_count++] = ((cx + 2) << 8) | cy;
+                // Check WEST (bit 0)
+                if ((direction_bits & 1) && (cx - 2 >= 0) && visited[cy * MAP_WIDTH + (cx - 2)] == 0)
+                    neighbors[n_count++] = ((cx - 2) << 8) | cy;
+
+                if (n_count > 0) {{
+                    int r = Random(0, n_count - 1);
+                    int next_packed = neighbors[r];
+                    nx = next_packed >> 8;
+                    ny = next_packed & 0xFF;
+
+                    carve((cx + nx) / 2, (cy + ny) / 2);
+                    carve(nx, ny);
+
+                    visited[ny * MAP_WIDTH + nx] = 1;
+                    count_carved += 2;
+                    last_x = nx;
+                    last_y = ny;
+
+                    stack[stack_ptr++] = next_packed;
+                }} else {{
+                    stack_ptr--;
+                }}
+            }}
+
+            current_end_tag = get_tag(last_x, last_y);
+            tm_goal_grid_x = last_x;
+            tm_goal_grid_y = last_y;
+        }}
+
+        ChangeFloor(current_end_tag, "F_END");
+        Sector_SetColor(current_end_tag, 255, 255, 255);
+        Light_ChangeToValue(current_end_tag, 255);
+        Sector_SetFade(current_end_tag, 0, 0, 0);
+
+        level_clear_lock = 0;
+    }}
     script 2 ENTER {{ }}
     script 3 ENTER {{ }}
-    script "EndGame" (void) {{ }}
-    script 999 DEATH {{ }}
+    script "EndGame" (void) {{
+        Delay(1);
+        Exit_Normal(0);
+    }}
+    script 999 DEATH {{
+        if (PlayerNumber() != -1) {{
+            ACS_NamedExecuteAlways("EndGame", 0);
+        }}
+    }}
     """
 
         acs.add_global_code(maze_logic_script)
