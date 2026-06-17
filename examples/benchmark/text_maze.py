@@ -182,7 +182,7 @@ class TextMazeScenario(Scenario):
     int maze_bits_chunk[3];
 
     // Current direction vocabulary state
-    int direction_bits = 3;  // bit 0=LEFT, 1=RIGHT, 2=SOUTH, 3=NORTH
+    int direction_bits = 3;  // bit 0=EAST, 1=WEST, 2=SOUTH, 3=NORTH
     str dir_tokens[4];
 
     function int get_tag(int x, int y) {{
@@ -239,8 +239,8 @@ class TextMazeScenario(Scenario):
 
     function void init_direction_tokens(void) {{
         // Called after direction_bits is set
-        dir_tokens[0] = "LEFT";
-        dir_tokens[1] = "RIGHT";
+        dir_tokens[0] = "EAST";
+        dir_tokens[1] = "WEST";
         dir_tokens[2] = "SOUTH";
         dir_tokens[3] = "NORTH";
     }}
@@ -270,7 +270,7 @@ class TextMazeScenario(Scenario):
         tm_level             = 0;
         tm_direction_count   = 2;
         tm_can_see           = 0;
-        direction_bits       = 3;    // bits 0+1 = LEFT,RIGHT
+        direction_bits       = 3;    // bits 0+1 = EAST,WEST
         level_clear_lock     = 1;
 
         init_direction_tokens();
@@ -298,10 +298,10 @@ class TextMazeScenario(Scenario):
 
         // Determine which directions are active based on tm_level
         int dir_count = 2;
-        direction_bits = 3;  // LEFT | RIGHT
+        direction_bits = 3;  // EAST | WEST
         if (tm_level >= DIR_2_LEVELS + DIR_3_LEVELS) {{
             // Stage 3: full 4 directions
-            direction_bits = 15;  // LEFT | RIGHT | SOUTH | NORTH
+            direction_bits = 15;  // EAST | WEST | SOUTH | NORTH
             dir_count = 4;
         }} else if (tm_level >= DIR_2_LEVELS) {{
             // Stage 2: 3 directions -- randomly exclude one axis
@@ -444,8 +444,8 @@ class TextMazeScenario(Scenario):
         int prev_cell_x = g_start_x;
         int prev_cell_y = g_start_y;
 
-        // Determine if this is a 2D (grid) or 1D (line) episode
-        int is_2d = (tm_direction_count >= 3);
+        // Always 4-direction movement; maze constrains which are safe
+        int is_2d = 1;
 
         while (TRUE) {{
             if (GetActorProperty(0, APROP_HEALTH) <= 0) {{
@@ -481,10 +481,10 @@ class TextMazeScenario(Scenario):
                     // Print the direction of movement to notifications buffer
                     int dx = p1_cell_x - prev_cell_x;
                     int dy = p1_cell_y - prev_cell_y;
-                    if (dx == 1)  Print(s:"RIGHT");
-                    if (dx == -1) Print(s:"LEFT");
-                    if (dy == 1)  Print(s:"NORTH");
-                    if (dy == -1) Print(s:"SOUTH");
+                    if (dx == 1)  PrintBold(s:"EAST");
+                    if (dx == -1) PrintBold(s:"WEST");
+                    if (dy == 1)  PrintBold(s:"NORTH");
+                    if (dy == -1) PrintBold(s:"SOUTH");
                     prev_cell_x = p1_cell_x;
                     prev_cell_y = p1_cell_y;
 
@@ -582,19 +582,19 @@ class TextMazeScenario(Scenario):
             int btns = GetPlayerInput(1, INPUT_BUTTONS);
 
             // Button mapping:
-            //   ATTACK = direction bit 0 (LEFT / WEST)
-            //   USE    = direction bit 1 (RIGHT / EAST)
+            //   ATTACK = direction bit 0 (EAST)
+            //   USE    = direction bit 1 (WEST)
             //   RELOAD = direction bit 2 (SOUTH)
             //   JUMP   = direction bit 3 (NORTH)
             // Only broadcast if the direction bit is active in current vocabulary
             if ((btns & BT_ATTACK) && (direction_bits & 1))
-                Print(s:dir_tokens[0]);
+                PrintBold(s:dir_tokens[0]);
             if ((btns & BT_USE) && (direction_bits & 2))
-                Print(s:dir_tokens[1]);
+                PrintBold(s:dir_tokens[1]);
             if ((btns & BT_RELOAD) && (direction_bits & 4))
-                Print(s:dir_tokens[2]);
+                PrintBold(s:dir_tokens[2]);
             if ((btns & BT_JUMP) && (direction_bits & 8))
-                Print(s:dir_tokens[3]);
+                PrintBold(s:dir_tokens[3]);
 
             // Auto-track Navigator on opposite stand
             int px = GetActorX(1000);
