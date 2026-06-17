@@ -245,7 +245,7 @@ class TextMazeScenario(Scenario):
         dir_tokens[3] = "NORTH";
     }}
 
-    function int count_directions() {{
+    function int count_directions(void) {{
         int count = 0;
         int i;
         for (i = 0; i < 4; i++) {{
@@ -278,7 +278,7 @@ class TextMazeScenario(Scenario):
         ACS_NamedExecute("GenerateMaze", 0, g_start_x, g_start_y, current_maze_size);
 
         while (TRUE) {{
-            tm_can_see = CheckSight(1001, 1000);
+            tm_can_see = CheckSight(1001, 1000, 0);
             Delay(5);
         }}
     }}
@@ -455,18 +455,16 @@ class TextMazeScenario(Scenario):
 
             if (step_active) {{
                 step_timer++;
+                int s_step_from_x = get_world_x(step_from_x);
+                int s_step_to_x   = get_world_x(step_to_x);
                 if (is_2d) {{
-                    int from_world_x = get_world_x(step_from_x);
-                    int to_world_x = get_world_x(step_to_x);
-                    int from_world_y = get_world_y(step_from_y);
-                    int to_world_y = get_world_y(step_to_y);
-                    int interp_x = from_world_x + (((to_world_x - from_world_x) * step_timer) / TM_STEP_TICS);
-                    int interp_y = from_world_y + (((to_world_y - from_world_y) * step_timer) / TM_STEP_TICS);
+                    int s_step_from_y = get_world_y(step_from_y);
+                    int s_step_to_y   = get_world_y(step_to_y);
+                    int interp_x = s_step_from_x + (((s_step_to_x - s_step_from_x) * step_timer) / TM_STEP_TICS);
+                    int interp_y = s_step_from_y + (((s_step_to_y - s_step_from_y) * step_timer) / TM_STEP_TICS);
                     SetActorPosition(0, interp_x << 16, interp_y << 16, 0, 0);
                 }} else {{
-                    int from_world_x = get_world_x(step_from_x);
-                    int to_world_x = get_world_x(step_to_x);
-                    int interp_world_x = from_world_x + (((to_world_x - from_world_x) * step_timer) / TM_STEP_TICS);
+                    int interp_world_x = s_step_from_x + (((s_step_to_x - s_step_from_x) * step_timer) / TM_STEP_TICS);
                     SetActorPosition(0, interp_world_x << 16, get_world_y(p1_cell_y) << 16, 0, 0);
                 }}
                 SetActorVelocity(0, 0, 0, 0, FALSE, FALSE);
