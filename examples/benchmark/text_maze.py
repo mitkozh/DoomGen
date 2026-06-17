@@ -1,5 +1,7 @@
 import random
 from typing import Any, Dict
+import io
+from PIL import Image
 
 from doomgen.abstraction.layout import ConnectionType
 from doomgen.batch.scenario import Scenario
@@ -57,6 +59,28 @@ class TextMazeScenario(Scenario):
             num_seeds=24000,
             seed=seed,
         )
+
+        # Generate texture lumps for stand walls, maze walls, and markers
+        def create_color_lump(name: str, color_rgb: tuple[int, int, int]):
+            img = Image.new('RGB', (1920, 1080), color=color_rgb)
+            buf = io.BytesIO()
+            img.save(buf, format='PNG')
+            builder.wad_writer.add_lump(name, buf.getvalue())
+
+        lump_files = {
+            "S_GREEN": (0, 255, 0),
+            "S_RED":   (255, 0, 0),
+            "S_YELLOW":(255, 255, 0),
+            "S_BLUE":  (0, 0, 255),
+            "S_BLACK": (0, 0, 0),
+            "S_WALL":  (200, 200, 200),
+            "F_START": (0, 255, 255),
+            "F_END":   (255, 0, 255),
+        }
+        builder.wad_writer.add_lump("TX_START", b"")
+        for lump_name, color in lump_files.items():
+            create_color_lump(lump_name, color)
+        builder.wad_writer.add_lump("TX_END", b"")
 
         # --- Lava pit ---
         builder.add_area(
@@ -275,7 +299,7 @@ class TextMazeScenario(Scenario):
 
         init_direction_tokens();
 
-        ACS_NamedExecute("GenerateMaze", 0, g_start_x, g_start_y, current_maze_size);
+        ACS_NamedExecuteAlways("GenerateMaze", 0, g_start_x, g_start_y, current_maze_size);
 
         while (TRUE) {{
             tm_can_see = CheckSight(1001, 1000, 0);
@@ -553,7 +577,7 @@ class TextMazeScenario(Scenario):
                     current_maze_size = next_size;
                     tm_maze_size = MAP_WIDTH;
 
-                    ACS_NamedExecute("GenerateMaze", 0, p1_cell_x, p1_cell_y, current_maze_size);
+                    ACS_NamedExecuteAlways("GenerateMaze", 0, p1_cell_x, p1_cell_y, current_maze_size);
                 }}
             }} else {{
                 tm_p1_grid_x = -1;
