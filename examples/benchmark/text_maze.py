@@ -32,6 +32,7 @@ class TextMazeScenario(Scenario):
             "lava_depth": 64,
             "step_tics": 12,
             "step_cooldown_tics": 4,
+            "stand_thickness": 200,
             "dir_2_levels": 3,
             "dir_3_levels": 3,
         }
@@ -46,6 +47,7 @@ class TextMazeScenario(Scenario):
         LAVA_DEPTH = int(cfg.get("lava_depth", 64))
         STEP_TICS = int(cfg.get("step_tics", 12))
         STEP_COOLDOWN_TICS = int(cfg.get("step_cooldown_tics", 4))
+        STANDS_THICKNESS = int(cfg.get("stand_thickness", 200))
         DIR_2_LEVELS = int(cfg.get("dir_2_levels", 3))
         DIR_3_LEVELS = int(cfg.get("dir_3_levels", 3))
         seed = cfg["seed"] if cfg["seed"] is not None else random.randint(0, 999999)
@@ -96,7 +98,6 @@ class TextMazeScenario(Scenario):
 
         # --- Perimeter stands ---
         STANDS_HEIGHT = 350
-        STANDS_THICKNESS = 100
         STANDS_INNER = (MAZE_WIDTH_UNITS // 2) + 64
 
         pos_y = STANDS_INNER + STANDS_THICKNESS / 2
@@ -454,6 +455,11 @@ class TextMazeScenario(Scenario):
         SetActorProperty(0, APROP_ScaleY, 5.5);
         SetActorProperty(0, 21, 0);
 
+        // Black HUD overlay to blind Navigator (forces reliance on text)
+        SetHudSize(320, 200, 1);
+        SetFont("S_BLACK");
+        HudMessage(s:"A"; HUDMSG_PLAIN | HUDMSG_LAYER_UNDERHUD, 1, CR_UNTRANSLATED, 160.0, 100.0, 0.0);
+
         ClearInventory();
 
         int p1_cell_x = g_start_x;
@@ -609,15 +615,10 @@ class TextMazeScenario(Scenario):
             if (btns & BT_MOVELEFT)   PrintBold(s:"WEST");
             if (btns & BT_MOVERIGHT)  PrintBold(s:"EAST");
 
-            // Auto-track Navigator on opposite stand
+            // Auto-track Navigator on NORTH stand (no side-flip)
             int px = GetActorX(1000);
-            int py = GetActorY(1000);
-
             int obs_x = px;
-            int obs_y = -r_fix;
-            if (py <= 0) {{
-                obs_y = r_fix;
-            }}
+            int obs_y = r_fix;
             int obs_z = GetActorZ(0);
 
             int bound = r_fix - (128 << 16);
