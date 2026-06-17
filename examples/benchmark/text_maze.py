@@ -299,6 +299,9 @@ class TextMazeScenario(Scenario):
 
         init_direction_tokens();
 
+        // Belt-and-suspenders: ensure start cell has no damage before GenerateMaze
+        Sector_SetDamage(current_start_tag, 0, 0);
+
         ACS_NamedExecuteAlways("GenerateMaze", 0, g_start_x, g_start_y, current_maze_size);
 
         while (TRUE) {{
@@ -443,6 +446,8 @@ class TextMazeScenario(Scenario):
         int wy = get_world_y(g_start_y) << 16;
 
         SetActorPosition(0, wx, wy, 0, 0);
+        // Force zero damage on whatever subsector the player landed in
+        Sector_SetDamage(0, 0, 0);
         SetActorProperty(0, APROP_ViewHeight, 110.0);
         SetActorProperty(0, APROP_Mass, 0x7FFFFFFF);
         SetActorProperty(0, APROP_ScaleX, 5.5);
