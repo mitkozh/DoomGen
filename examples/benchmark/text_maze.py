@@ -22,10 +22,10 @@ class TextMazeScenario(Scenario):
     def get_default_config(self) -> Dict[str, Any]:
         return {
             "seed": 42,
-            "physical_size": 18,
+            "physical_size": 9,
             "cell_size": 128,
             "initial_maze_size": 4,
-            "max_maze_size": 14,
+            "max_maze_size": 20,
             "lava_damage": 35,
             "lava_depth": 64,
             "step_tics": 12,
