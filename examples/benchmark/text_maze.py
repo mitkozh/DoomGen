@@ -599,60 +599,36 @@ class TextMazeScenario(Scenario):
 
         ClearInventory();
 
-        int r_fix = PLATFORM_RADIUS << 16;
+        // Static position on the SOUTH stand, looking north across the maze
+        int r_fix = -(PLATFORM_RADIUS + 192) << 16;  // south side, pulled back for wider view
+        SetActorPosition(0, 0, r_fix, 450 << 16, 0);
+
+        // Look at grid center
+        int dx = 0 - GetActorX(0);
+        int dy = 0 - GetActorY(0);
+        int dz = 0 - (GetActorZ(0) + GetActorViewHeight(0));
+        int target_angle = VectorAngle(dx, dy);
+        int xy_dist = VectorLength(dx, dy);
+        int target_pitch = VectorAngle(xy_dist, dz);
+        if (target_pitch > 0.5) {{ target_pitch -= 1.0; }}
+        target_pitch = -target_pitch;
+        SetActorAngle(0, target_angle);
+        SetActorPitch(0, target_pitch);
 
         while(TRUE) {{
-            // Read Guide's button presses and broadcast corresponding direction
+            // WASD broadcast: MOVE buttons drive directional text output
             int btns = GetPlayerInput(1, INPUT_BUTTONS);
 
-            // Button mapping:
-            //   ATTACK = direction bit 0 (EAST)
-            //   USE    = direction bit 1 (WEST)
-            //   RELOAD = direction bit 2 (SOUTH)
-            //   JUMP   = direction bit 3 (NORTH)
-            // Only broadcast if the direction bit is active in current vocabulary
-            if ((btns & BT_ATTACK) && (direction_bits & 1))
-                PrintBold(s:dir_tokens[0]);
-            if ((btns & BT_USE) && (direction_bits & 2))
-                PrintBold(s:dir_tokens[1]);
-            if ((btns & BT_RELOAD) && (direction_bits & 4))
-                PrintBold(s:dir_tokens[2]);
-            if ((btns & BT_JUMP) && (direction_bits & 8))
+            // BF_FORWARD -> NORTH, BF_BACK -> SOUTH,
+            // BF_MOVELEFT -> WEST, BF_MOVERIGHT -> EAST
+            if ((btns & BT_FORWARD) && (direction_bits & 8))
                 PrintBold(s:dir_tokens[3]);
-
-            // Auto-track Navigator on opposite stand
-            int px = GetActorX(1000);
-            int py = GetActorY(1000);
-
-            int obs_x = px;
-            int obs_y = -r_fix;
-            if (py <= 0) {{
-                obs_y = r_fix;
-            }}
-            int obs_z = GetActorZ(0);
-
-            int bound = r_fix - (128 << 16);
-            if (obs_x > bound) obs_x = bound;
-            if (obs_x < -bound) obs_x = -bound;
-
-            SetActorPosition(0, obs_x, obs_y, obs_z, 0);
-
-            // Always look at Navigator
-            int dx = GetActorX(1000) - GetActorX(0);
-            int dy = GetActorY(1000) - GetActorY(0);
-            int dz = (GetActorZ(1000) + (GetActorProperty(1000, APROP_Height) / 2)) - (GetActorZ(0) + GetActorViewHeight(0));
-
-            int target_angle = VectorAngle(dx, dy);
-            int xy_dist = VectorLength(dx, dy);
-            int target_pitch = VectorAngle(xy_dist, dz);
-
-            if (target_pitch > 0.5) {{
-                target_pitch -= 1.0;
-            }}
-            target_pitch = -target_pitch;
-
-            SetActorAngle(0, target_angle);
-            SetActorPitch(0, target_pitch);
+            if ((btns & BT_BACK) && (direction_bits & 4))
+                PrintBold(s:dir_tokens[2]);
+            if ((btns & BT_MOVELEFT) && (direction_bits & 2))
+                PrintBold(s:dir_tokens[1]);
+            if ((btns & BT_MOVERIGHT) && (direction_bits & 1))
+                PrintBold(s:dir_tokens[0]);
 
             Delay(1);
         }}
