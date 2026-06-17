@@ -40,9 +40,9 @@ class Area:
     An abstract region in the map.
     """
     def __init__(
-        self, 
-        name: str, 
-        transform: Transform, 
+        self,
+        name: str,
+        transform: Transform,
         config: Optional[AreaConfig] = None,
     ):
         self.id = str(uuid.uuid4())

@@ -8,7 +8,7 @@ class LinedefFlags(IntFlag):
     """Linedef flags controlling rendering and collision."""
     NONE = 0
     BLOCKING = 1           # Blocks players and monsters
-    BLOCK_MONSTERS = 2     # Blocks monsters only  
+    BLOCK_MONSTERS = 2     # Blocks monsters only
     TWO_SIDED = 4          # Renders both sides
     UPPER_UNPEGGED = 8     # Upper texture anchored to ceiling
     LOWER_UNPEGGED = 16    # Lower texture anchored to floor
@@ -23,23 +23,23 @@ class DoorAction(IntEnum):
     # Manual doors (D = "use" on the door linedef itself)
     DR_OPEN_WAIT_CLOSE = 1          # Repeatable manual door
     D1_OPEN_STAY = 31               # One-shot manual door, stays open
-    
+
     # Remote doors (S = switch, W = walk-over, G = gun/shoot)
     SR_OPEN_WAIT_CLOSE = 63         # Repeatable switch door
     S1_OPEN_WAIT_CLOSE = 29         # One-shot switch door
     WR_OPEN_WAIT_CLOSE = 86         # Repeatable walk-trigger door
     W1_OPEN_WAIT_CLOSE = 4          # One-shot walk-trigger door
-    
+
     # Fast doors (Doom II)
     DR_OPEN_WAIT_CLOSE_FAST = 117   # Fast repeatable manual door
     D1_OPEN_STAY_FAST = 118         # Fast one-shot manual door
-    
+
     # Keyed doors (D1 = one-shot, stay open)
     D1_BLUE_DOOR = 32
     D1_RED_DOOR = 33
     D1_YELLOW_DOOR = 34
     DR_BLUE_DOOR = 26               # Repeatable blue key door
-    DR_RED_DOOR = 28                # Repeatable red key door  
+    DR_RED_DOOR = 28                # Repeatable red key door
     DR_YELLOW_DOOR = 27             # Repeatable yellow key door
 
 
@@ -50,11 +50,11 @@ class LiftAction(IntEnum):
     S1_LIFT = 21                    # One-shot switch lift
     WR_LIFT = 88                    # Repeatable walk-trigger lift
     W1_LIFT = 10                    # One-shot walk-trigger lift
-    
+
     # Fast/turbo lifts
     SR_LIFT_FAST = 123              # Fast repeatable lift
     WR_LIFT_FAST = 120              # Fast walk-trigger lift
-    
+
     # Perpetual platforms (continuous up/down motion)
     SR_PERPETUAL_RAISE = 87         # Start perpetual raise
     S1_STOP_PERPETUAL = 89          # Stop perpetual platform
@@ -66,14 +66,14 @@ class FloorAction(IntEnum):
     SR_FLOOR_LOWER_TO_LOWEST = 60
     W1_FLOOR_LOWER_TO_LOWEST = 38
     WR_FLOOR_LOWER_TO_LOWEST = 36
-    
+
     S1_FLOOR_RAISE_TO_NEXT = 18
     SR_FLOOR_RAISE_TO_NEXT = 69
     W1_FLOOR_RAISE_TO_NEXT = 119
-    
+
     S1_FLOOR_RAISE_24 = 15
     W1_FLOOR_RAISE_24 = 58
-    
+
     S1_FLOOR_RAISE_TO_CEILING = 20
 
 
@@ -91,13 +91,13 @@ class CrusherAction(IntEnum):
     WR_CRUSHER_SLOW = 73
     S1_CRUSHER_SLOW = 49
     SR_CRUSHER_SLOW = 77
-    
+
     W1_CRUSHER_FAST = 25
     WR_CRUSHER_FAST = 74
-    
+
     W1_CRUSHER_STOP = 57
     S1_CRUSHER_STOP = 168
-    
+
     W1_CRUSHER_SILENT = 141
 
 
@@ -133,10 +133,10 @@ class TeleportAction(IntEnum):
     W1_TELEPORT = 39                # One-shot walk teleport
     WR_TELEPORT = 97                # Repeatable walk teleport
     SR_TELEPORT = 195               # Switch teleport (Boom)
-    
+
     W1_TELEPORT_MONSTER_ONLY = 126  # Monsters only
     WR_TELEPORT_MONSTER_ONLY = 125
-    
+
     W1_SILENT_TELEPORT = 207        # Silent teleport (Boom)
     WR_SILENT_TELEPORT = 208
 
@@ -146,7 +146,7 @@ class ExitAction(IntEnum):
     S1_EXIT = 11                    # Switch exit to next level
     W1_EXIT = 52                    # Walk exit
     G1_EXIT = 197                   # Gun/shoot exit (Boom)
-    
+
     S1_SECRET_EXIT = 51             # Switch secret exit
     W1_SECRET_EXIT = 124            # Walk secret exit
 
@@ -156,13 +156,13 @@ class LightAction(IntEnum):
     W1_LIGHT_TO_HIGHEST = 13        # Light to highest adjacent
     WR_LIGHT_TO_HIGHEST = 81
     S1_LIGHT_TO_HIGHEST = 138
-    
+
     W1_LIGHT_TO_LOWEST = 35         # Light to lowest adjacent
     WR_LIGHT_TO_LOWEST = 79
-    
+
     W1_LIGHT_TO_255 = 12            # Maximum brightness
     WR_LIGHT_TO_255 = 80
-    
+
     W1_LIGHT_TO_35 = 104            # Minimum brightness
     S1_LIGHT_BLINK = 17             # Start blinking
 

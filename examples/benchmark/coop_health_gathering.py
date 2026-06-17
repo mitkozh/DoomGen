@@ -23,7 +23,7 @@ class CoopHealthGatheringScenario(Scenario):
             "max_players": 4,
             "map_radius": 2000,
             "chain_max_len": 400,
-            "toxic_damage": 5,      
+            "toxic_damage": 5,
             "max_health_kits": 80,
             "maze_density": 0.6,
         }
@@ -217,7 +217,7 @@ ACTOR ChainNodeHot {
         toxic_damage_amt = int(cfg["toxic_damage"])
         max_health_kits = int(cfg["max_health_kits"])
         maze_density = float(cfg["maze_density"])
-        
+
         builder = ProceduralMapBuilder(
             bounds=(-map_radius, -map_radius, map_radius, map_radius),
             num_seeds=8000,
@@ -229,29 +229,29 @@ ACTOR ChainNodeHot {
             builder.wad_writer.add_lump("DECORATE", decorate_lump.encode("utf-8"))
 
         floor_tag = 900
-        
+
         num_points = random.randint(12, 24)
         base_points = []
         for i in range(num_points):
             angle = (i / num_points) * 2 * math.pi
             r = random.uniform(map_radius * 0.6, map_radius)
             base_points.append((r * math.cos(angle), r * math.sin(angle)))
-            
+
         base_shape = Polygon(base_points)
-        
+
         builder.add_area(
             "BaseArena",
             shape=base_shape,
             floor_height=0,
             ceiling_height=384,
-            floor_texture="FLAT1", 
+            floor_texture="FLAT1",
             ceiling_texture="CEIL1_2",
             wall_texture="BRICK6",
             light_level=200,
             tag=floor_tag,
             mode="claim_void"
         )
-        
+
         block_size = 140
         num_pillars = int(map_radius * map_radius * 4 / (block_size * block_size * 4) * maze_density)
 
@@ -272,27 +272,27 @@ ACTOR ChainNodeHot {
                 f"Pillar_{block_idx}",
                 shape=(x, y, w, h),
                 floor_height=0,
-                ceiling_height=0, 
+                ceiling_height=0,
                 floor_texture="FLAT1",
                 wall_texture="ASHWALL6",
                 light_level=200,
                 mode="overwrite"
             )
             block_idx += 1
-                        
+
         spawn_center = builder.get_random_point_in_area("BaseArena", safe=True)
         if not spawn_center:
             spawn_center = (0, 0)
-        
+
         spawn_points = []
         for _ in range(100):
             if len(spawn_points) >= max_players:
                 break
-                
+
             pt = builder.get_random_point_in_area("BaseArena", safe=True)
             if not pt:
                 continue
-                
+
             dist_sq = (pt[0] - spawn_center[0])**2 + (pt[1] - spawn_center[1])**2
             if dist_sq < (chain_max_len / 2)**2:
                 too_close = False
@@ -302,25 +302,25 @@ ACTOR ChainNodeHot {
                         break
                 if not too_close:
                     spawn_points.append(pt)
-                    
+
         while len(spawn_points) < max_players:
-            spawn_points.append((spawn_center[0] + random.randint(-64, 64), 
+            spawn_points.append((spawn_center[0] + random.randint(-64, 64),
                                  spawn_center[1] + random.randint(-64, 64)))
-            
+
         player_types = [
-            ThingType.PLAYER1_START, 
-            ThingType.PLAYER2_START, 
-            ThingType.PLAYER3_START, 
+            ThingType.PLAYER1_START,
+            ThingType.PLAYER2_START,
+            ThingType.PLAYER3_START,
             ThingType.PLAYER4_START
         ]
-        
+
         for i in range(max_players):
             if i < len(player_types):
                 builder.add_thing(player_types[i], spawn_points[i][0], spawn_points[i][1], angle=random.randint(0, 359))
-        
+
         num_spawn_spots = 300
         spot_tid_base = 3000
-        
+
         spawned_spots = []
         attempts = 0
         min_distance_sq = (map_radius * 0.15) ** 2  # Keep spots reasonably apart
@@ -330,7 +330,7 @@ ACTOR ChainNodeHot {
             pt = builder.get_random_point_in_area("BaseArena", safe=True)
             if not pt:
                 continue
-                
+
             # Check distance against already placed spots for more even distribution
             too_close = False
             for spt in spawned_spots:
@@ -338,33 +338,33 @@ ACTOR ChainNodeHot {
                 if dist_sq < min_distance_sq:
                     too_close = True
                     break
-                    
+
             if not too_close:
                 builder.add_thing("MAP_SPOT", pt[0], pt[1], z=0, tid=spot_tid_base + len(spawned_spots))
                 spawned_spots.append(pt)
-                
+
         # If we failed to place enough because of the strict distance, fallback to random
         while len(spawned_spots) < num_spawn_spots:
             pt = builder.get_random_point_in_area("BaseArena", safe=True)
             if pt:
                 builder.add_thing("MAP_SPOT", pt[0], pt[1], z=0, tid=spot_tid_base + len(spawned_spots))
                 spawned_spots.append(pt)
-        
+
         acs = ACSBuilder()
         acs.add_include("zcommon.acs")
-        
+
         acs.add_global_var("chg_active_health_kits_global", 1, "int")
         acs.add_global_var("chg_total_spawned_kits_global", 2, "int")
         acs.add_global_var("chg_chain_stretches_global", 3, "int")
         acs.add_global_var("chg_total_pickups_global", 4, "int")
         acs.add_global_var("chg_dragged_links_flash_global", 5, "int")
-        
+
         acs.add_script(
             ScriptType.VOID,
             "chg_total_pickups_global++;",
             number=10
         )
-        
+
         script_setup = f"""
         int pn = PlayerNumber();
         if (pn >= 0 && pn < {max_players}) {{
@@ -378,7 +378,7 @@ ACTOR ChainNodeHot {
         """
         acs.add_script(ScriptType.ENTER, script_setup, number=1)
         acs.add_script(ScriptType.RESPAWN, script_setup, number=2)
-        
+
         chain_lines: List[str] = []
         for follower in range(1, max_players):
             leader = follower - 1
@@ -452,44 +452,44 @@ ACTOR ChainNodeHot {
                 }}
                 """
             )
-            
+
         chain_block = "".join(chain_lines)
-        
+
         script_main = f"""
-        Sector_SetDamage({floor_tag}, {toxic_damage_amt}, 14); 
-        
+        Sector_SetDamage({floor_tag}, {toxic_damage_amt}, 14);
+
         int tick = 0;
         int active_health_kits = 0;
         int health_kit_tid = 800;
-        
+
         chg_active_health_kits_global = 0;
         chg_total_spawned_kits_global = 0;
         chg_chain_stretches_global = 0;
         chg_dragged_links_flash_global = 0;
         chg_total_pickups_global = 0;
-        
+
         while (TRUE) {{
             {chain_block}
 
             if (chg_dragged_links_flash_global > 0) {{
                 chg_dragged_links_flash_global--;
             }}
-            
+
             active_health_kits = ThingCount(T_NONE, health_kit_tid);
             chg_active_health_kits_global = active_health_kits;
-            
+
             if (tick % 35 == 0) {{
                 if (active_health_kits < {max_health_kits}) {{
                     int spawns = 0;
                     for (spawns = 0; spawns < 3; spawns++) {{
                         if (active_health_kits + spawns >= {max_health_kits}) break;
-                        
+
                         int r_spot = Random(0, {num_spawn_spots - 1});
                         int target_spot_tid = {spot_tid_base} + r_spot;
-                        
+
                         str type = "Stimpack";
-                        if (Random(0, 3) == 0) type = "Medikit"; 
-                        
+                        if (Random(0, 3) == 0) type = "Medikit";
+
                         SpawnSpot(type, target_spot_tid, health_kit_tid, 0);
                         SetThingSpecial(health_kit_tid, 80, 10, 0, 0, 0, 0);
                         chg_total_spawned_kits_global++;
@@ -497,13 +497,13 @@ ACTOR ChainNodeHot {
                     chg_active_health_kits_global = ThingCount(T_NONE, health_kit_tid);
                 }}
             }}
-            
+
             tick++;
             Delay(1);
         }}
         """
         acs.add_script(ScriptType.OPEN, script_main, number=3)
-        
+
         acs.add_script(
             ScriptType.DEATH,
             """
@@ -512,7 +512,7 @@ ACTOR ChainNodeHot {
             """,
             number=4
         )
-        
+
         source_acs = acs.to_code()
         builder.map_data.scripts = source_acs
         try:
@@ -521,16 +521,16 @@ ACTOR ChainNodeHot {
             print(f"ACS Compile Warning: {e}")
             if hasattr(e, 'stderr') and e.stderr:
                 print(f"ACC Stderr: {e.stderr}")
-                
+
         builder.build(output_path)
-        
+
 if __name__ == "__main__":
     out_dir = os.path.join("examples", "benchmark", "output")
     os.makedirs(out_dir, exist_ok=True)
-    
+
     path = os.path.join(out_dir, "coop_health_gathering.wad")
     print(f"Generating {path}...")
-    
+
     scen = CoopHealthGatheringScenario()
     scen.generate(path)
     print("Done.")

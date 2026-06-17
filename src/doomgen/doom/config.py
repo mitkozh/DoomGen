@@ -36,7 +36,7 @@ class WallConfig:
 class PrefabDoomConfig:
     """
     Complete Doom configuration for a prefab.
-    
+
     Encapsulates all Doom-specific settings needed to apply a prefab
     to a sector: heights, textures, linedef actions, and flags.
     """
@@ -44,7 +44,7 @@ class PrefabDoomConfig:
     linedef_action: int = 0
     linedef_flags: int = 0
     sector_tag: int = 0
-    
+
     # Texture overrides for linedefs
     upper_texture: Optional[str] = None
     lower_texture: Optional[str] = None

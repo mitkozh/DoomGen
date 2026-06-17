@@ -21,13 +21,13 @@ def visualize_mesh(
     Visualize the VoronoiMesh.
     """
     fig, ax = plt.subplots(figsize=(12, 12))
-    
+
     # Process all cells
     for point_idx, polygon in mesh.cells.items():
         if polygon.is_empty: continue
-        
+
         area_id = mesh.point_idx_to_area_id[point_idx]
-        
+
         # Color based on area_id
         if area_id == "VOID":
             color = "black"
@@ -44,11 +44,11 @@ def visualize_mesh(
             alpha = 0.8
             edgecolor = "black"
             linewidth = 1.0
-            
+
         coords = list(polygon.exterior.coords)
         mpl_poly = MplPolygon(coords, closed=True, facecolor=color, edgecolor=edgecolor, alpha=alpha, linewidth=linewidth)
         ax.add_patch(mpl_poly)
-        
+
         # Label
         if show_labels and area_id != "VOID":
             centroid = polygon.centroid
@@ -63,19 +63,19 @@ def visualize_mesh(
     # Calculate bounds from non-VOID cells
     minx, miny, maxx, maxy = float('inf'), float('inf'), float('-inf'), float('-inf')
     has_valid_cells = False
-    
+
     for point_idx, polygon in mesh.cells.items():
         if polygon.is_empty: continue
         area_id = mesh.point_idx_to_area_id[point_idx]
         if area_id == "VOID": continue
-        
+
         has_valid_cells = True
         b = polygon.bounds
         minx = min(minx, b[0])
         miny = min(miny, b[1])
         maxx = max(maxx, b[2])
         maxy = max(maxy, b[3])
-        
+
     if has_valid_cells:
         margin = 64
         ax.set_xlim(minx - margin, maxx + margin)

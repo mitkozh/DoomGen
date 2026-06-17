@@ -328,10 +328,10 @@
 #define STYLE_OptFuzzy		4	// Draw as fuzzy, translucent or shadow, based on user preference
 #define STYLE_Stencil		5	// Draw as solid color
 #define STYLE_AddStencil	6	// Draw as additive solid color
-#define STYLE_AddShaded		7	// 
+#define STYLE_AddShaded		7	//
 #define STYLE_Translucent	64	// Draw translucent
 #define STYLE_Add			65	// Draw additive
-#define STYLE_Shaded		66	// 
+#define STYLE_Shaded		66	//
 #define STYLE_TranslucentStencil 67
 #define STYLE_Shadow		68	// Draw dark translucent stencil
 #define STYLE_Subtract  69  // Draw subtractive
@@ -787,7 +787,7 @@
 
 #DEFINE PTROP_UNSAFETARGET 1
 #DEFINE PTROP_UNSAFEMASTER 2
-#DEFINE PTROP_NOSAFEGUARDS PTROP_UNSAFETARGET |PTROP_UNSAFEMASTER 
+#DEFINE PTROP_NOSAFEGUARDS PTROP_UNSAFETARGET |PTROP_UNSAFEMASTER
 
 // Line activation flags
 
@@ -1178,6 +1178,6 @@
 #define LUMP_READ_USHORT 3
 #define LUMP_READ_INT 4
 #define LUMP_READ_FLOAT 5
-                
+
 #define LUMP_INFO_SIZE 0
 #define LUMP_INFO_NAME 1

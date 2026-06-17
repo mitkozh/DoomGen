@@ -5,10 +5,10 @@ import os
 
 def create_stairs_map():
     print("Generating Stairs Map...")
-    
+
     # Initialize Builder
     builder = ProceduralMapBuilder(bounds=(-512, -512, 512, 512), num_seeds=1500, seed=99)
-    
+
     # Lower Room (Safe)
     # Right edge at -200 + 128 = -72
     builder.add_area(
@@ -18,7 +18,7 @@ def create_stairs_map():
         ceiling_height=128,
         floor_texture="FLOOR4_8"
     )
-    
+
     # Upper Room (Damaging)
     # Left edge at 200 - 128 = 72
     # Gap between -72 and 72 is 144 units.
@@ -30,7 +30,7 @@ def create_stairs_map():
         floor_texture="NUKAGE1", # Damaging look
         special=16 # Damage 20%
     )
-    
+
     # Create Stairs using the new helper method
     # This will automatically find the path between the rooms and create steps
     step_ids = builder.add_stairs(
@@ -42,7 +42,7 @@ def create_stairs_map():
         riser_texture="STEP1",
         wall_texture="BROWN1"
     )
-    
+
     # Add Door between Lower Room and Stairs
     # We use add_boundary to insert a door sector between the Lower Room and the first step
     from doomgen.abstraction.layout import ConnectionType
@@ -57,14 +57,14 @@ def create_stairs_map():
         ceiling_texture="GATE1",
         wall_texture="BIGDOOR2"
     )
-    
+
     # Add Player Start in Lower Room
     builder.add_thing("PLAYER1_START", -200, 0, angle=0)
-    
+
     # Build
     os.makedirs("examples/output", exist_ok=True)
     builder.build("examples/output/stairs_test.wad")
-    
+
     # Visualize
     from doomgen.utils.visualization import visualize_mesh
     visualize_mesh(builder.mesh, "examples/output/stairs_test.png")

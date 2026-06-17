@@ -4,44 +4,44 @@ from doomgen.doom.things import ThingType
 
 def main():
     print("Generating Central Hub Map with Builder...")
-    
+
     # 1. Initialize the Builder
     builder = ProceduralMapBuilder(bounds=(-1024, -1024, 1024, 1024), num_seeds=2500, seed=42)
 
     # 2. Add Rooms
     # Central Hub
     builder.add_area(
-        name="central_hub", 
-        shape=(0, 0, 256, 256), 
-        floor_height=0, 
-        ceiling_height=192, 
-        floor_texture="FLOOR4_8", 
+        name="central_hub",
+        shape=(0, 0, 256, 256),
+        floor_height=0,
+        ceiling_height=192,
+        floor_texture="FLOOR4_8",
         ceiling_texture="CEIL3_5"
     )
-    
+
     # Slime Pit
     builder.add_area(
-        name="slime_pit", 
-        shape=(-600, 400, 180, 180), 
-        floor_height=-16, 
-        floor_texture="NUKAGE1", 
+        name="slime_pit",
+        shape=(-600, 400, 180, 180),
+        floor_height=-16,
+        floor_texture="NUKAGE1",
         special=16 # Damage 20%
     )
-    
+
     # Hell Keep
     builder.add_area(
-        name="hell_keep", 
-        shape=(600, 400, 200, 200), 
-        floor_height=32, 
+        name="hell_keep",
+        shape=(600, 400, 200, 200),
+        floor_height=32,
         floor_texture="RROCK19",
         ceiling_texture="FLOOR6_1"
     )
-    
+
     # Tech Lab
     builder.add_area(
-        name="tech_lab", 
-        shape=(0, -600, 160, 160), 
-        floor_height=0, 
+        name="tech_lab",
+        shape=(0, -600, 160, 160),
+        floor_height=0,
         ceiling_texture="TLITE6_4"
     )
 

@@ -5,7 +5,7 @@ from enum import IntEnum
 
 class ThingType(IntEnum):
     """Standard Doom 2 thing type IDs."""
-    
+
     # Player starts
     PLAYER1_START = 1
     PLAYER2_START = 2
@@ -16,7 +16,7 @@ class ThingType(IntEnum):
     PLAYER7_START = 4003
     PLAYER8_START = 4004
     DEATHMATCH_START = 11
-    
+
     # Enemies - Easy/Medium
     ZOMBIEMAN = 3004
     SHOTGUN_GUY = 9
@@ -25,7 +25,7 @@ class ThingType(IntEnum):
     DEMON = 3002
     SPECTRE = 58
     LOST_SOUL = 3006
-    
+
     # Enemies - Hard
     CACODEMON = 3005
     HELL_KNIGHT = 69
@@ -35,12 +35,12 @@ class ThingType(IntEnum):
     ARACHNOTRON = 68
     PAIN_ELEMENTAL = 71
     ARCH_VILE = 64
-    
+
     # Bosses
     SPIDER_MASTERMIND = 7
     CYBERDEMON = 16
     ICON_OF_SIN = 89
-    
+
     # Weapons
     CHAINSAW = 2005
     SHOTGUN = 2001
@@ -49,31 +49,31 @@ class ThingType(IntEnum):
     ROCKET_LAUNCHER = 2003
     PLASMA_RIFLE = 2004
     BFG9000 = 2006
-    
+
     # Ammo - Small
     CLIP = 2007
     SHELLS = 2008
     ROCKET = 2010
     CELL = 2047
-    
+
     # Ammo - Large
     BOX_OF_BULLETS = 2048
     BOX_OF_SHELLS = 2049
     BOX_OF_ROCKETS = 2046
     ENERGY_CELL_PACK = 17
-    
+
     # Health
     STIMPACK = 2011
     MEDIKIT = 2012
     HEALTH_BONUS = 2014
     SOULSPHERE = 2013
     MEGASPHERE = 83
-    
+
     # Armor
     ARMOR_BONUS = 2015
     GREEN_ARMOR = 2018
     BLUE_ARMOR = 2019
-    
+
     # Powerups
     BERSERK = 2023
     INVULNERABILITY = 2022
@@ -81,7 +81,7 @@ class ThingType(IntEnum):
     COMPUTER_MAP = 2026
     LIGHT_AMP_GOGGLES = 2045
     RADIATION_SUIT = 2025
-    
+
     # Keys
     BLUE_KEYCARD = 5
     YELLOW_KEYCARD = 6
@@ -89,7 +89,7 @@ class ThingType(IntEnum):
     BLUE_SKULL_KEY = 40
     YELLOW_SKULL_KEY = 39
     RED_SKULL_KEY = 38
-    
+
     # Decorations - Small
     CANDLE = 34
     CANDELABRA = 35
@@ -100,7 +100,7 @@ class ThingType(IntEnum):
     SHORT_GREEN_PILLAR = 31
     TALL_RED_PILLAR = 32
     SHORT_RED_PILLAR = 33
-    
+
     # Decorations - Gore
     BLOODY_MESS = 10
     BLOODY_MESS2 = 12
@@ -110,10 +110,10 @@ class ThingType(IntEnum):
     HANGING_VICTIM = 49
     HANGING_PAIR = 50
     HANGING_LEG = 51
-    
+
     # Teleport
     TELEPORT_LANDING = 14
-    
+
     # ZDoom/GZDoom special actors
     MAP_SPOT = 9001  # Invisible spawn point used by ACS SpawnSpot.
 
@@ -201,7 +201,7 @@ def get_thing_radius(thing_type: ThingType) -> int:
         ThingType.SPIDER_MASTERMIND,
         ThingType.CYBERDEMON,
     ]
-    
+
     medium_enemies = [
         ThingType.CACODEMON,
         ThingType.PAIN_ELEMENTAL,
@@ -209,7 +209,7 @@ def get_thing_radius(thing_type: ThingType) -> int:
         ThingType.HELL_KNIGHT,
         ThingType.REVENANT,
     ]
-    
+
     if thing_type in large_enemies:
         return 48
     elif thing_type in medium_enemies:

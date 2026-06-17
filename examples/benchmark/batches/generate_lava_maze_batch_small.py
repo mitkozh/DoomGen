@@ -24,7 +24,7 @@ def main():
             "lava_depth":        [24],
             "lava_damage":       [20, 35],
         },
-        
+
         {
             "physical_size":     [6, 8],
             "initial_maze_size": [6, 8, 10],

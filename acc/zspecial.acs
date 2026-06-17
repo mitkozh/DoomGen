@@ -126,9 +126,9 @@ special
 	119:Thing_Damage(2,3),
 	120:Radius_Quake(5),
 //	121:Line_SetIdentification
-	
+
 	125:Thing_Move(2,3),
-	
+
 	127:Thing_SetSpecial(5),
 	128:ThrustThingZ(4),
 	129:UsePuzzleItem(0),	// only for setting it on a line. Cannot be called!
@@ -143,7 +143,7 @@ special
 	138:Floor_Waggle(5),
 	139:Thing_SpawnFacing(2,4),
 	140:Sector_ChangeSound(2),
-	
+
 	143:Player_RemoveItem(2),			// Skulltag Functions
 	144:Player_GiveItem(2),				// Skulltag Functions
 	145:Player_SetTeam(1),				// Skulltag Functions
@@ -158,7 +158,7 @@ special
 	159:Sector_SetPlaneReflection(3),	// GZDoom only!
 //	160:Sector_Set3DFloor
 //	161:Sector_SetContents
-	
+
 	168:Ceiling_CrushAndRaiseDist(3,5),
 	169:Generic_Crusher2(5),
 	170:Sector_SetCeilingScale2(3),
@@ -265,7 +265,7 @@ special
 	270:Stairs_BuildDownDoom(5),
 	271:Stairs_BuildUpDoomSync(4),
 	272:Stairs_BuildDownDoomSync(4),
-	
+
 	// New additions can go above 255 now.
 	273:Stairs_BuildUpDoomCrush(5),
 	274:Door_AnimatedClose(2),
@@ -278,12 +278,12 @@ special
 	281:Line_SetAutomapFlags(3),
 	282:Line_SetAutomapStyle(2),
 	283:Polyobj_StopSound(1),
-	
+
 	// new to Eternity
 //	300:Portal_Define(5),
 //	301:Line_QuickPortal(1),
-	
-	
+
+
 	// internal functions have negative values
 	-1:GetLineUDMFInt(2),
 	-2:GetLineUDMFFixed(2),
@@ -385,7 +385,7 @@ special
 	-97:SetMusicVolume(1),
 	-98:CheckProximity(3, 6),
 	-99:CheckActorState(2,3),
-	
+
 	// Zandronum's
 	-100:ResetMap(0),
 	-101:PlayerIsSpectator(1),
@@ -450,7 +450,7 @@ special
     // built-in to ACC. So 162-165 are used up function indices.
     -166:LumpGetInfo(2),
     -167:LumpClose(1),
-	
+
 	// -1xx are reserved for Zandronum
 	-200:CheckClass(1),
 	-201:DamageActor(6), // [arookas]
@@ -467,19 +467,19 @@ special
 	-212:GetSectorHealth(2),
 	-213:GetLineHealth(1),
 	-214:SetSubtitleNumber(2),
-	
-	
+
+
 	// Eternity's
 	-300:GetLineX(3),
 	-301:GetLineY(3),
 	-302:SetAirFriction(1),
-	
+
 	// GZDoom OpenGL
 	-400:SetSectorGlow(6),
 	-401:SetFogDensity(2),
-	
+
 	// ZDaemon's
 	-19620:GetTeamScore(1),
 	-19621:SetTeamScore(2),
-	
+
 	-100000:__EndOfList__(10);

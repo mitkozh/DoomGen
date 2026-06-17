@@ -87,7 +87,7 @@ class RhythmSyncScenario(Scenario):
         "switch_height": 45,
         "switch_wall_margin": 32, # How far away from wall, reduce to jitter more
         "switch_intro_stages": 8, # How many stage to start actual randomizing
-        "switch_intro_jitter_frac": 0.125, # How much random in intro stages 
+        "switch_intro_jitter_frac": 0.125, # How much random in intro stages
         "switch_pos_seed_offset": 0,
         "switch_use_range": 64,
         "seed_density_per_section": 1400,

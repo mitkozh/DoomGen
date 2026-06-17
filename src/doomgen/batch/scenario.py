@@ -5,7 +5,7 @@ import os
 
 class Scenario(ABC):
     """Base class for a generated DoomGen scenario."""
-    
+
     def __init__(self, config: Optional[Dict[str, Any]] = None, name: str = "scenario"):
         """Initialize the scenario config and validate it."""
         self.config = self.get_default_config()
@@ -23,11 +23,11 @@ class Scenario(ABC):
     def generate(self, output_path: str) -> None:
         """Generate the scenario WAD at `output_path`."""
         pass
-    
+
     def validate_config(self) -> None:
         """Validate the current configuration."""
         pass
-        
+
     def get_param(self, key: str) -> Any:
         """Return a config parameter if present."""
         return self.config.get(key)

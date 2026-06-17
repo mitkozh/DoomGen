@@ -103,6 +103,7 @@ ACTOR LMPistol : Pistol replaces Pistol
     Loop
   Fire:
     PISG A 4
+    PISG B 0 ACS_ExecuteAlways(910, 0, 1)
     PISG B 6 A_FirePistol
     PISG C 4
     PISG B 5
@@ -141,6 +142,7 @@ ACTOR LMShotgun : Shotgun replaces Shotgun
     Loop
   Fire:
     SHTG A 3
+    SHTG A 0 ACS_ExecuteAlways(910, 0, 2)
     SHTG A 0 A_FireShotgun
     SHTG A 4
     SHTG B 5
@@ -182,6 +184,7 @@ ACTOR LMChaingun : Chaingun replaces Chaingun
     CHGG A 1 A_Lower
     Loop
   Fire:
+    CHGG A 0 ACS_ExecuteAlways(910, 0, 3)
     CHGG A 4 A_FireCGun
     CHGG B 4 A_FireCGun
     CHGG B 20
@@ -218,6 +221,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
     PLSG A 1 A_Lower
     Loop
   Fire:
+    PLSG A 0 ACS_ExecuteAlways(910, 0, 4)
     PLSG A 3 A_FirePlasma
     PLSG B 24
     PLSG B 0 A_ReFire
@@ -467,7 +471,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
         g_start_y = Random(0, MAP_WIDTH - 1);
 
         current_start_tag = get_tag(g_start_x, g_start_y);
-        lm_maze_size_global        = current_maze_size;
+        lm_maze_size_global        = MAP_WIDTH;
         lm_goal_grid_x_global      = -1;
         lm_goal_grid_y_global      = -1;
         lm_p1_grid_x_global        = -1;
@@ -559,7 +563,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
         }}
 
         current_end_tag = last_visited_tag;
-        lm_maze_size_global        = current_maze_size;
+        lm_maze_size_global        = MAP_WIDTH;
         lm_goal_grid_x_global      = last_x;
         lm_goal_grid_y_global      = last_y;
         lm_maze_bits_0_global      = maze_bits_chunk[0];
@@ -576,6 +580,18 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
     script "EndGame" (void) {{
         Delay(1);
         Exit_Normal(0);
+    }}
+
+    script 910 (int signal) {{
+        if (signal < 1 || signal > 4) terminate;
+
+        lm_flash_signal_global = signal;
+        if (signal == 1) {{ g_flash_lump = "S_GREEN";  }}
+        if (signal == 2) {{ g_flash_lump = "S_RED";    }}
+        if (signal == 3) {{ g_flash_lump = "S_YELLOW"; }}
+        if (signal == 4) {{ g_flash_lump = "S_BLUE";   }}
+
+        g_flash_timer = 25;
     }}
 
     script 999 DEATH {{
@@ -628,7 +644,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
                     current_maze_size += 2;
                     if (current_maze_size > MAX_TILES) current_maze_size = MAX_TILES;
                     if (current_maze_size < {INITIAL_MAZE_SIZE}) current_maze_size = {INITIAL_MAZE_SIZE};
-                    lm_maze_size_global = current_maze_size;
+                    lm_maze_size_global = MAP_WIDTH;
 
                     ACS_NamedExecute("GenerateMaze", 0, gx, gy, current_maze_size);
                 }}
@@ -653,6 +669,7 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
                     HudMessage(s:"A"; HUDMSG_PLAIN | HUDMSG_LAYER_UNDERHUD, 1, CR_UNTRANSLATED, 160.0, 100.0, 0.0);
                     g_flash_state = 0;
                     lm_flash_active_global = 0;
+                    lm_flash_signal_global = 0;
                 }}
             }}
 
@@ -680,14 +697,10 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
         GiveInventory("Cell",   200);
         SetWeapon("LMPistol");
 
-        int btns, old_btns;
         int r_fix = PLATFORM_RADIUS << 16;
         int current_s = 5 * r_fix; // Start at middle of South edge
-        int attack_cooldown = 0;
 
         while(TRUE) {{
-            if (attack_cooldown > 0) attack_cooldown--;
-
             GiveInventory("Clip",  1);
             GiveInventory("Shell", 1);
             GiveInventory("Cell",  1);
@@ -750,30 +763,6 @@ ACTOR LMPlasmaRifle : PlasmaRifle replaces PlasmaRifle
             SetActorAngle(0, target_angle);
             SetActorPitch(0, target_pitch);
 
-            btns = GetPlayerInput(-1, INPUT_BUTTONS);
-
-            if ((btns & BT_ATTACK) && attack_cooldown == 0) {{
-                int signal = 0;
-                str w_name = "";
-                if      (CheckWeapon("LMPistol"))      {{ signal = 1; w_name = "GREEN";  }}
-                else if (CheckWeapon("LMShotgun"))     {{ signal = 2; w_name = "RED";    }}
-                else if (CheckWeapon("LMChaingun"))    {{ signal = 3; w_name = "YELLOW"; }}
-                else if (CheckWeapon("LMPlasmaRifle")) {{ signal = 4; w_name = "BLUE";   }}
-
-                if (signal != 0) {{
-                    lm_flash_signal_global = signal;
-                    if (signal == 1) {{ g_flash_lump = "S_GREEN";  }}
-                    if (signal == 2) {{ g_flash_lump = "S_RED";    }}
-                    if (signal == 3) {{ g_flash_lump = "S_YELLOW"; }}
-                    if (signal == 4) {{ g_flash_lump = "S_BLUE";   }}
-
-                    g_flash_timer = 25;
-                    attack_cooldown = 40;
-
-                    //HudMessage(s:"Signaling: ", s:w_name; HUDMSG_FADEOUT, 2, CR_WHITE, 0.5, 0.8, 1.0, 0.5);
-                }}
-            }}
-            old_btns = btns;
             Delay(1);
         }}
     }}

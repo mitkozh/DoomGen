@@ -26,7 +26,7 @@ def get_bundled_compiler(tool_name: str) -> str:
     project_root = get_project_root()
     is_windows = sys.platform == "win32" or sys.platform == "cygwin"
     exe_ext = ".exe" if is_windows else ""
-    
+
     tool_path = project_root / tool_name / f"{tool_name}{exe_ext}"
     return str(tool_path.resolve())
 

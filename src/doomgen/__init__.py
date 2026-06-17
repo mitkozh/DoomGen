@@ -3,10 +3,10 @@
 __version__ = "0.3.0"
 
 from doomgen.abstraction.layout import (
-    LayoutGraph, 
-    Area, 
-    AreaConfig, 
-    Transform, 
+    LayoutGraph,
+    Area,
+    AreaConfig,
+    Transform,
     ConnectionType
 )
 

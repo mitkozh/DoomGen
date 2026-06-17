@@ -9,7 +9,7 @@ class ArmorySiegeScenario(Scenario):
     """
     Parameterized version of Armory Siege Defense Benchmark.
     """
-    
+
     def get_default_config(self) -> Dict[str, Any]:
         return {
             'distance': 600,             # Radius of supply rooms from center (Closer = Easier)
@@ -20,26 +20,26 @@ class ArmorySiegeScenario(Scenario):
             'max_players': 8,          # Number of cooperative player starts to emit
             'seed': 42,                # Random seed
         }
-        
+
     def generate(self, output_path: str) -> None:
         cfg = self.config
         seed = cfg['seed'] if cfg['seed'] is not None else random.randint(0, 999999)
-        
+
         # Determine bounds based on distance
         dist = int(cfg['distance']) # Ensure int
         bound = dist + 1000 # Enough padding
-        
+
         max_players = int(cfg.get('max_players', 8))
         if max_players < 1 or max_players > 8:
             raise ValueError(f"max_players must be in range [1, 8], got {max_players}")
 
         # 1. Initialize Builder
         builder = ProceduralMapBuilder(
-            bounds=(-bound, -bound, bound, bound), 
-            num_seeds=5000, 
+            bounds=(-bound, -bound, bound, bound),
+            num_seeds=5000,
             seed=seed
         )
-        
+
         # 0. Add DECORATE
         decorate_str = f"""
 ACTOR HarmlessTargeter
@@ -81,7 +81,7 @@ ACTOR DefenseCore 15000
   +MISSILEMORE
   +MISSILEEVENMORE
   DamageFactor "Player", 0
-  
+
   States
   {{
   Spawn:
@@ -185,9 +185,9 @@ ACTOR SiegeLostSoul : LostSoul 15007
 }}
 """
         builder.wad_writer.add_lump("DECORATE", decorate_str.encode('utf-8'))
-        
+
         # 2. Define Areas
-        
+
         # Central Armory
         builder.add_area(
             name="Armory",
@@ -198,7 +198,7 @@ ACTOR SiegeLostSoul : LostSoul 15007
             ceiling_texture="TLITE6_4",
             wall_texture="STARTAN3"
         )
-        
+
         # Calculate positions
         # Room A (North) - 90 deg
         pos_a = (0, dist)
@@ -208,7 +208,7 @@ ACTOR SiegeLostSoul : LostSoul 15007
         pos_b = (int(dist * 0.866), int(dist * -0.5))
         # Room C (South West) - 210 deg
         pos_c = (int(dist * -0.866), int(dist * -0.5))
-        
+
         # Supply Room A (Heavy Weapons)
         builder.add_area(
             name="Room A",
@@ -218,7 +218,7 @@ ACTOR SiegeLostSoul : LostSoul 15007
             floor_texture="CEIL5_2",
             wall_texture="STONE2"
         )
-        
+
         # Supply Room B (Ammo)
         builder.add_area(
             name="Room B",
@@ -228,7 +228,7 @@ ACTOR SiegeLostSoul : LostSoul 15007
             floor_texture="FLAT5_4",
             wall_texture="BROWN1"
         )
-        
+
         # Supply Room C (Health/Armor)
         builder.add_area(
             name="Room C",
@@ -238,42 +238,42 @@ ACTOR SiegeLostSoul : LostSoul 15007
             floor_texture="MFLR8_1",
             wall_texture="STARGR1"
         )
-        
+
         # 3. Connect via Corridors
         cw = int(cfg['corridor_width'])
         corr_a = builder.add_corridor("Armory", "Room A", width=cw, floor_texture="RROCK19")
         corr_b = builder.add_corridor("Armory", "Room B", width=cw, floor_texture="RROCK19")
         corr_c = builder.add_corridor("Armory", "Room C", width=cw, floor_texture="RROCK19")
-        
+
         # 4. Add Doors
         TAG_DOOR_A = 10
         TAG_DOOR_B = 11
         TAG_DOOR_C = 12
-        
+
         door_a_id = builder.add_boundary(
-            "Room A", corr_a, 
+            "Room A", corr_a,
             name="Door A", connection_type=ConnectionType.DOOR,
             floor_height=0, ceiling_height=0,
             floor_texture="GATE1", ceiling_texture="GATE1", wall_texture="BIGDOOR2"
         )
         builder.graph.get_area(door_a_id).config.tag = TAG_DOOR_A
-        
+
         door_b_id = builder.add_boundary(
-            "Room B", corr_b, 
+            "Room B", corr_b,
             name="Door B", connection_type=ConnectionType.DOOR,
             floor_height=0, ceiling_height=0,
             floor_texture="GATE1", ceiling_texture="GATE1", wall_texture="BIGDOOR2"
         )
         builder.graph.get_area(door_b_id).config.tag = TAG_DOOR_B
-        
+
         door_c_id = builder.add_boundary(
-            "Room C", corr_c, 
+            "Room C", corr_c,
             name="Door C", connection_type=ConnectionType.DOOR,
             floor_height=0, ceiling_height=0,
             floor_texture="GATE1", ceiling_texture="GATE1", wall_texture="BIGDOOR2"
         )
         builder.graph.get_area(door_c_id).config.tag = TAG_DOOR_C
-        
+
         # 5. Add Things (Spawners)
         # Players. ZDoom supports dedicated cooperative start thing types for
         # players 5-8 (4001-4004), so emit the full set when requested.
@@ -289,13 +289,13 @@ ACTOR SiegeLostSoul : LostSoul 15007
         ]
         for thing_type, x, y, angle in player_starts[:max_players]:
             builder.add_thing(thing_type, x, y, angle=angle)
-        
+
         def place_spawn_cluster(area_name, base_tid, count=5):
             for i in range(count):
                 pt = builder.get_random_point_in_area(area_name)
                 if pt:
                     builder.add_thing("MAP_SPOT", pt[0], pt[1], tid=base_tid + i)
-        
+
         place_spawn_cluster("Armory", 50, count=5) # Core spots - Critical
         place_spawn_cluster("Armory", 60, count=10) # Player respawn spots - Critical
         place_spawn_cluster("Room A", 100, count=5)
@@ -304,7 +304,7 @@ ACTOR SiegeLostSoul : LostSoul 15007
         place_spawn_cluster(corr_a, 200, count=5) # Enemy spawns A
         place_spawn_cluster(corr_b, 210, count=5)
         place_spawn_cluster(corr_c, 220, count=5)
-        
+
         # Corridor Items
         place_spawn_cluster(corr_a, 300, count=5)
         place_spawn_cluster(corr_a, 310, count=5)
@@ -312,14 +312,14 @@ ACTOR SiegeLostSoul : LostSoul 15007
         place_spawn_cluster(corr_b, 330, count=5)
         place_spawn_cluster(corr_c, 340, count=5)
         place_spawn_cluster(corr_c, 350, count=5)
-        
+
         # 6. Generate ACS
         acs = ACSBuilder()
         acs.add_include("zcommon.acs")
         acs.add_global_var("core_health_global", 1, "int")
         acs.add_global_var("core_x_global", 2, "int")
         acs.add_global_var("core_y_global", 3, "int")
-        
+
         acs.add_script(ScriptType.ENTER, """
             int p_tid = 1000 + PlayerNumber();
             Thing_ChangeTID(0, p_tid);
@@ -328,7 +328,7 @@ ACTOR SiegeLostSoul : LostSoul 15007
             int dest_spot = 60 + Random(0, 9);
             SetActorPosition(0, GetActorX(dest_spot), GetActorY(dest_spot), GetActorZ(dest_spot), 0);
         """)
-        
+
         acs.add_script(ScriptType.RESPAWN, """
             int p_tid = 1000 + PlayerNumber();
             Thing_ChangeTID(0, p_tid);
@@ -337,7 +337,7 @@ ACTOR SiegeLostSoul : LostSoul 15007
             int dest_spot = 60 + Random(0, 9);
             SetActorPosition(0, GetActorX(dest_spot), GetActorY(dest_spot), GetActorZ(dest_spot), 0);
         """)
-        
+
         # Dynamic Script Variables
         open_dur = int(cfg['door_timer'])
         # Door schedule: 3 doors open in a staggered rotating pattern across
@@ -373,7 +373,7 @@ ACTOR SiegeLostSoul : LostSoul 15007
         # 32768, breaking integer arithmetic. Using integer division avoids
         # the fixed-point trap entirely.
         enemy_diff_pct = max(5, int(diff * 100))
-        
+
         # Generate ACS Health Bar Switch
         bar_cases = []
         for i in range(21):
@@ -381,7 +381,7 @@ ACTOR SiegeLostSoul : LostSoul 15007
              empty = "-" * (20 - i)
              bar_cases.append(f'case {i}: bar_gfx = "\\cD{filled}\\cG{empty}"; break;')
         bar_switch_str = "\n                ".join(bar_cases)
-        
+
         script_body = f"""
         int max_core_health = {int(cfg['core_health'])};
         core_health_global = max_core_health;
@@ -394,8 +394,8 @@ ACTOR SiegeLostSoul : LostSoul 15007
         int TID_ENEMY_UNIT = 500;
         int TID_CORE = 90;
         int TID_TEMP_SPAWN = 900;
-        
-        // retry spawn DefenseCore if fail 
+
+        // retry spawn DefenseCore if fail
         int core_spawned = 0;
         int core_spawn_attempts = 0;
         while (!core_spawned && core_spawn_attempts < 5) {{
@@ -419,25 +419,25 @@ ACTOR SiegeLostSoul : LostSoul 15007
         // Initial Items (Scaled maybe? For now static)
         SpawnSpot("PlaceablePistol", 300 + Random(0, 4), 0, 0);
         SpawnSpot("Clip", 310 + Random(0, 4), 0, 0);
-        
+
         SpawnSpot("PlaceablePistol", 320 + Random(0, 4), 0, 0);
         SpawnSpot("Clip", 330 + Random(0, 4), 0, 0);
-        
+
         SpawnSpot("PlaceablePistol", 340 + Random(0, 4), 0, 0);
         SpawnSpot("Clip", 350 + Random(0, 4), 0, 0);
-        
+
         Sector_SetColor({TAG_DOOR_A}, 255, 0, 0);
         Sector_SetColor({TAG_DOOR_B}, 255, 0, 0);
         Sector_SetColor({TAG_DOOR_C}, 255, 0, 0);
-        
+
         int door_a_open = 0;
         int door_b_open = 0;
         int door_c_open = 0;
-        
+
         while (TRUE) {{
             cycle = tick % {cycle_len};
             wave = tick / ({cycle_len} - 50); // Difficulty scaling
-            
+
             // Check against core being destroyed/missing
             if (ThingCount(T_NONE, TID_CORE) > 0) {{
                 core_health_global = GetActorProperty(TID_CORE, APROP_HEALTH);
@@ -457,15 +457,15 @@ ACTOR SiegeLostSoul : LostSoul 15007
             HudMessage(s:"", s:bar_gfx, s:"\\c-"; HUDMSG_PLAIN, 1, CR_WHITE, 0.5, 0.9, 0.1);
             SetFont("SMALLFONT");
             HudMessage(d:core_health_global, s:"/", d:max_core_health; HUDMSG_PLAIN, 2, CR_WHITE, 0.5, 0.93, 0.1);
-            
+
             // Door Logic with parameterized duration
             // Durations are relative to open_dur.
-            
+
             int dur = {open_dur};
             int should_open_a = (cycle >= {off_a1} && cycle < ({off_a1}+dur)) || (cycle >= {off_a2} && cycle < ({off_a2}+dur)) || (cycle >= {off_a3} && cycle < ({off_a3}+dur));
             int should_open_b = (cycle >= {off_b1} && cycle < ({off_b1}+dur)) || (cycle >= {off_b2} && cycle < ({off_b2}+dur));
             int should_open_c = (cycle >= {off_c1} && cycle < ({off_c1}+dur)) || (cycle >= {off_c2} && cycle < ({off_c2}+dur));
-            
+
             if (should_open_a) {{
                 if (!door_a_open) {{
                     Door_Open({TAG_DOOR_A}, 16, 0);
@@ -487,7 +487,7 @@ ACTOR SiegeLostSoul : LostSoul 15007
                     door_a_open = 0;
                 }}
             }}
-            
+
              if (should_open_b) {{
                 if (!door_b_open) {{
                     Door_Open({TAG_DOOR_B}, 16, 0);
@@ -509,7 +509,7 @@ ACTOR SiegeLostSoul : LostSoul 15007
                     door_b_open = 0;
                 }}
             }}
-            
+
              if (should_open_c) {{
                 if (!door_c_open) {{
                     Door_Open({TAG_DOOR_C}, 16, 0);
@@ -531,22 +531,22 @@ ACTOR SiegeLostSoul : LostSoul 15007
                     door_c_open = 0;
                 }}
             }}
-            
+
             // Wave System
             int max_enemies = (20 + wave * 5) * {enemy_diff_pct} / 100;
             int spawn_interval = 200 - (wave * 20);
             if (spawn_interval < 40) spawn_interval = 40;
-            
+
             if (tick % spawn_interval == 0 && tick > 0 && ThingCount(T_NONE, TID_ENEMY_UNIT) < max_enemies) {{
                 int r = Random(0, 10);
                 int spawn_base = 200;
                 int r_spawn = Random(0, 2);
                 if (r_spawn == 1) spawn_base = 210;
                 if (r_spawn == 2) spawn_base = 220;
-                
+
                 int spawn_tid = spawn_base + Random(0, 4);
                 str spawn_class = "MeleeZombieman";
-                
+
                 if (wave == 0) {{
                     spawn_class = "MeleeZombieman";
                 }} else if (wave == 1) {{
@@ -571,16 +571,16 @@ ACTOR SiegeLostSoul : LostSoul 15007
                     Thing_ChangeTID(TID_TEMP_SPAWN, TID_ENEMY_UNIT);
                 }}
             }}
-            
+
             Delay(1);
             tick++;
         }}
         """
         acs.add_script(ScriptType.OPEN, script_body)
-        
+
         acs.add_script(ScriptType.VOID, "Delay(35*3); Thing_Remove(0);", number=998)
         acs.add_script(ScriptType.VOID, "Delay(35*3); Exit_Normal(0);", number=999)
-        
+
         # Build logic
         try:
             print(f"Compiling ACS for {self.name}...")
@@ -592,9 +592,9 @@ ACTOR SiegeLostSoul : LostSoul 15007
         except Exception as e:
             print(f"ACS compile error: {e}")
             builder.map_data.behavior = b'ACSE\x08\x00\x00\x00\x00\x00\x00\x00'
-        
+
         builder.map_data.scripts = acs.to_code()
-        
+
         builder.build(output_path)
         print(f"WAD written to {output_path}")
 

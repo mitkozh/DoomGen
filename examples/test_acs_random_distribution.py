@@ -153,12 +153,12 @@ def plot_results(counts: dict[int, int]):
     expected_freq = total / SPAN
     values   = np.arange(RNG_LO, RNG_HI + 1)
     observed = np.array([counts.get(v, 0) for v in values])
-    
+
     ecdf = np.cumsum(observed) / total
     theoretical_cdf = (values - RNG_LO + 1) / SPAN
 
     d_stat = np.max(np.abs(ecdf - theoretical_cdf))
-    
+
     chi_stat, p_val = stats.chisquare(observed, f_exp=np.full_like(observed, expected_freq))
 
     fig, axes = plt.subplots(1, 2, figsize=(13, 5))
@@ -168,7 +168,7 @@ def plot_results(counts: dict[int, int]):
     ax = axes[0]
     expected_freq = total / SPAN
     deviations = 100.0 * (observed - expected_freq) / expected_freq
-    
+
     # Standard deviation for a binomial distribution for each bin
     # sigma = sqrt(n * p * (1-p))
     p = 1.0 / SPAN
@@ -176,20 +176,20 @@ def plot_results(counts: dict[int, int]):
 
     ax.bar(values, observed, color=THEME_BLUE, alpha=0.8, edgecolor=THEME_NAVY, linewidth=0.6, label="Observed")
     ax.axhline(expected_freq, color=THEME_NAVY, linestyle="--", linewidth=1.2, label=f"Expected ({expected_freq:.0f})")
-    
+
     # STD Bands
     ax.axhspan(expected_freq - sigma, expected_freq + sigma, color='#2ecc71', alpha=0.15, label="$\pm 1 \sigma$")
     ax.axhspan(expected_freq - 2*sigma, expected_freq + 2*sigma, color='#f39c12', alpha=0.10, label="$\pm 2 \sigma$")
-    
+
     # Add relative deviation labels on top of bars
     for i, (v, count, dev) in enumerate(zip(values, observed, deviations)):
-        ax.text(v, count + (0.1 * sigma), f"{dev:+.2f}%", 
+        ax.text(v, count + (0.1 * sigma), f"{dev:+.2f}%",
                 ha='center', va='bottom', fontsize=7, color=THEME_NAVY, fontweight='bold')
 
     y_min = expected_freq - 4 * sigma
     y_max = max(observed.max(), expected_freq + 4 * sigma) + (sigma * 0.5)
     ax.set_ylim(y_min, y_max)
-    
+
     ax.set_xticks(values)
     ax.set_xlabel("Value")
     ax.set_ylabel("Count")

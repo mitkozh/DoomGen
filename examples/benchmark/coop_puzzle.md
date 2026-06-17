@@ -71,22 +71,22 @@ script 2 OPEN {
 	int cnt_b;
 	int chosen;
 	int rand; // 0 = A, 1 = B
-	
+
 	rand = Random(0, 1);
 	for (i = 1; i <= 50; i++) {
         if (i % 2 != 0) {
             rand = Random(0, 1);
         }
 		iidx = i * 1000;
-		
+
 		cnt_a = cnt_sectors(iidx + 1, iidx + 99);
 		cnt_b = cnt_sectors(iidx + 101, iidx + 199);
-		
+
 		if (cnt_a + cnt_b == 0) {
 			active_plate[i] = 0;
 			continue;
 		}
-		
+
 		if (rand == 0 && cnt_a > 0) {
 			pos = Random(1, cnt_a);
 			chosen = get_sector_tag(iidx + 1, iidx + 99, pos);
@@ -112,7 +112,7 @@ script 2 OPEN {
 			plate_in_b_zone[i] = 1;
 			ChangeFloor(chosen, "AQF038"); // Agent B plate
 		}
-		
+
 		rand = 1 - rand;
 	}
 }
@@ -129,49 +129,49 @@ script 1 OPEN {
 	int should_open;
 	int door_tag;
 	int plate_tag;
-	
+
 	Delay(5);
-	
+
 	// Player 1 = TID 1, Player 2 = TID 2
 	SetActivator(0, AAPTR_PLAYER1);
 	Thing_ChangeTID(0, 1);
 	SetActivator(0, AAPTR_PLAYER2);
 	Thing_ChangeTID(0, 2);
 	SetActivator(0, AAPTR_NULL);
-	
+
 	while (true) {
 		new_zone = 0;
 		plate = 0;
-		
+
 		// Zone sectors
 		for (z = 201; z <= 250; z++) {
 			if (ThingCountSector(T_NONE, 1, z) > 0 || ThingCountSector(T_NONE, 2, z) > 0) {
 				new_zone = z - 200;
 			}
 		}
-		
+
 		// Plate type 1
 		for (i = 1; i <= 50; i++) {
 			plate_tag = active_plate[i];
 			if (plate_tag == 0) continue;
-			
+
 			p1_on = ThingCountSector(T_NONE, 1, plate_tag) > 0;
 			p2_on = ThingCountSector(T_NONE, 2, plate_tag) > 0;
-			
+
 			if (p1_on || p2_on) {
 				plate = 1;
 				if (new_zone == 0) {
 					new_zone = i;
 				}
 			}
-			
+
 			int door = (i + 1) / 2;
 			if (plate_in_b_zone[i] == 1) {
 				door_tag = door;
 			} else {
 				door_tag = door + 50;
 			}
-			
+
 			should_open = (p1_on || p2_on);
 			if (should_open) {
 				Door_Open(door_tag, 64, 0);
@@ -179,33 +179,33 @@ script 1 OPEN {
 				Door_Close(door_tag, 64, 0);
 			}
 		}
-		
+
 		// Plate type 2
 		for (d = 101; d <= 150; d++) {
 			idx = d - 101;
-			
+
 			p1_on = ThingCountSector(T_NONE, 1, d) > 0;
 			p2_on = ThingCountSector(T_NONE, 2, d) > 0;
-			
+
 			if (p1_on && p2_on) {
 				plate = 1;
 				plate2_timer[idx] = 70; // 2s
 				if (new_zone == 0) new_zone = d - 100;
 			}
-			
+
 			should_open = (p1_on && p2_on) || (plate2_timer[idx] > 0);
 			if (should_open) {
 				Door_Open(d + 50, 64, 0);
 			} else {
 				Door_Close(d + 50, 64, 0);
 			}
-			
+
 			if (plate2_timer[idx] > 0) plate2_timer[idx]--;
 		}
-		
+
 		if (new_zone > 0) zone = new_zone;
 		plate_state = plate;
-		
+
 		Delay(1);
 	}
 }
