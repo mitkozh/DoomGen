@@ -237,7 +237,7 @@ class TextMazeScenario(Scenario):
         }}
     }}
 
-    function void init_direction_tokens() {{
+    function void init_direction_tokens(void) {{
         // Called after direction_bits is set
         dir_tokens[0] = "LEFT";
         dir_tokens[1] = "RIGHT";
