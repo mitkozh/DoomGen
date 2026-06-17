@@ -601,17 +601,18 @@ class TextMazeScenario(Scenario):
         Thing_ChangeTID(0, 1001);
         SetActorProperty(0, APROP_Health, 100);
         SetPlayerProperty(0, 1, 0); // PROP_FROZEN
-
         ClearInventory();
 
-        // Static position on the SOUTH stand, looking north across the maze
-        int r_fix = -(PLATFORM_RADIUS + 192) << 16;  // south side, pulled back for wider view
-        SetActorPosition(0, 0, r_fix, 450 << 16, 0);
+        // Position on NORTH stand, elevated, looking south at grid center
+        int stand_y = PLATFORM_RADIUS << 16;
+        SetActorPosition(0, 0, stand_y, 450 << 16, 0);
 
-        // Look at grid center
-        int dx = 0 - GetActorX(0);
-        int dy = 0 - GetActorY(0);
-        int dz = 0 - (GetActorZ(0) + GetActorViewHeight(0));
+        int obs_x = GetActorX(0);
+        int obs_y = GetActorY(0);
+        int obs_z = GetActorZ(0) + GetActorViewHeight(0);
+        int dx = 0 - obs_x;
+        int dy = 0 - obs_y;
+        int dz = 0 - obs_z;
         int target_angle = VectorAngle(dx, dy);
         int xy_dist = VectorLength(dx, dy);
         int target_pitch = VectorAngle(xy_dist, dz);
@@ -621,20 +622,11 @@ class TextMazeScenario(Scenario):
         SetActorPitch(0, target_pitch);
 
         while(TRUE) {{
-            // WASD broadcast: MOVE buttons drive directional text output
             int btns = GetPlayerInput(1, INPUT_BUTTONS);
-
-            // BF_FORWARD -> NORTH, BF_BACK -> SOUTH,
-            // BF_MOVELEFT -> WEST, BF_MOVERIGHT -> EAST
-            if ((btns & BT_FORWARD) && (direction_bits & 8))
-                PrintBold(s:dir_tokens[3]);
-            if ((btns & BT_BACK) && (direction_bits & 4))
-                PrintBold(s:dir_tokens[2]);
-            if ((btns & BT_MOVELEFT) && (direction_bits & 2))
-                PrintBold(s:dir_tokens[1]);
-            if ((btns & BT_MOVERIGHT) && (direction_bits & 1))
-                PrintBold(s:dir_tokens[0]);
-
+            if (btns & BT_FORWARD)    PrintBold(s:"NORTH");
+            if (btns & BT_BACK)       PrintBold(s:"SOUTH");
+            if (btns & BT_MOVELEFT)   PrintBold(s:"WEST");
+            if (btns & BT_MOVERIGHT)  PrintBold(s:"EAST");
             Delay(1);
         }}
     }}
