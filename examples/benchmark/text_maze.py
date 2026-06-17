@@ -408,7 +408,166 @@ class TextMazeScenario(Scenario):
 
         level_clear_lock = 0;
     }}
-    script 2 ENTER {{ }}
+    script 2 ENTER {{
+        if (PlayerNumber() != 0) terminate;
+
+        Thing_ChangeTID(0, 1000);
+        SetActorProperty(0, APROP_Health, 100);
+        SetPlayerProperty(0, 1, 0); // PROP_FROZEN
+
+        int wx = get_world_x(g_start_x) << 16;
+        int wy = get_world_y(g_start_y) << 16;
+
+        SetActorPosition(0, wx, wy, 0, 0);
+        SetActorProperty(0, APROP_ViewHeight, 110.0);
+        SetActorProperty(0, APROP_Mass, 0x7FFFFFFF);
+        SetActorProperty(0, APROP_ScaleX, 5.5);
+        SetActorProperty(0, APROP_ScaleY, 5.5);
+        SetActorProperty(0, 21, 0);
+
+        // Hide HUD overlay
+        SetHudSize(320, 200, 1);
+        SetFont("S_BLACK");
+        HudMessage(s:"A"; HUDMSG_PLAIN | HUDMSG_LAYER_UNDERHUD, 1, CR_UNTRANSLATED, 160.0, 100.0, 0.0);
+        ClearInventory();
+
+        int p1_cell_x = g_start_x;
+        int p1_cell_y = g_start_y;
+        int step_active = 0;
+        int step_timer = 0;
+        int step_from_x = g_start_x;
+        int step_from_y = g_start_y;
+        int step_to_x = g_start_x;
+        int step_to_y = g_start_y;
+        int step_cooldown = 0;
+        int step_into_lava = 0;
+        int prev_cell_x = g_start_x;
+        int prev_cell_y = g_start_y;
+
+        // Determine if this is a 2D (grid) or 1D (line) episode
+        int is_2d = (tm_direction_count >= 3);
+
+        while (TRUE) {{
+            if (GetActorProperty(0, APROP_HEALTH) <= 0) {{
+                ACS_NamedExecute("EndGame", 0);
+                terminate;
+            }}
+
+            if (step_active) {{
+                step_timer++;
+                if (is_2d) {{
+                    int from_world_x = get_world_x(step_from_x);
+                    int to_world_x = get_world_x(step_to_x);
+                    int from_world_y = get_world_y(step_from_y);
+                    int to_world_y = get_world_y(step_to_y);
+                    int interp_x = from_world_x + (((to_world_x - from_world_x) * step_timer) / TM_STEP_TICS);
+                    int interp_y = from_world_y + (((to_world_y - from_world_y) * step_timer) / TM_STEP_TICS);
+                    SetActorPosition(0, interp_x << 16, interp_y << 16, 0, 0);
+                }} else {{
+                    int from_world_x = get_world_x(step_from_x);
+                    int to_world_x = get_world_x(step_to_x);
+                    int interp_world_x = from_world_x + (((to_world_x - from_world_x) * step_timer) / TM_STEP_TICS);
+                    SetActorPosition(0, interp_world_x << 16, get_world_y(p1_cell_y) << 16, 0, 0);
+                }}
+                SetActorVelocity(0, 0, 0, 0, FALSE, FALSE);
+
+                if (step_timer >= TM_STEP_TICS) {{
+                    p1_cell_x = step_to_x;
+                    p1_cell_y = step_to_y;
+                    SetActorPosition(0, get_world_x(p1_cell_x) << 16, get_world_y(p1_cell_y) << 16, 0, 0);
+                    SetActorVelocity(0, 0, 0, 0, FALSE, FALSE);
+                    step_active = 0;
+                    step_timer = 0;
+                    step_cooldown = TM_STEP_COOLDOWN_TICS;
+
+                    // Print the direction of movement to notifications buffer
+                    int dx = p1_cell_x - prev_cell_x;
+                    int dy = p1_cell_y - prev_cell_y;
+                    if (dx == 1)  Print(s:"RIGHT");
+                    if (dx == -1) Print(s:"LEFT");
+                    if (dy == 1)  Print(s:"NORTH");
+                    if (dy == -1) Print(s:"SOUTH");
+                    prev_cell_x = p1_cell_x;
+                    prev_cell_y = p1_cell_y;
+
+                    if (step_into_lava) {{
+                        SetActorProperty(0, APROP_Health, 0);
+                    }}
+                    step_into_lava = 0;
+                }}
+            }} else if (step_cooldown > 0) {{
+                step_cooldown--;
+            }} else if (level_clear_lock == 0) {{
+                int btns = GetPlayerInput(-1, INPUT_BUTTONS);
+                int target_x = p1_cell_x;
+                int target_y = p1_cell_y;
+
+                // Map buttons to movement
+                if ((btns & BT_FORWARD) && !(btns & BT_BACK)) {{
+                    if (!is_2d) {{
+                        target_x = p1_cell_x + 1;  // 1D: forward = +X
+                    }} else {{
+                        target_y = p1_cell_y + 1;  // 2D: forward = +Y (NORTH)
+                    }}
+                }}
+                if ((btns & BT_BACK) && !(btns & BT_FORWARD)) {{
+                    if (!is_2d) {{
+                        target_x = p1_cell_x - 1;  // 1D: back = -X
+                    }} else {{
+                        target_y = p1_cell_y - 1;  // 2D: back = -Y (SOUTH)
+                    }}
+                }}
+                if (is_2d && (btns & BT_MOVELEFT) && !(btns & BT_MOVERIGHT)) {{
+                    target_x = p1_cell_x - 1;
+                }}
+                if (is_2d && (btns & BT_MOVERIGHT) && !(btns & BT_MOVELEFT)) {{
+                    target_x = p1_cell_x + 1;
+                }}
+
+                if (target_x != p1_cell_x || target_y != p1_cell_y) {{
+                    step_into_lava = !cell_is_safe(target_x, target_y);
+                    step_active = 1;
+                    step_timer = 0;
+                    step_from_x = p1_cell_x;
+                    step_from_y = p1_cell_y;
+                    step_to_x = target_x;
+                    step_to_y = target_y;
+                }}
+            }}
+
+            if (!step_active) {{
+                SetActorPosition(0, get_world_x(p1_cell_x) << 16, get_world_y(p1_cell_y) << 16, 0, 0);
+                SetActorVelocity(0, 0, 0, 0, FALSE, FALSE);
+            }}
+
+            if (p1_cell_x >= 0 && p1_cell_x < MAP_WIDTH && p1_cell_y >= 0 && p1_cell_y < MAP_WIDTH) {{
+                tm_p1_grid_x = p1_cell_x;
+                tm_p1_grid_y = p1_cell_y;
+                int my_tag = get_tag(p1_cell_x, p1_cell_y);
+
+                if (my_tag == current_end_tag && level_clear_lock == 0) {{
+                    level_clear_lock = 1;
+                    tm_level++;
+                    max_unlocked_size += 2;
+                    if (max_unlocked_size > MAX_TILES) max_unlocked_size = MAX_TILES;
+
+                    int next_size = Random({INITIAL_MAZE_SIZE}, max_unlocked_size);
+                    current_maze_size = next_size;
+                    tm_maze_size = MAP_WIDTH;
+
+                    ACS_NamedExecute("GenerateMaze", 0, p1_cell_x, p1_cell_y, current_maze_size);
+                }}
+            }} else {{
+                tm_p1_grid_x = -1;
+                tm_p1_grid_y = -1;
+            }}
+
+            SetActorAngle(1000, 0);
+            SetActorPitch(1000, 0);
+
+            Delay(1);
+        }}
+    }}
     script 3 ENTER {{ }}
     script "EndGame" (void) {{
         Delay(1);
