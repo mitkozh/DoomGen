@@ -454,10 +454,6 @@ class TextMazeScenario(Scenario):
         SetActorProperty(0, APROP_ScaleY, 5.5);
         SetActorProperty(0, 21, 0);
 
-        // Hide HUD overlay
-        SetHudSize(320, 200, 1);
-        SetFont("S_BLACK");
-        HudMessage(s:"A"; HUDMSG_PLAIN | HUDMSG_LAYER_UNDERHUD, 1, CR_UNTRANSLATED, 160.0, 100.0, 0.0);
         ClearInventory();
 
         int p1_cell_x = g_start_x;
@@ -529,26 +525,26 @@ class TextMazeScenario(Scenario):
                 int target_x = p1_cell_x;
                 int target_y = p1_cell_y;
 
-                // Map buttons to movement
+                // Map buttons to movement (inverted: W=south, S=north, A=east, D=west)
                 if ((btns & BT_FORWARD) && !(btns & BT_BACK)) {{
                     if (!is_2d) {{
-                        target_x = p1_cell_x + 1;  // 1D: forward = +X
+                        target_x = p1_cell_x - 1;
                     }} else {{
-                        target_y = p1_cell_y + 1;  // 2D: forward = +Y (NORTH)
+                        target_y = p1_cell_y - 1;
                     }}
                 }}
                 if ((btns & BT_BACK) && !(btns & BT_FORWARD)) {{
                     if (!is_2d) {{
-                        target_x = p1_cell_x - 1;  // 1D: back = -X
+                        target_x = p1_cell_x + 1;
                     }} else {{
-                        target_y = p1_cell_y - 1;  // 2D: back = -Y (SOUTH)
+                        target_y = p1_cell_y + 1;
                     }}
                 }}
                 if (is_2d && (btns & BT_MOVELEFT) && !(btns & BT_MOVERIGHT)) {{
-                    target_x = p1_cell_x - 1;
+                    target_x = p1_cell_x + 1;
                 }}
                 if (is_2d && (btns & BT_MOVERIGHT) && !(btns & BT_MOVELEFT)) {{
-                    target_x = p1_cell_x + 1;
+                    target_x = p1_cell_x - 1;
                 }}
 
                 if (target_x != p1_cell_x || target_y != p1_cell_y) {{
@@ -603,30 +599,50 @@ class TextMazeScenario(Scenario):
         SetPlayerProperty(0, 1, 0); // PROP_FROZEN
         ClearInventory();
 
-        // Position on NORTH stand, elevated, looking south at grid center
-        int stand_y = PLATFORM_RADIUS << 16;
-        SetActorPosition(0, 0, stand_y, 450 << 16, 0);
-
-        int obs_x = GetActorX(0);
-        int obs_y = GetActorY(0);
-        int obs_z = GetActorZ(0) + GetActorViewHeight(0);
-        int dx = 0 - obs_x;
-        int dy = 0 - obs_y;
-        int dz = 0 - obs_z;
-        int target_angle = VectorAngle(dx, dy);
-        int xy_dist = VectorLength(dx, dy);
-        int target_pitch = VectorAngle(xy_dist, dz);
-        if (target_pitch > 0.5) {{ target_pitch -= 1.0; }}
-        target_pitch = -target_pitch;
-        SetActorAngle(0, target_angle);
-        SetActorPitch(0, target_pitch);
+        int r_fix = PLATFORM_RADIUS << 16;
 
         while(TRUE) {{
+            // Broadcast direction via WASD buttons
             int btns = GetPlayerInput(1, INPUT_BUTTONS);
             if (btns & BT_FORWARD)    PrintBold(s:"NORTH");
             if (btns & BT_BACK)       PrintBold(s:"SOUTH");
             if (btns & BT_MOVELEFT)   PrintBold(s:"WEST");
             if (btns & BT_MOVERIGHT)  PrintBold(s:"EAST");
+
+            // Auto-track Navigator on opposite stand
+            int px = GetActorX(1000);
+            int py = GetActorY(1000);
+
+            int obs_x = px;
+            int obs_y = -r_fix;
+            if (py <= 0) {{
+                obs_y = r_fix;
+            }}
+            int obs_z = GetActorZ(0);
+
+            int bound = r_fix - (128 << 16);
+            if (obs_x > bound) obs_x = bound;
+            if (obs_x < -bound) obs_x = -bound;
+
+            SetActorPosition(0, obs_x, obs_y, obs_z, 0);
+
+            // Always look at Navigator
+            int dx = GetActorX(1000) - GetActorX(0);
+            int dy = GetActorY(1000) - GetActorY(0);
+            int dz = (GetActorZ(1000) + (GetActorProperty(1000, APROP_Height) / 2)) - (GetActorZ(0) + GetActorViewHeight(0));
+
+            int target_angle = VectorAngle(dx, dy);
+            int xy_dist = VectorLength(dx, dy);
+            int target_pitch = VectorAngle(xy_dist, dz);
+
+            if (target_pitch > 0.5) {{
+                target_pitch -= 1.0;
+            }}
+            target_pitch = -target_pitch;
+
+            SetActorAngle(0, target_angle);
+            SetActorPitch(0, target_pitch);
+
             Delay(1);
         }}
     }}
