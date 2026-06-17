@@ -33,6 +33,7 @@ class TextMazeScenario(Scenario):
             "step_tics": 12,
             "step_cooldown_tics": 4,
             "stand_thickness": 200,
+            "stand_gap": 64,
             "dir_2_levels": 3,
             "dir_3_levels": 3,
         }
@@ -48,6 +49,7 @@ class TextMazeScenario(Scenario):
         STEP_TICS = int(cfg.get("step_tics", 12))
         STEP_COOLDOWN_TICS = int(cfg.get("step_cooldown_tics", 4))
         STANDS_THICKNESS = int(cfg.get("stand_thickness", 200))
+        STANDS_GAP = int(cfg.get("stand_gap", 64))
         DIR_2_LEVELS = int(cfg.get("dir_2_levels", 3))
         DIR_3_LEVELS = int(cfg.get("dir_3_levels", 3))
         seed = cfg["seed"] if cfg["seed"] is not None else random.randint(0, 999999)
@@ -98,7 +100,7 @@ class TextMazeScenario(Scenario):
 
         # --- Perimeter stands ---
         STANDS_HEIGHT = 350
-        STANDS_INNER = (MAZE_WIDTH_UNITS // 2) + 64
+        STANDS_INNER = (MAZE_WIDTH_UNITS // 2) + STANDS_GAP
 
         pos_y = STANDS_INNER + STANDS_THICKNESS / 2
         stands_width = 2 * STANDS_INNER + 2 * STANDS_THICKNESS
@@ -455,10 +457,10 @@ class TextMazeScenario(Scenario):
         SetActorProperty(0, APROP_ScaleY, 5.5);
         SetActorProperty(0, 21, 0);
 
-        // Black HUD overlay to blind Navigator (forces reliance on text)
-        SetHudSize(320, 200, 1);
+        // Black blind overlay for this player only (target=0 prevents netgame leak)
         SetFont("S_BLACK");
-        HudMessage(s:"A"; HUDMSG_PLAIN | HUDMSG_LAYER_UNDERHUD, 1, CR_UNTRANSLATED, 160.0, 100.0, 0.0);
+        HudMessage(s:"A"; HUDMSG_PLAIN | HUDMSG_LAYER_UNDERHUD, 1, CR_UNTRANSLATED, 160.0, 100.0, 0.0, 0, 0, 0, 0);
+        SetFont("SMALLFONT");
 
         ClearInventory();
 
