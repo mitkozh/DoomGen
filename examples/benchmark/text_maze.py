@@ -568,7 +568,73 @@ class TextMazeScenario(Scenario):
             Delay(1);
         }}
     }}
-    script 3 ENTER {{ }}
+    script 3 ENTER {{
+        if (PlayerNumber() != 1) terminate;
+
+        Thing_ChangeTID(0, 1001);
+        SetActorProperty(0, APROP_Health, 100);
+        SetPlayerProperty(0, 1, 0); // PROP_FROZEN
+
+        ClearInventory();
+
+        int r_fix = PLATFORM_RADIUS << 16;
+
+        while(TRUE) {{
+            // Read Guide's button presses and broadcast corresponding direction
+            int btns = GetPlayerInput(1, INPUT_BUTTONS);
+
+            // Button mapping:
+            //   ATTACK = direction bit 0 (LEFT / WEST)
+            //   USE    = direction bit 1 (RIGHT / EAST)
+            //   RELOAD = direction bit 2 (SOUTH)
+            //   JUMP   = direction bit 3 (NORTH)
+            // Only broadcast if the direction bit is active in current vocabulary
+            if ((btns & BT_ATTACK) && (direction_bits & 1))
+                Print(s:dir_tokens[0]);
+            if ((btns & BT_USE) && (direction_bits & 2))
+                Print(s:dir_tokens[1]);
+            if ((btns & BT_RELOAD) && (direction_bits & 4))
+                Print(s:dir_tokens[2]);
+            if ((btns & BT_JUMP) && (direction_bits & 8))
+                Print(s:dir_tokens[3]);
+
+            // Auto-track Navigator on opposite stand
+            int px = GetActorX(1000);
+            int py = GetActorY(1000);
+
+            int obs_x = px;
+            int obs_y = -r_fix;
+            if (py <= 0) {{
+                obs_y = r_fix;
+            }}
+            int obs_z = GetActorZ(0);
+
+            int bound = r_fix - (128 << 16);
+            if (obs_x > bound) obs_x = bound;
+            if (obs_x < -bound) obs_x = -bound;
+
+            SetActorPosition(0, obs_x, obs_y, obs_z, 0);
+
+            // Always look at Navigator
+            int dx = GetActorX(1000) - GetActorX(0);
+            int dy = GetActorY(1000) - GetActorY(0);
+            int dz = (GetActorZ(1000) + (GetActorProperty(1000, APROP_Height) / 2)) - (GetActorZ(0) + GetActorViewHeight(0));
+
+            int target_angle = VectorAngle(dx, dy);
+            int xy_dist = VectorLength(dx, dy);
+            int target_pitch = VectorAngle(xy_dist, dz);
+
+            if (target_pitch > 0.5) {{
+                target_pitch -= 1.0;
+            }}
+            target_pitch = -target_pitch;
+
+            SetActorAngle(0, target_angle);
+            SetActorPitch(0, target_pitch);
+
+            Delay(1);
+        }}
+    }}
     script "EndGame" (void) {{
         Delay(1);
         Exit_Normal(0);
