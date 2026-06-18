@@ -24,7 +24,7 @@ while true; do
     fi
 done
 
-./examples/play/vizdoom -windowed 1 -iwad ./examples/play/freedoom2.wad -file "$wad" -host 2 &
+./examples/play/vizdoom -windowed 1 -iwad ./examples/play/freedoom2.wad -file "$wad" -host 2 +viz_notifications 1 &
 hpid=$!
 sleep 0.5
 ./examples/play/vizdoom -windowed 1 -iwad ./examples/play/freedoom2.wad -file "$wad" -join 127.0.0.1 &
