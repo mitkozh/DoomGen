@@ -509,10 +509,10 @@ class TextMazeScenario(Scenario):
                     // Print the direction of movement to notifications buffer
                     int dx = p1_cell_x - prev_cell_x;
                     int dy = p1_cell_y - prev_cell_y;
-                    if (dx == 1)  PrintBold(s:"EAST");
-                    if (dx == -1) PrintBold(s:"WEST");
-                    if (dy == 1)  PrintBold(s:"NORTH");
-                    if (dy == -1) PrintBold(s:"SOUTH");
+                    if (dx == 1)  PrintBold(s:"WEST");
+                    if (dx == -1) PrintBold(s:"EAST");
+                    if (dy == 1)  PrintBold(s:"SOUTH");
+                    if (dy == -1) PrintBold(s:"NORTH");
                     prev_cell_x = p1_cell_x;
                     prev_cell_y = p1_cell_y;
 
@@ -604,10 +604,10 @@ class TextMazeScenario(Scenario):
         while(TRUE) {{
             // Broadcast direction via WASD buttons
             int btns = GetPlayerInput(1, INPUT_BUTTONS);
-            if (btns & BT_FORWARD)    PrintBold(s:"SOUTH");
-            if (btns & BT_BACK)       PrintBold(s:"NORTH");
-            if (btns & BT_MOVELEFT)   PrintBold(s:"EAST");
-            if (btns & BT_MOVERIGHT)  PrintBold(s:"WEST");
+            if (btns & BT_FORWARD)    PrintBold(s:"NORTH");
+            if (btns & BT_BACK)       PrintBold(s:"SOUTH");
+            if (btns & BT_MOVELEFT)   PrintBold(s:"WEST");
+            if (btns & BT_MOVERIGHT)  PrintBold(s:"EAST");
 
             // Auto-track Navigator on NORTH stand (no side-flip)
             int px = GetActorX(1000);
