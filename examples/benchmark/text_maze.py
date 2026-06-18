@@ -32,8 +32,8 @@ class TextMazeScenario(Scenario):
             "lava_depth": 64,
             "step_tics": 12,
             "step_cooldown_tics": 4,
-            "stand_thickness": 200,
-            "stand_gap": 64,
+            "stand_thickness": 50,
+            "stand_gap": 500,
             "dir_2_levels": 3,
             "dir_3_levels": 3,
         }
@@ -165,8 +165,8 @@ class TextMazeScenario(Scenario):
         p1_y = OFFSET_Y + (center_idx * CELL_SIZE) + (CELL_SIZE // 2)
         builder.add_thing(ThingType.PLAYER1_START, x=p1_x, y=p1_y, angle=0)
 
-        p2_y = -(STANDS_INNER + (STANDS_THICKNESS // 2))
-        builder.add_thing(ThingType.PLAYER2_START, x=0, y=p2_y, angle=90)
+        p2_y = STANDS_INNER + (STANDS_THICKNESS // 2)  # NORTH stand
+        builder.add_thing(ThingType.PLAYER2_START, x=0, y=p2_y, angle=270)
 
         acs = ACSBuilder()
         acs.add_include("zcommon.acs")
@@ -255,7 +255,7 @@ class TextMazeScenario(Scenario):
         Floor_MoveToValue(tag, 2048, 0, 0);
         ChangeFloor(tag, "FLOOR4_8");
         Sector_SetDamage(tag, 0, 0);
-        Light_ChangeToValue(tag, 255);
+        Light_ChangeToValue(tag, 0);  // blind Navigator inside cell
         if (x >= 0 && x < MAP_WIDTH && y >= 0 && y < MAP_WIDTH) {{
             int bit_idx = y * MAP_WIDTH + x;
             int chunk = bit_idx / 27;
@@ -323,7 +323,7 @@ class TextMazeScenario(Scenario):
         carve(sx, sy);
         ChangeFloor(start_tag, "F_START");
         Sector_SetColor(start_tag, 255, 255, 255);
-        Light_ChangeToValue(start_tag, 255);
+        Light_ChangeToValue(start_tag, 0);
         Sector_SetFade(start_tag, 0, 0, 0);
 
         // Determine which directions are active based on tm_level
@@ -393,17 +393,17 @@ class TextMazeScenario(Scenario):
 
                 n_count = 0;
 
-                // Check NORTH (bit 3)
+                // NORTH (cy+2, bit 3)
                 if ((direction_bits & 8) && (cy + 2 < MAP_WIDTH) && visited[(cy + 2) * MAP_WIDTH + cx] == 0)
                     neighbors[n_count++] = (cx << 8) | (cy + 2);
-                // Check SOUTH (bit 2)
+                // SOUTH (cy-2, bit 2)
                 if ((direction_bits & 4) && (cy - 2 >= 0) && visited[(cy - 2) * MAP_WIDTH + cx] == 0)
                     neighbors[n_count++] = (cx << 8) | (cy - 2);
-                // Check EAST (bit 1)
-                if ((direction_bits & 2) && (cx + 2 < MAP_WIDTH) && visited[cy * MAP_WIDTH + (cx + 2)] == 0)
+                // EAST (cx+2, bit 0)
+                if ((direction_bits & 1) && (cx + 2 < MAP_WIDTH) && visited[cy * MAP_WIDTH + (cx + 2)] == 0)
                     neighbors[n_count++] = ((cx + 2) << 8) | cy;
-                // Check WEST (bit 0)
-                if ((direction_bits & 1) && (cx - 2 >= 0) && visited[cy * MAP_WIDTH + (cx - 2)] == 0)
+                // WEST (cx-2, bit 1)
+                if ((direction_bits & 2) && (cx - 2 >= 0) && visited[cy * MAP_WIDTH + (cx - 2)] == 0)
                     neighbors[n_count++] = ((cx - 2) << 8) | cy;
 
                 if (n_count > 0) {{
@@ -433,7 +433,7 @@ class TextMazeScenario(Scenario):
 
         ChangeFloor(current_end_tag, "F_END");
         Sector_SetColor(current_end_tag, 255, 255, 255);
-        Light_ChangeToValue(current_end_tag, 255);
+        Light_ChangeToValue(current_end_tag, 0);
         Sector_SetFade(current_end_tag, 0, 0, 0);
 
         level_clear_lock = 0;
@@ -457,11 +457,6 @@ class TextMazeScenario(Scenario):
         SetActorProperty(0, APROP_ScaleY, 5.5);
         SetActorProperty(0, 21, 0);
 
-        // Black blind overlay for this player only (target=0 prevents netgame leak)
-        SetFont("S_BLACK");
-        HudMessage(s:"A"; HUDMSG_PLAIN | HUDMSG_LAYER_UNDERHUD, 1, CR_UNTRANSLATED, 160.0, 100.0, 0.0, 0, 0, 0, 0);
-        SetFont("SMALLFONT");
-
         ClearInventory();
 
         int p1_cell_x = g_start_x;
@@ -477,8 +472,7 @@ class TextMazeScenario(Scenario):
         int prev_cell_x = g_start_x;
         int prev_cell_y = g_start_y;
 
-        // Always 4-direction movement; maze constrains which are safe
-        int is_2d = 1;
+        // Always 4-direction grid movement
 
         while (TRUE) {{
             if (GetActorProperty(0, APROP_HEALTH) <= 0) {{
@@ -490,16 +484,11 @@ class TextMazeScenario(Scenario):
                 step_timer++;
                 int s_step_from_x = get_world_x(step_from_x);
                 int s_step_to_x   = get_world_x(step_to_x);
-                if (is_2d) {{
-                    int s_step_from_y = get_world_y(step_from_y);
-                    int s_step_to_y   = get_world_y(step_to_y);
-                    int interp_x = s_step_from_x + (((s_step_to_x - s_step_from_x) * step_timer) / TM_STEP_TICS);
-                    int interp_y = s_step_from_y + (((s_step_to_y - s_step_from_y) * step_timer) / TM_STEP_TICS);
-                    SetActorPosition(0, interp_x << 16, interp_y << 16, 0, 0);
-                }} else {{
-                    int interp_world_x = s_step_from_x + (((s_step_to_x - s_step_from_x) * step_timer) / TM_STEP_TICS);
-                    SetActorPosition(0, interp_world_x << 16, get_world_y(p1_cell_y) << 16, 0, 0);
-                }}
+                int s_step_from_y = get_world_y(step_from_y);
+                int s_step_to_y   = get_world_y(step_to_y);
+                int interp_x = s_step_from_x + (((s_step_to_x - s_step_from_x) * step_timer) / TM_STEP_TICS);
+                int interp_y = s_step_from_y + (((s_step_to_y - s_step_from_y) * step_timer) / TM_STEP_TICS);
+                SetActorPosition(0, interp_x << 16, interp_y << 16, 0, 0);
                 SetActorVelocity(0, 0, 0, 0, FALSE, FALSE);
 
                 if (step_timer >= TM_STEP_TICS) {{
@@ -533,26 +522,18 @@ class TextMazeScenario(Scenario):
                 int target_x = p1_cell_x;
                 int target_y = p1_cell_y;
 
-                // Map buttons to movement (inverted: W=south, S=north, A=east, D=west)
+                // Map buttons to movement
                 if ((btns & BT_FORWARD) && !(btns & BT_BACK)) {{
-                    if (!is_2d) {{
-                        target_x = p1_cell_x - 1;
-                    }} else {{
-                        target_y = p1_cell_y - 1;
-                    }}
+                    target_y = p1_cell_y + 1;
                 }}
                 if ((btns & BT_BACK) && !(btns & BT_FORWARD)) {{
-                    if (!is_2d) {{
-                        target_x = p1_cell_x + 1;
-                    }} else {{
-                        target_y = p1_cell_y + 1;
-                    }}
+                    target_y = p1_cell_y - 1;
                 }}
-                if (is_2d && (btns & BT_MOVELEFT) && !(btns & BT_MOVERIGHT)) {{
-                    target_x = p1_cell_x + 1;
-                }}
-                if (is_2d && (btns & BT_MOVERIGHT) && !(btns & BT_MOVELEFT)) {{
+                if ((btns & BT_MOVELEFT) && !(btns & BT_MOVERIGHT)) {{
                     target_x = p1_cell_x - 1;
+                }}
+                if ((btns & BT_MOVERIGHT) && !(btns & BT_MOVELEFT)) {{
+                    target_x = p1_cell_x + 1;
                 }}
 
                 if (target_x != p1_cell_x || target_y != p1_cell_y) {{
