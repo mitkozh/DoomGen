@@ -255,7 +255,7 @@ class TextMazeScenario(Scenario):
         Floor_MoveToValue(tag, 2048, 0, 0);
         ChangeFloor(tag, "FLOOR4_8");
         Sector_SetDamage(tag, 0, 0);
-        Light_ChangeToValue(tag, 0);  // blind Navigator inside cell
+        Light_ChangeToValue(tag, 255);  // normal light
         if (x >= 0 && x < MAP_WIDTH && y >= 0 && y < MAP_WIDTH) {{
             int bit_idx = y * MAP_WIDTH + x;
             int chunk = bit_idx / 27;
@@ -323,7 +323,7 @@ class TextMazeScenario(Scenario):
         carve(sx, sy);
         ChangeFloor(start_tag, "F_START");
         Sector_SetColor(start_tag, 255, 255, 255);
-        Light_ChangeToValue(start_tag, 0);
+        Light_ChangeToValue(start_tag, 255);
         Sector_SetFade(start_tag, 0, 0, 0);
 
         // Determine which directions are active based on tm_level
@@ -433,7 +433,7 @@ class TextMazeScenario(Scenario):
 
         ChangeFloor(current_end_tag, "F_END");
         Sector_SetColor(current_end_tag, 255, 255, 255);
-        Light_ChangeToValue(current_end_tag, 0);
+        Light_ChangeToValue(current_end_tag, 255);
         Sector_SetFade(current_end_tag, 0, 0, 0);
 
         level_clear_lock = 0;
@@ -456,6 +456,12 @@ class TextMazeScenario(Scenario):
         SetActorProperty(0, APROP_ScaleX, 5.5);
         SetActorProperty(0, APROP_ScaleY, 5.5);
         SetActorProperty(0, 21, 0);
+
+        // Black HUD blind
+        SetHudSize(320, 200, 1);
+        SetFont("S_BLACK");
+        HudMessage(s:"A"; HUDMSG_PLAIN, 1, CR_UNTRANSLATED, 160.0, 100.0, 0.0);
+        SetFont("SMALLFONT");
 
         ClearInventory();
 
@@ -522,18 +528,18 @@ class TextMazeScenario(Scenario):
                 int target_x = p1_cell_x;
                 int target_y = p1_cell_y;
 
-                // Map buttons to movement
+                // WASD: W=south, S=north, A=east, D=west
                 if ((btns & BT_FORWARD) && !(btns & BT_BACK)) {{
-                    target_y = p1_cell_y + 1;
-                }}
-                if ((btns & BT_BACK) && !(btns & BT_FORWARD)) {{
                     target_y = p1_cell_y - 1;
                 }}
+                if ((btns & BT_BACK) && !(btns & BT_FORWARD)) {{
+                    target_y = p1_cell_y + 1;
+                }}
                 if ((btns & BT_MOVELEFT) && !(btns & BT_MOVERIGHT)) {{
-                    target_x = p1_cell_x - 1;
+                    target_x = p1_cell_x + 1;
                 }}
                 if ((btns & BT_MOVERIGHT) && !(btns & BT_MOVELEFT)) {{
-                    target_x = p1_cell_x + 1;
+                    target_x = p1_cell_x - 1;
                 }}
 
                 if (target_x != p1_cell_x || target_y != p1_cell_y) {{
@@ -574,6 +580,11 @@ class TextMazeScenario(Scenario):
                 tm_p1_grid_y = -1;
             }}
 
+            // Keep blind overlay active
+            SetFont("S_BLACK");
+            HudMessage(s:"A"; HUDMSG_PLAIN, 1, CR_UNTRANSLATED, 160.0, 100.0, 0.0);
+            SetFont("SMALLFONT");
+
             SetActorAngle(1000, 0);
             SetActorPitch(1000, 0);
 
@@ -593,10 +604,10 @@ class TextMazeScenario(Scenario):
         while(TRUE) {{
             // Broadcast direction via WASD buttons
             int btns = GetPlayerInput(1, INPUT_BUTTONS);
-            if (btns & BT_FORWARD)    PrintBold(s:"NORTH");
-            if (btns & BT_BACK)       PrintBold(s:"SOUTH");
-            if (btns & BT_MOVELEFT)   PrintBold(s:"WEST");
-            if (btns & BT_MOVERIGHT)  PrintBold(s:"EAST");
+            if (btns & BT_FORWARD)    PrintBold(s:"SOUTH");
+            if (btns & BT_BACK)       PrintBold(s:"NORTH");
+            if (btns & BT_MOVELEFT)   PrintBold(s:"EAST");
+            if (btns & BT_MOVERIGHT)  PrintBold(s:"WEST");
 
             // Auto-track Navigator on NORTH stand (no side-flip)
             int px = GetActorX(1000);
