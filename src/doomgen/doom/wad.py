@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
-from typing import Optional, Any
+from typing import Optional
 from pathlib import Path
 
 try:
@@ -31,7 +30,7 @@ class WADWriter:
 
         self.wad = WAD()
         self.wad_type = wad_type
-        self.maps: dict[str, Any] = {}
+        self.maps: dict[str, DoomMapData] = {}
 
     def create_map(self, name: str = "MAP01") -> 'DoomMapData':
         """Create and register a new map."""

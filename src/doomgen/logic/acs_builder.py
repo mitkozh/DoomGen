@@ -111,7 +111,7 @@ class ACSScript:
 class ACSBuilder:
     """Builds ACS source and compiles it with ACC."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Create an empty ACS builder."""
         self.scripts: list[ACSScript] = []
         self.includes: list[str] = []
@@ -316,7 +316,8 @@ while (true)
             if not validate_executable(acc_path):
                 raise FileNotFoundError(
                     f"ACC compiler not found at '{acc_path}'. "
-                    "Ensure ACC is installed or available via bundled ./acc directory."
+                    "Ensure ACC is installed or available via the bundled "
+                    "doomgen/bin/acc directory."
                 )
 
             try:
@@ -331,6 +332,12 @@ while (true)
                     f"ACC compiler not found at '{acc_path}'. "
                     "Please install ACC and add it to your PATH."
                 )
+            except subprocess.CalledProcessError as e:
+                raise RuntimeError(
+                    f"ACC compilation failed (exit {e.returncode}).\n"
+                    f"--- ACC stdout ---\n{e.stdout}\n"
+                    f"--- ACC stderr ---\n{e.stderr}"
+                ) from e
 
             if obj_file.exists():
                 return obj_file.read_bytes()

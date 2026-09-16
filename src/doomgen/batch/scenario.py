@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
-import os
+from typing import Any, Dict, Optional
 
 
 class Scenario(ABC):

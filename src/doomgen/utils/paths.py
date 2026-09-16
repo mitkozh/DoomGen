@@ -1,8 +1,14 @@
-import os
+"""Resolve bundled ACC/ZDBSP binaries (installed package first, source checkout fallback)."""
+
 import shutil
 import sys
-from pathlib import Path
 from functools import lru_cache
+from pathlib import Path
+
+
+def _package_dir() -> Path:
+    """Directory of the installed ``doomgen`` package."""
+    return Path(__file__).resolve().parent.parent
 
 
 @lru_cache(maxsize=1)
@@ -23,10 +29,16 @@ def get_bundled_compiler(tool_name: str) -> str:
     if tool_name not in ["acc", "zdbsp"]:
         raise ValueError(f"Unknown tool: {tool_name}")
 
-    project_root = get_project_root()
     is_windows = sys.platform == "win32" or sys.platform == "cygwin"
     exe_ext = ".exe" if is_windows else ""
 
+    # Installed-package layout first: <site-packages>/doomgen/bin/<tool>/<exe>
+    packaged = _package_dir() / "bin" / tool_name / f"{tool_name}{exe_ext}"
+    if packaged.is_file():
+        return str(packaged.resolve())
+
+    # Source-checkout layout: <project-root>/<tool>/<exe>
+    project_root = get_project_root()
     tool_path = project_root / tool_name / f"{tool_name}{exe_ext}"
     return str(tool_path.resolve())
 

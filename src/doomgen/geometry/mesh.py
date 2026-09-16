@@ -1,11 +1,11 @@
 """Voronoi mesh construction and topology helpers."""
 
 from __future__ import annotations
-from typing import List, Dict, Set, Tuple, Optional
+from typing import List, Dict, Tuple, Optional
 import numpy as np
 import heapq
 from scipy.spatial import Voronoi
-from shapely.geometry import Polygon, LineString, Point
+from shapely.geometry import Polygon, LineString
 
 from doomgen.geometry.seeds import Seed
 from doomgen.abstraction.layout import LayoutGraph, ConnectionType
@@ -75,19 +75,18 @@ class VoronoiMesh:
         if not self.adjacency:
             self.build_adjacency()
 
-        start_set = set(start_indices)
         end_set = set(end_indices)
 
-        open_set = []
-        came_from = {}
+        open_set: list[tuple[float, int]] = []
+        came_from: dict[int, int] = {}
         g_score = {node: float('inf') for node in range(len(self.seeds))}
         f_score = {node: float('inf') for node in range(len(self.seeds))}
 
         for start_node in start_indices:
             g_score[start_node] = 0
-            h = min(np.linalg.norm(np.array([self.seeds[start_node].x, self.seeds[start_node].y]) -
-                                   np.array([self.seeds[end_node].x, self.seeds[end_node].y]))
-                    for end_node in end_indices)
+            h = float(min(np.linalg.norm(np.array([self.seeds[start_node].x, self.seeds[start_node].y]) -
+                                             np.array([self.seeds[end_node].x, self.seeds[end_node].y]))
+                              for end_node in end_indices))
             f_score[start_node] = h
             heapq.heappush(open_set, (h, start_node))
 
@@ -118,15 +117,15 @@ class VoronoiMesh:
                 if self.seeds[neighbor].area_id != "VOID" and neighbor not in end_set:
                     penalty = 1000
 
-                tentative_g = g_score[current] + dist + penalty
+                tentative_g = float(g_score[current] + dist + penalty)
 
                 if tentative_g < g_score[neighbor]:
                     came_from[neighbor] = current
                     g_score[neighbor] = tentative_g
 
-                    h = min(np.linalg.norm(np.array([self.seeds[neighbor].x, self.seeds[neighbor].y]) -
-                                           np.array([self.seeds[end_node].x, self.seeds[end_node].y]))
-                            for end_node in end_indices)
+                    h = float(min(np.linalg.norm(np.array([self.seeds[neighbor].x, self.seeds[neighbor].y]) -
+                                                       np.array([self.seeds[end_node].x, self.seeds[end_node].y]))
+                                        for end_node in end_indices))
 
                     f_score[neighbor] = tentative_g + h
                     heapq.heappush(open_set, (f_score[neighbor], neighbor))
@@ -200,6 +199,8 @@ class VoronoiMesh:
         return processed_ridges
 
     def _find_connection(self, id_a: str, id_b: str):
+        if self.graph is None:
+            return None
         for conn in self.graph.connections:
             if (conn.area_a_id == id_a and conn.area_b_id == id_b) or \
                (conn.area_a_id == id_b and conn.area_b_id == id_a):

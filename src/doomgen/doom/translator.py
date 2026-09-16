@@ -1,12 +1,12 @@
 """Translate a Voronoi layout graph into Doom map data."""
 
 from __future__ import annotations
-from typing import Dict, List, Tuple, Optional
+from typing import Dict
 from shapely.geometry import LineString
 
 from doomgen.doom.wad import DoomMapData
 from doomgen.geometry.mesh import VoronoiMesh
-from doomgen.abstraction.layout import LayoutGraph, Area, ConnectionType
+from doomgen.abstraction.layout import LayoutGraph, ConnectionType
 from doomgen.doom.specials import LinedefFlags
 
 class MapTranslator:
@@ -51,14 +51,17 @@ class MapTranslator:
             v1_idx = self.map_data.add_vertex(x1, y1)
             v2_idx = self.map_data.add_vertex(x2, y2)
 
-            config_front = graph.get_area(front_area).config if front_area != "VOID" else None
-            config_back = graph.get_area(back_area).config if back_area != "VOID" else None
+            front = graph.get_area(front_area) if front_area != "VOID" else None
+            back = graph.get_area(back_area) if back_area != "VOID" else None
+            config_front = front.config if front is not None else None
+            config_back = back.config if back is not None else None
 
             side_front = -1
             side_back = -1
 
             if rtype == "void_wall":
                 if sec_front is not None:
+                    assert config_front is not None
                     side_front = self.map_data.add_sidedef(
                         sector=sec_front,
                         middle_texture=config_front.wall_texture,
@@ -67,6 +70,7 @@ class MapTranslator:
 
             elif rtype == "solid":
                 if sec_front is not None:
+                    assert config_front is not None
                     side_front = self.map_data.add_sidedef(
                         sector=sec_front,
                         middle_texture=config_front.wall_texture,
@@ -81,6 +85,7 @@ class MapTranslator:
                     )
 
                 if sec_back is not None:
+                    assert config_back is not None
                     side_back = self.map_data.add_sidedef(
                         sector=sec_back,
                         middle_texture=config_back.wall_texture,
@@ -97,13 +102,10 @@ class MapTranslator:
                 continue
 
             elif rtype == "portal":
+                assert sec_front is not None and sec_back is not None
+                assert config_front is not None and config_back is not None
                 s_front = self.map_data.sectors[sec_front]
                 s_back = self.map_data.sectors[sec_back]
-
-                f_front = s_front['floor_height']
-                c_front = s_front['ceiling_height']
-                f_back = s_back['floor_height']
-                c_back = s_back['ceiling_height']
 
                 # Always populate portal upper/lower textures so later dynamic height
                 # changes still have wall surfaces to reveal.
@@ -153,6 +155,7 @@ class MapTranslator:
             connection = ridge.get("connection")
 
             if rtype == "portal":
+                assert config_front is not None and config_back is not None
                 flags |= LinedefFlags.TWO_SIDED
 
                 mid_tex = "-"

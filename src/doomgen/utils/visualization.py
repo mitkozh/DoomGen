@@ -1,34 +1,33 @@
-"""
-Visualization tools for DoomGen maps.
-"""
+"""Mesh visualization. Requires the `viz` extra."""
 
-from typing import Optional, Dict, Any, TYPE_CHECKING
-import matplotlib.pyplot as plt
-from matplotlib.patches import Polygon as MplPolygon
-import numpy as np
-from shapely.geometry import Polygon, MultiPolygon
+from __future__ import annotations
+
 import hashlib
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from doomgen.geometry.mesh import VoronoiMesh
 
-def visualize_mesh(
-    mesh: 'VoronoiMesh',
-    output_path: str,
-    show_labels: bool = True
-) -> None:
-    """
-    Visualize the VoronoiMesh.
-    """
+
+def visualize_mesh(mesh: VoronoiMesh, output_path: str, show_labels: bool = True) -> None:
+    """Render the Voronoi mesh to an image file."""
+    try:
+        import matplotlib.pyplot as plt
+        from matplotlib.patches import Polygon as MplPolygon
+    except ImportError as e:
+        raise ImportError("visualization needs the 'viz' extra: pip install 'doomgen[viz]'") from e
+
     fig, ax = plt.subplots(figsize=(12, 12))
 
     # Process all cells
     for point_idx, polygon in mesh.cells.items():
-        if polygon.is_empty: continue
+        if polygon.is_empty:
+            continue
 
         area_id = mesh.point_idx_to_area_id[point_idx]
 
         # Color based on area_id
+        color: str | tuple[float, float, float]
         if area_id == "VOID":
             color = "black"
             alpha = 0.1
@@ -65,9 +64,11 @@ def visualize_mesh(
     has_valid_cells = False
 
     for point_idx, polygon in mesh.cells.items():
-        if polygon.is_empty: continue
+        if polygon.is_empty:
+            continue
         area_id = mesh.point_idx_to_area_id[point_idx]
-        if area_id == "VOID": continue
+        if area_id == "VOID":
+            continue
 
         has_valid_cells = True
         b = polygon.bounds

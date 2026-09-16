@@ -1,7 +1,6 @@
 """Doom linedef actions and sector specials."""
 
 from enum import IntEnum, IntFlag
-from typing import Optional
 
 
 class LinedefFlags(IntFlag):

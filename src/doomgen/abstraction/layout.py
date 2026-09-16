@@ -5,7 +5,7 @@ Defines Areas (abstract regions) and their relationships, independent of geometr
 
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Tuple, Any, Set
+from typing import List, Dict, Optional, Any, Set
 from enum import Enum
 import uuid
 
@@ -51,7 +51,7 @@ class Area:
         self.config = config or AreaConfig()
         self.tags: Set[str] = set()
 
-    def add_tag(self, tag: str):
+    def add_tag(self, tag: str) -> None:
         self.tags.add(tag)
 
 class ConnectionType(Enum):
@@ -72,7 +72,7 @@ class LayoutGraph:
     """
     The graph of areas and connections.
     """
-    def __init__(self):
+    def __init__(self) -> None:
         self.areas: Dict[str, Area] = {}
         self.connections: List[Connection] = []
 
@@ -83,5 +83,11 @@ class LayoutGraph:
     def get_area(self, area_id: str) -> Optional[Area]:
         return self.areas.get(area_id)
 
-    def connect(self, id_a: str, id_b: str, type: ConnectionType = ConnectionType.OPEN, **kwargs):
+    def connect(
+        self,
+        id_a: str,
+        id_b: str,
+        type: ConnectionType = ConnectionType.OPEN,
+        **kwargs: Any,
+    ) -> None:
         self.connections.append(Connection(id_a, id_b, type, properties=kwargs))

@@ -6,7 +6,6 @@ from typing import List, Tuple, Optional
 import numpy as np
 import math
 from scipy.spatial import Voronoi
-from shapely.geometry import Polygon, box
 
 @dataclass
 class Seed:

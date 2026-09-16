@@ -3,7 +3,7 @@ Utility functions for geometry operations.
 """
 
 import math
-from typing import List, Tuple, Optional
+from typing import List, Tuple
 from shapely.geometry import Point, LineString
 from doomgen.geometry.seeds import Seed
 

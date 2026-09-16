@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import warnings
 from typing import Any
 
 import numpy as np
@@ -14,6 +16,8 @@ from doomgen.doom.wad import WADWriter, run_zdbsp
 from doomgen.geometry.mesh import VoronoiMesh
 from doomgen.geometry.seeds import generate_relaxed_seeds
 from doomgen.utils.paths import get_bundled_compiler, validate_executable
+
+logger = logging.getLogger(__name__)
 
 
 class ProceduralMapBuilder:
@@ -125,7 +129,10 @@ class ProceduralMapBuilder:
                 count = 1
 
         if count == 0:
-            print(f"Warning: Area {name} claimed 0 seeds. Check bounds/density.")
+            warnings.warn(
+                f"Area {name} claimed 0 seeds. Check bounds/density.",
+                stacklevel=2,
+            )
 
         return area_id
 
@@ -156,13 +163,19 @@ class ProceduralMapBuilder:
         seeds_b = [i for i, s in enumerate(self.seeds) if s.area_id == id_b]
 
         if not seeds_a or not seeds_b:
-            print(f"Warning: Cannot connect {room_a_name} and {room_b_name}, one has no seeds.")
+            warnings.warn(
+                f"Cannot connect {room_a_name} and {room_b_name}, one has no seeds.",
+                stacklevel=2,
+            )
             return ""
 
         path_indices = self.mesh.find_path(seeds_a, seeds_b)
 
         if not path_indices:
-            print(f"Warning: No path found between {room_a_name} and {room_b_name}.")
+            warnings.warn(
+                f"No path found between {room_a_name} and {room_b_name}.",
+                stacklevel=2,
+            )
             return ""
 
         corridor_name = f"corridor_{room_a_name}_{room_b_name}"
@@ -221,6 +234,13 @@ class ProceduralMapBuilder:
         area_a = self.graph.get_area(id_a)
         area_b = self.graph.get_area(id_b)
 
+        if area_a is None or area_b is None:
+            warnings.warn(
+                f"Cannot connect {room_a_name} and {room_b_name} with stairs.",
+                stacklevel=2,
+            )
+            return []
+
         h_start = area_a.config.floor_height
         h_end = area_b.config.floor_height
 
@@ -228,16 +248,25 @@ class ProceduralMapBuilder:
         seeds_b = [i for i, s in enumerate(self.seeds) if s.area_id == id_b]
 
         if not seeds_a or not seeds_b:
-            print(f"Warning: Cannot connect {room_a_name} and {room_b_name} with stairs.")
+            warnings.warn(
+                f"Cannot connect {room_a_name} and {room_b_name} with stairs.",
+                stacklevel=2,
+            )
             return []
 
         path_indices = self.mesh.find_path(seeds_a, seeds_b)
         if not path_indices:
-            print(f"Warning: No path found for stairs between {room_a_name} and {room_b_name}.")
+            warnings.warn(
+                f"No path found for stairs between {room_a_name} and {room_b_name}.",
+                stacklevel=2,
+            )
             return []
 
         if len(path_indices) < num_steps:
-            print(f"Warning: Path length ({len(path_indices)}) < requested steps ({num_steps}). Reducing steps.")
+            warnings.warn(
+                f"Path length ({len(path_indices)}) < requested steps ({num_steps}). Reducing steps.",
+                stacklevel=2,
+            )
             num_steps = max(1, len(path_indices))
 
         cell_to_step = {}
@@ -338,10 +367,14 @@ class ProceduralMapBuilder:
                     candidates.append(idx)
 
         if not candidates:
-            print(f"Warning: No boundary found between {room_a_name} and {room_b_name}.")
+            warnings.warn(
+                f"No boundary found between {room_a_name} and {room_b_name}.",
+                stacklevel=2,
+            )
             return ""
 
         area_a = self.graph.get_area(id_a)
+        assert area_a is not None
 
         config = AreaConfig(
             floor_height=floor_height if floor_height is not None else area_a.config.floor_height,
@@ -383,12 +416,16 @@ class ProceduralMapBuilder:
                 if self.seeds[neighbor].area_id == id_b:
                     is_adjacent = True
                     break
-            if is_adjacent: break
+            if is_adjacent:
+                break
 
         if is_adjacent:
             self.graph.connect(id_a, id_b, type, **kwargs)
         elif not silent:
-            print(f"Warning: {room_a_name} and {room_b_name} are not adjacent.")
+            warnings.warn(
+                f"{room_a_name} and {room_b_name} are not adjacent.",
+                stacklevel=2,
+            )
 
     def add_thing(self, thing_type: str, x: float, y: float, **kwargs):
         """Adds a thing to the map."""
@@ -472,7 +509,10 @@ class ProceduralMapBuilder:
                 elif raw_type.isdigit():
                     t_type = int(raw_type)
                 else:
-                    print(f"Warning: Unknown thing type '{raw_type}', defaulting to Imp (2001)")
+                    warnings.warn(
+                        f"Unknown thing type '{raw_type}', defaulting to Imp (2001)",
+                        stacklevel=2,
+                    )
 
             x = thing["x"]
             y = thing["y"]
@@ -491,7 +531,7 @@ class ProceduralMapBuilder:
             )
 
         self.wad_writer.save(output_path)
-        print(f"WAD written to {output_path}")
+        logger.info("WAD written to %s", output_path)
 
         if zdbsp_path is None:
             zdbsp_path = get_bundled_compiler("zdbsp")
@@ -499,9 +539,15 @@ class ProceduralMapBuilder:
         if zdbsp_path is not None and validate_executable(zdbsp_path):
             found = run_zdbsp(output_path, zdbsp_path=zdbsp_path)
             if found:
-                print(f"ZDBSP: nodes built successfully for {output_path}")
+                logger.info("ZDBSP: nodes built successfully for %s", output_path)
             else:
-                print(f"Warning: ZDBSP not found at '{zdbsp_path}'.")
+                warnings.warn(
+                    f"ZDBSP not found at '{zdbsp_path}'.",
+                    stacklevel=2,
+                )
         elif zdbsp_path is not None:
-            print(f"Warning: ZDBSP not found at '{zdbsp_path}'. "
-                  "WAD saved with empty node lumps (ZDoom will rebuild at load time).")
+            warnings.warn(
+                f"ZDBSP not found at '{zdbsp_path}'. "
+                "WAD saved with empty node lumps (ZDoom will rebuild at load time).",
+                stacklevel=2,
+            )

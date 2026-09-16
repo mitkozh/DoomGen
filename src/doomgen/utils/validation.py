@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional, Any, Union
+from typing import Union
 from pathlib import Path
 
 from shapely.geometry import Polygon, Point, MultiPolygon, GeometryCollection

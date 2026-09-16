@@ -1,6 +1,5 @@
 from typing import Any, Dict, List, Type, Iterator
 import itertools
-from copy import deepcopy
 from .scenario import Scenario
 
 
