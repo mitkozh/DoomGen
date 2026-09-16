@@ -48,25 +48,31 @@ def generate_relaxed_seeds(
         all_points = np.vstack([points, dummy_points])
         vor = Voronoi(all_points)
 
-        new_points = []
-        for i in range(len(points)):
-            region_idx = vor.point_region[i]
-            region = vor.regions[region_idx]
+        vert_lists: list[list[int] | None] = []
+        max_len = 0
+        for region_idx in vor.point_region[: len(points)]:
+            region = vor.regions[region_idx] if region_idx != -1 else []
+            if not region or -1 in region:
+                vert_lists.append(None)
+            else:
+                vert_lists.append(region)
+                max_len = max(max_len, len(region))
 
-            if -1 in region or not region:
-                new_points.append(points[i])
-                continue
-
-            vertices = vor.vertices[region]
-
-            centroid = np.mean(vertices, axis=0)
-
-            centroid[0] = np.clip(centroid[0], minx, maxx)
-            centroid[1] = np.clip(centroid[1], miny, maxy)
-
-            new_points.append(centroid)
-
-        points = np.array(new_points)
+        if max_len:
+            mat = np.full((len(points), max_len), -1)
+            for i, verts in enumerate(vert_lists):
+                if verts:
+                    mat[i, : len(verts)] = verts
+            flat = mat.ravel()
+            hit = flat >= 0
+            owners = np.repeat(np.arange(len(points)), max_len)[hit]
+            sums = np.zeros((len(points), 2))
+            np.add.at(sums, owners, vor.vertices[flat[hit]])
+            counts = np.bincount(owners, minlength=len(points))
+            has = counts > 0
+            centroids = points.copy()
+            centroids[has] = sums[has] / counts[has, None]
+            points = np.clip(centroids, [minx, miny], [maxx, maxy])
 
     seeds = [Seed(p[0], p[1]) for p in points]
 

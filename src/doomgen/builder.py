@@ -7,7 +7,8 @@ import warnings
 from typing import Any
 
 import numpy as np
-from shapely.geometry import Point, Polygon, box
+from shapely import contains_xy, prepare
+from shapely.geometry import Polygon, box
 
 from doomgen.abstraction.layout import Area, AreaConfig, ConnectionType, LayoutGraph, Transform
 from doomgen.doom.things import ThingType
@@ -34,6 +35,8 @@ class ProceduralMapBuilder:
         self._used_cells: set[int] = set()
 
         self.seeds = generate_relaxed_seeds(bounds, num_seeds, seed=seed)
+        # Seed positions never change, only their area assignment does.
+        self._seed_xy = np.array([(s.x, s.y) for s in self.seeds], dtype=float)
 
         self.mesh = VoronoiMesh(self.seeds, self.graph)
         self.mesh.build()
@@ -93,18 +96,19 @@ class ProceduralMapBuilder:
         area_id = self.graph.add_area(area)
         self.name_to_id[name] = area_id
 
-        count = 0
-        for s in self.seeds:
-            should_claim = False
-            if mode == "overwrite":
-                should_claim = True
-            elif mode == "claim_void" and s.area_id == "VOID":
-                should_claim = True
+        prepare(poly)
+        inside = contains_xy(poly, self._seed_xy[:, 0], self._seed_xy[:, 1])
+        if mode == "overwrite":
+            claim = inside
+        elif mode == "claim_void":
+            void = np.array([s.area_id == "VOID" for s in self.seeds])
+            claim = inside & void
+        else:
+            claim = np.zeros(len(self.seeds), dtype=bool)
 
-            if should_claim:
-                if poly.contains(Point(s.x, s.y)):
-                    s.area_id = area_id
-                    count += 1
+        for idx in np.nonzero(claim)[0]:
+            self.seeds[int(idx)].area_id = area_id
+        count = int(claim.sum())
 
         # Overwrite areas smaller than the seed spacing can otherwise vanish entirely.
         if count == 0 and mode == "overwrite":
@@ -330,9 +334,10 @@ class ProceduralMapBuilder:
         else:
             poly = shape
 
-        for s in self.seeds:
-            if poly.contains(Point(s.x, s.y)):
-                s.area_id = "VOID"
+        prepare(poly)
+        inside = contains_xy(poly, self._seed_xy[:, 0], self._seed_xy[:, 1])
+        for idx in np.nonzero(inside)[0]:
+            self.seeds[int(idx)].area_id = "VOID"
 
     def add_boundary(
         self,
