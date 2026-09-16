@@ -4,20 +4,20 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "doomgen"
-version = "0.1.0"
+version = "1.0.0"
 description = "A modular Python library for generating Doom WAD files, targeted at MARL benchmarks"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE*"]
 requires-python = ">=3.10"
 authors = [
-    {name = "mitkozh"}
+    {name = "Dimitar Zhekov", email = "mitko.zh@gmail.com"}
 ]
 keywords = ["doom", "wad", "procedural-generation", "marl", "reinforcement-learning", "doomgen"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -25,24 +25,28 @@ classifiers = [
     "Topic :: Games/Entertainment :: First Person Shooters",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
+# Core runtime deps: only what src/doomgen imports.
+# (networkx/pyyaml/vizdoom were unused; matplotlib/pillow only needed for
+# visualization helpers and examples -> moved to the `viz` extra.)
 dependencies = [
     "omgifol>=0.5.0",
     "shapely>=2.0.0",
     "numpy>=1.24.0",
     "scipy>=1.10.0",
-    "networkx>=3.0",
-    "pyyaml>=6.0.0",
-    "vizdoom>=1.3.0",
-    "pillow>=12.2.0",
 ]
 
 [project.optional-dependencies]
+viz = [
+    "matplotlib>=3.0.0",
+    "pillow>=12.2.0",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
     "mypy>=1.0.0",
-    "matplotlib>=3.0.0",
     "ruff>=0.1.0",
+    "matplotlib>=3.0.0",
+    "pillow>=12.2.0",
 ]
 docs = [
     "sphinx>=6.0.0",
@@ -50,11 +54,14 @@ docs = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/mitkozh/doomgen"
-Repository = "https://github.com/mitkozh/doomgen"
+Homepage = "https://github.com/mitkozh/DoomGen"
+Repository = "https://github.com/mitkozh/DoomGen"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+doomgen = ["bin/acc/*", "bin/zdbsp/*", "py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -67,20 +74,13 @@ warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true
 
-[tool.uv.workspace]
-members = [
-    ".",
-    ".",
-    ".",
-]
-
-[tool.uv.sources]
-doomgen = { workspace = true, editable = true }
-
 [dependency-groups]
 dev = [
-    "doomgen[dev]",
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "mypy>=1.0.0",
+    "ruff>=0.1.0",
 ]
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py310"

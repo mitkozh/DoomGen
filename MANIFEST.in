@@ -1,0 +1,5 @@
+include README.md LICENSE
+recursive-include src/doomgen/bin *
+include src/doomgen/py.typed
+global-exclude __pycache__
+global-exclude *.py[cod]
