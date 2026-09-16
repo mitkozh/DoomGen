@@ -95,6 +95,9 @@ dmypy.json
 *.wad
 *.png
 
+# README assets are committed intentionally
+!assets/*.png
+
 # Benchmark output
 benchmarks/
 marl_benchmarks/

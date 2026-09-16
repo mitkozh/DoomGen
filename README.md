@@ -1,90 +1,128 @@
 # DoomGen
 
-A Python library for procedurally generating Doom WAD files, specifically designed for creating benchmarks for **Multi-Agent Reinforcement Learning (MARL)**.
+Procedural Doom map generation for RL research. Define rooms and connections in a few lines of Python and get a playable WAD out, with full control over geometry, things, and map scripts.
 
-The library uses a **Voronoi-First** approach: the map is generated as a mesh of relaxed Voronoi cells (Lloyd's algorithm), which are then grouped into logical areas (rooms, corridors, doors). This ensures organic, non-grid-aligned geometry and robust topology suitable for navigation tasks.
+The generator is Voronoi-first. A relaxed seed field (Lloyd's algorithm) is grouped into areas, linked with doors, corridors, and stairs, then converted to a Doom WAD. That gives organic non-grid layouts that stay fully seedable, which is what you want when training or evaluating agents.
 
-## Features
+DoomGen was built during the development of [COMRAD](https://github.com/TTomilin/COMRAD), a multi-agent benchmark suite in ViZDoom. The scenario generators under `examples/benchmark/` produced the COMRAD map pool.
 
-- **Voronoi-Based Geometry**: Organic, mesh-based map generation using Lloyd's relaxation.
-- **Logical Layouts**: Define areas (rooms) and connections (doors, open passages) abstractly.
-- **Pathfinding Generation**: Automatically generate corridors and stairs between disconnected areas using A* on the cell mesh.
-- **ACS Scripting**: Inject game logic (puzzles, rewards, state tracking) via a Pythonic ACS builder.
-- **Deterministic**: Fully seedable for reproducible RL benchmarks.
-- **Doom 2 Compatible**: Generates standard UDMF or Hexen format WADs (via `omgifol`).
+Works with VizDoom / ZDoom 2.8.1+. Not GZDoom-specific.
 
-## Installation
+![Armory Siege mesh colored by floor texture](assets/hero_armory_mesh.png)
 
-Clone the repository and install in editable mode:
+Above is the Armory Siege scenario: a central hub with supply rooms off corridors. Areas are colored by their real floor textures, so the mesh shows what the map looks like. It was generated with this code.
+
+```python
+from examples.benchmark.armory_siege import ArmorySiegeScenario
+
+scenario = ArmorySiegeScenario({"seed": 42})
+scenario.generate("output/armory_siege.wad")
+```
+
+Every example under `examples/benchmark/` works the same way. A config dict in, a WAD out.
+
+## Install
 
 ```bash
-git clone https://github.com/mitkozh/doomgen.git
-cd doomgen
+pip install doomgen
+# with visualization helpers (matplotlib, pillow):
+pip install "doomgen[viz]"
+```
+
+From source:
+
+```bash
+git clone https://github.com/mitkozh/DoomGen.git
+cd DoomGen
 pip install -e ".[dev]"
 ```
 
-## Quick Start
+Requires Python 3.10+. Runtime deps: `omgifol`, `shapely`, `numpy`, `scipy`. ACC and ZDBSP binaries ship under `src/doomgen/bin/` and are picked up automatically.
+
+## Quick start
 
 ```python
 from doomgen.builder import ProceduralMapBuilder
 from doomgen.abstraction.layout import ConnectionType
 
-# 1. Initialize Builder with bounds and seed
-builder = ProceduralMapBuilder(bounds=(-1024, -1024, 1024, 1024), num_seeds=2000, seed=42)
+builder = ProceduralMapBuilder(bounds=(-1024, -1024, 1024, 1024), num_seeds=250, seed=7)
 
-# 2. Define Areas (Claim Voronoi Cells)
-# "claim_void" (default): Only claims unassigned cells.
-builder.add_area("Main Hall", shape=(0, 0, 512, 512), floor_texture="FLOOR4_8")
-builder.add_area("Armory", shape=(600, 0, 256, 256), floor_texture="CEIL5_1")
+# shape is (center_x, center_y, width, height)
+builder.add_area("Main Hall", shape=(-350, 0, 900, 900), floor_texture="FLOOR4_8")
+builder.add_area("Armory", shape=(500, 0, 800, 700), floor_texture="CEIL5_1")
 
-# 3. Connect Areas
-# Create a door between them (automatically finds shared boundary cells)
-builder.add_boundary("Main Hall", "Armory", name="Door1", connection_type=ConnectionType.DOOR)
+# door from shared boundary cells; use connect_adjacent for open joins,
+# add_corridor / add_stairs for distant areas (A* over the cell mesh)
+builder.add_boundary("Main Hall", "Armory", name="Door", connection_type=ConnectionType.DOOR)
 
-# 4. Add Things
-builder.add_thing("PLAYER1_START", 0, 0, angle=0)
-builder.add_thing("Shotgun", 600, 0, angle=0)
+builder.add_thing("PLAYER1_START", -350, 0, angle=0)
+builder.add_thing("PLAYER2_START", -350, 120, angle=0)
+builder.add_thing("SHOTGUN", 500, 0, angle=0)
+builder.add_thing("BOX_OF_SHELLS", 500, 120, angle=0)
 
-# 5. Build WAD
 builder.build("output/my_map.wad")
 ```
 
-## Architecture
+`build()` writes the WAD then runs the bundled ZDBSP if present. Override with `build(path, zdbsp_path=...)`. Without ZDBSP the WAD still loads (ZDoom rebuilds nodes).
 
-- **`ProceduralMapBuilder`**: High-level facade for map generation.
-- **`VoronoiMesh`**: Manages the underlying graph of Voronoi cells and their adjacency.
-- **`ACSBuilder`**: Generates Action Code Script (ACS) bytecode for map logic.
-- **`MapTranslator`**: Converts the abstract Voronoi mesh into Doom sectors and linedefs.
+## Seeds
 
-## Requirements
+Two knobs control the mesh. `num_seeds` sets how fine the cells are, `seed` fixes the output. Run the same code with the same seed and you get the same map back. Change the seed and the rooms stay where they are while every wall shifts. Below is the quick start snippet.
 
-- Python 3.10+
-- `scipy`, `numpy`, `shapely` (for geometry)
-- `omgifol` (for WAD I/O)
-- `acc` (ACS Compiler) - usually included with GZDoom or available separately.
+![Quick start map at seeds 7, 8, and 9](assets/seed_variation.png)
 
-## Benchmark Scenarios
+Coarse meshes build faster and suit large open areas. Fine meshes resolve small features like narrow doors and pillars. If an area claims zero cells, increase `num_seeds` or enlarge the shape.
 
-Run the new chained-platform benchmark:
+## API map
+
+| Import | Use |
+| --- | --- |
+| `doomgen.builder.ProceduralMapBuilder` | Main entrypoint (`add_area`, `add_corridor`, `add_stairs`, `add_boundary`, `connect_adjacent`, `add_thing`, `build`) |
+| `doomgen.abstraction.layout` | `LayoutGraph`, `Area`, `AreaConfig`, `ConnectionType` |
+| `doomgen.geometry.mesh` / `doomgen.geometry.seeds` | `VoronoiMesh`, `generate_relaxed_seeds` |
+| `doomgen.logic.acs_builder` | `ACSBuilder`, `ScriptType` for map scripts (OPEN/ENTER/VOID, vars, triggers) |
+| `doomgen.batch` | `Scenario`, `BatchGenerator` for param-grid WAD batches |
+| `doomgen.doom` | `WADWriter`, `DoomMapData`, `MapTranslator`, `ThingType`, `run_zdbsp` |
+| `doomgen.utils.paths` | `get_bundled_compiler("acc" \| "zdbsp")` |
+| `doomgen.utils.visualization` | `visualize_mesh` (needs `doomgen[viz]`) |
+
+`MapBuilder` is an alias of `ProceduralMapBuilder`.
+
+## Examples
+
+`examples/benchmark/` holds 16 scenario generators (arenas, mazes, platforming, asymmetric co-op) with batch variants in `examples/benchmark/batches/` and a curriculum script in `examples/benchmark/curriculum/`. These were written for COMRAD but work standalone. See `examples/benchmark/README.md` for the list. Minimal geometry demos (`test_voronoi.py`, `test_corridor.py`, `test_stairs.py`, …) are directly under `examples/`.
+
+Generate one map:
 
 ```bash
 python examples/benchmark/platform_chain.py
 ```
 
-This generates:
+Batch example:
 
-- `examples/benchmark/output/platform_chain.wad`
+```python
+from doomgen.batch import BatchGenerator
+from examples.benchmark.platform_chain import PlatformChainScenario
 
-Batch-generate varied platform-chain configurations:
-
-```bash
-python examples/benchmark/batches/generate_platform_chain_batch.py
+for scenario in BatchGenerator(PlatformChainScenario, {"seed": [1, 2, 3]}).generate_scenarios("chain"):
+    scenario.generate(f"output/{scenario.name}.wad")
 ```
 
-Batch output directory:
+Play locally (bundled Freedoom + VizDoom under `examples/play/`):
 
-- `examples/benchmark/output/batch_platform_chain/`
+```bash
+# Windows / Linux
+play.bat
+./play.sh
+```
+
+## Dev
+
+```bash
+pytest tests/ -v
+ruff check src tests
+```
 
 ## License
 
-MIT License
+MIT. See `LICENSE`.
