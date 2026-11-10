@@ -1,17 +1,17 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=77.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "doomgen"
-version = "1.0.0"
-description = "A modular Python library for generating Doom WAD files, targeted at MARL benchmarks"
+version = "0.1.0"
+description = "A Python library for seedable procedural generation of Doom WAD files."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE*"]
 requires-python = ">=3.10"
 authors = [
-    {name = "Dimitar Zhekov", email = "mitko.zh@gmail.com"}
+    {name = "Anonymized Authors"}
 ]
 keywords = ["doom", "wad", "procedural-generation", "marl", "reinforcement-learning", "doomgen"]
 classifiers = [
@@ -25,9 +25,7 @@ classifiers = [
     "Topic :: Games/Entertainment :: First Person Shooters",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-# Core runtime deps: only what src/doomgen imports.
-# (networkx/pyyaml/vizdoom were unused; matplotlib/pillow only needed for
-# visualization helpers and examples -> moved to the `viz` extra.)
+# Runtime dependencies.
 dependencies = [
     "omgifol>=0.5.0",
     "shapely>=2.0.0",
@@ -47,15 +45,15 @@ dev = [
     "ruff>=0.1.0",
     "matplotlib>=3.0.0",
     "pillow>=12.2.0",
-]
-docs = [
-    "sphinx>=6.0.0",
-    "sphinx-rtd-theme>=1.0.0",
+    "tomli>=2.0.0; python_version < '3.11'",
+    "build>=1.0.0",
+    "twine>=5.0.0",
 ]
 
 [project.urls]
 Homepage = "https://github.com/mitkozh/DoomGen"
 Repository = "https://github.com/mitkozh/DoomGen"
+Issues = "https://github.com/mitkozh/DoomGen/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -80,6 +78,9 @@ dev = [
     "pytest-cov>=4.0.0",
     "mypy>=1.0.0",
     "ruff>=0.1.0",
+    "tomli>=2.0.0; python_version < '3.11'",
+    "build>=1.0.0",
+    "twine>=5.0.0",
 ]
 
 [tool.ruff]
