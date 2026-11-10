@@ -1,14 +1,21 @@
+name: Publish
+
 on:
   push:
     tags:
-      - 'doomgen-v*'
+      - 'v*'
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
-  build-and-publish:
+  build-and-check:
+    name: Build and check
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
     steps:
       - uses: actions/checkout@v4
 
@@ -16,7 +23,7 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Set up Python
+      - name: Set up Python 3.12
         run: uv python install 3.12
 
       - name: Install dependencies
@@ -24,15 +31,66 @@ jobs:
 
       - name: Check tag matches package version
         run: |
-          uv run python -c 'import tomllib; print("pyproject version:", tomllib.load(open("pyproject.toml","rb"))["project"]["version"])'
+          VERSION="$(uv run python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+          echo "pyproject version: $VERSION"
           echo "tag: ${{ github.ref_name }}"
-          test "doomgen-v$(uv run python -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')" = "${{ github.ref_name }}"
+          test "v$VERSION" = "${{ github.ref_name }}"
+
+      - name: Install ACC
+        run: uv run python -m doomgen.tools install acc
 
       - name: Run tests
         run: uv run pytest tests -v
 
-      - name: Build package
-        run: uv build
+      - name: Build sdist
+        run: uv build --sdist
+
+      - name: Build platform wheels
+        run: uv run python scripts/build_platform_wheels.py
+
+      - name: Check package metadata
+        run: uv run twine check dist/*
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: build-and-check
+    runs-on: ubuntu-latest
+    # The PyPI trusted publisher currently uses no environment.
+    # To require manual approval, configure a GitHub environment and add:
+    # environment: pypi
+    permissions:
+      id-token: write  # required for Trusted Publishing + PEP 740 attestations
+    steps:
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    name: Create GitHub release
+    needs: publish-pypi
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
