@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from doomgen.abstraction.layout import Area, AreaConfig, ConnectionType, LayoutGraph, Transform
+from doomgen.abstraction.layout import (
+    Area,
+    AreaConfig,
+    ConnectionType,
+    LayoutGraph,
+    Transform,
+)
 from doomgen.geometry.mesh import VoronoiMesh
 from doomgen.geometry.seeds import Seed, generate_relaxed_seeds
 

@@ -1,25 +1,30 @@
 """Seed generation for Voronoi-first map generation."""
 
 from __future__ import annotations
-from dataclasses import dataclass
-from typing import List, Tuple, Optional
-import numpy as np
+
 import math
+from dataclasses import dataclass
+from typing import List, Optional, Tuple
+
+import numpy as np
 from scipy.spatial import Voronoi
+
 
 @dataclass
 class Seed:
     """A single Voronoi seed."""
+
     x: float
     y: float
     area_id: str = "VOID"
     is_boundary: bool = False
 
+
 def generate_relaxed_seeds(
     bounds: Tuple[float, float, float, float],
     num_seeds: int,
     iterations: int = 5,
-    seed: Optional[int] = None
+    seed: Optional[int] = None,
 ) -> List[Seed]:
     """Generate seeds using Lloyd relaxation plus a boundary ring."""
     rng = np.random.default_rng(seed)
@@ -27,23 +32,21 @@ def generate_relaxed_seeds(
     width = maxx - minx
     height = maxy - miny
 
-    points = rng.uniform(
-        low=[minx, miny],
-        high=[maxx, maxy],
-        size=(num_seeds, 2)
-    )
+    points = rng.uniform(low=[minx, miny], high=[maxx, maxy], size=(num_seeds, 2))
 
     for _ in range(iterations):
-        dummy_points = np.array([
-            [minx - width, miny - height],
-            [minx - width, maxy + height],
-            [maxx + width, miny - height],
-            [maxx + width, maxy + height],
-            [minx - width, (miny + maxy)/2],
-            [maxx + width, (miny + maxy)/2],
-            [(minx + maxx)/2, miny - height],
-            [(minx + maxx)/2, maxy + height],
-        ])
+        dummy_points = np.array(
+            [
+                [minx - width, miny - height],
+                [minx - width, maxy + height],
+                [maxx + width, miny - height],
+                [maxx + width, maxy + height],
+                [minx - width, (miny + maxy) / 2],
+                [maxx + width, (miny + maxy) / 2],
+                [(minx + maxx) / 2, miny - height],
+                [(minx + maxx) / 2, maxy + height],
+            ]
+        )
 
         all_points = np.vstack([points, dummy_points])
         vor = Voronoi(all_points)

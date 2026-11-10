@@ -22,8 +22,8 @@ class TestThingIds:
         assert [t.value for t in PLAYER_STARTS[:4]] == [1, 2, 3, 4]
 
     def test_translator_player_start_matches_catalog(self):
-        from doomgen.doom.wad import DoomMapData
         from doomgen.doom.translator import MapTranslator
+        from doomgen.doom.wad import DoomMapData
 
         data = DoomMapData("MAP01")
         MapTranslator(data).add_player_start("area", 10, 20)

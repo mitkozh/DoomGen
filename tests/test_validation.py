@@ -35,7 +35,9 @@ class TestSnapping:
     def test_to_integer_coords(self):
         result = to_integer_coords(box(0.4, 0.6, 10.2, 10.8))
 
-        assert all(float(x).is_integer() for x, y in result.exterior.coords for x in (x,))
+        assert all(
+            float(x).is_integer() for x, y in result.exterior.coords for x in (x,)
+        )
 
 
 class TestPolygons:

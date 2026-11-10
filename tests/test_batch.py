@@ -66,7 +66,9 @@ class TestBatchGenerator:
         ]
 
     def test_scenarios_numbered_and_initialized(self):
-        scenarios = list(BatchGenerator(ToyScenario, self.GRID).generate_scenarios("run"))
+        scenarios = list(
+            BatchGenerator(ToyScenario, self.GRID).generate_scenarios("run")
+        )
 
         assert [s.name for s in scenarios] == [f"run_{i}" for i in range(6)]
         assert all(isinstance(s, ToyScenario) for s in scenarios)

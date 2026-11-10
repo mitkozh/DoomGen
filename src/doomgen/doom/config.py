@@ -13,6 +13,7 @@ from typing import Optional
 @dataclass
 class SectorConfig:
     """Sector properties: heights, textures, lighting."""
+
     floor_height: int = 0
     ceiling_height: int = 128
     floor_texture: str = "FLOOR4_8"
@@ -25,6 +26,7 @@ class SectorConfig:
 @dataclass
 class WallConfig:
     """Wall texture configuration."""
+
     upper_texture: str = "-"
     middle_texture: str = "STARTAN2"
     lower_texture: str = "-"
@@ -40,6 +42,7 @@ class PrefabDoomConfig:
     Encapsulates all Doom-specific settings needed to apply a prefab
     to a sector: heights, textures, linedef actions, and flags.
     """
+
     sector_config: SectorConfig
     linedef_action: int = 0
     linedef_flags: int = 0

@@ -1,16 +1,20 @@
 """Translate a Voronoi layout graph into Doom map data."""
 
 from __future__ import annotations
+
 from typing import Dict
+
 from shapely.geometry import LineString
 
+from doomgen.abstraction.layout import ConnectionType, LayoutGraph
+from doomgen.doom.specials import LinedefFlags
 from doomgen.doom.wad import DoomMapData
 from doomgen.geometry.mesh import VoronoiMesh
-from doomgen.abstraction.layout import LayoutGraph, ConnectionType
-from doomgen.doom.specials import LinedefFlags
+
 
 class MapTranslator:
     """Translate a Voronoi mesh into sectors, sidedefs, and linedefs."""
+
     def __init__(self, map_data: DoomMapData, use_hexen_format: bool = False):
         self.map_data = map_data
         self.use_hexen_format = use_hexen_format
@@ -27,7 +31,7 @@ class MapTranslator:
                 light_level=area.config.light_level,
                 special=area.config.special,
                 tag=area.config.tag,
-                **area.config.properties
+                **area.config.properties,
             )
             self.area_to_sector_idx[area_id] = sector_idx
 
@@ -39,8 +43,14 @@ class MapTranslator:
             back_area = ridge["back_area"]
             rtype = ridge["type"]
 
-            x1, y1 = int(round(line_geom.coords[0][0])), int(round(line_geom.coords[0][1]))
-            x2, y2 = int(round(line_geom.coords[1][0])), int(round(line_geom.coords[1][1]))
+            x1, y1 = (
+                int(round(line_geom.coords[0][0])),
+                int(round(line_geom.coords[0][1])),
+            )
+            x2, y2 = (
+                int(round(line_geom.coords[1][0])),
+                int(round(line_geom.coords[1][1])),
+            )
 
             if x1 == x2 and y1 == y2:
                 continue
@@ -65,7 +75,7 @@ class MapTranslator:
                     side_front = self.map_data.add_sidedef(
                         sector=sec_front,
                         middle_texture=config_front.wall_texture,
-                        **config_front.properties
+                        **config_front.properties,
                     )
 
             elif rtype == "solid":
@@ -74,14 +84,14 @@ class MapTranslator:
                     side_front = self.map_data.add_sidedef(
                         sector=sec_front,
                         middle_texture=config_front.wall_texture,
-                        **config_front.properties
+                        **config_front.properties,
                     )
                     self.map_data.add_linedef(
                         start_vertex=v1_idx,
                         end_vertex=v2_idx,
                         front_sidedef=side_front,
                         back_sidedef=-1,
-                        flags=LinedefFlags.BLOCKING
+                        flags=LinedefFlags.BLOCKING,
                     )
 
                 if sec_back is not None:
@@ -89,14 +99,14 @@ class MapTranslator:
                     side_back = self.map_data.add_sidedef(
                         sector=sec_back,
                         middle_texture=config_back.wall_texture,
-                        **config_back.properties
+                        **config_back.properties,
                     )
                     self.map_data.add_linedef(
                         start_vertex=v2_idx,
                         end_vertex=v1_idx,
                         front_sidedef=side_back,
                         back_sidedef=-1,
-                        flags=LinedefFlags.BLOCKING
+                        flags=LinedefFlags.BLOCKING,
                     )
 
                 continue
@@ -134,18 +144,22 @@ class MapTranslator:
 
                 side_front = self.map_data.add_sidedef(
                     sector=sec_front,
-                    middle_texture=config_front.middle_texture if config_front.middle_texture else "-",
+                    middle_texture=config_front.middle_texture
+                    if config_front.middle_texture
+                    else "-",
                     lower_texture=lower_front,
                     upper_texture=upper_front,
-                    **config_front.properties
+                    **config_front.properties,
                 )
 
                 side_back = self.map_data.add_sidedef(
                     sector=sec_back,
-                    middle_texture=config_back.middle_texture if config_back.middle_texture else "-",
+                    middle_texture=config_back.middle_texture
+                    if config_back.middle_texture
+                    else "-",
                     lower_texture=lower_back,
                     upper_texture=upper_back,
-                    **config_back.properties
+                    **config_back.properties,
                 )
 
             flags = 0
@@ -168,24 +182,24 @@ class MapTranslator:
                     flags |= connection.properties["linedef_flags"]
 
                 if connection and connection.type == ConnectionType.DOOR:
-                    is_front_door = (s_front['ceiling_height'] == s_front['floor_height'])
-                    is_back_door = (s_back['ceiling_height'] == s_back['floor_height'])
+                    is_front_door = s_front["ceiling_height"] == s_front["floor_height"]
+                    is_back_door = s_back["ceiling_height"] == s_back["floor_height"]
 
                     if is_back_door and not is_front_door:
                         if side_front != -1:
                             sd = self.map_data.sidedefs[side_front]
-                            if sd['upper_texture'] != "-":
-                                sd['upper_texture'] = config_back.wall_texture
-                            if sd['lower_texture'] != "-":
-                                sd['lower_texture'] = config_back.wall_texture
+                            if sd["upper_texture"] != "-":
+                                sd["upper_texture"] = config_back.wall_texture
+                            if sd["lower_texture"] != "-":
+                                sd["lower_texture"] = config_back.wall_texture
 
                     elif is_front_door and not is_back_door:
                         if side_back != -1:
                             sd = self.map_data.sidedefs[side_back]
-                            if sd['upper_texture'] != "-":
-                                sd['upper_texture'] = config_front.wall_texture
-                            if sd['lower_texture'] != "-":
-                                sd['lower_texture'] = config_front.wall_texture
+                            if sd["upper_texture"] != "-":
+                                sd["upper_texture"] = config_front.wall_texture
+                            if sd["lower_texture"] != "-":
+                                sd["lower_texture"] = config_front.wall_texture
 
                     if is_front_door and not is_back_door:
                         v1_idx, v2_idx = v2_idx, v1_idx
@@ -203,11 +217,14 @@ class MapTranslator:
                         else:
                             special = 1
 
-                    elif "DOOR" in config_front.wall_texture or "DOOR" in config_back.wall_texture:
-                         if self.use_hexen_format:
-                             special = 0
-                         else:
-                             special = 1
+                    elif (
+                        "DOOR" in config_front.wall_texture
+                        or "DOOR" in config_back.wall_texture
+                    ):
+                        if self.use_hexen_format:
+                            special = 0
+                        else:
+                            special = 1
 
                     door_config = None
                     if is_front_door:
@@ -220,9 +237,9 @@ class MapTranslator:
 
                 if mid_tex != "-":
                     if side_front != -1:
-                        self.map_data.sidedefs[side_front]['middle_texture'] = mid_tex
+                        self.map_data.sidedefs[side_front]["middle_texture"] = mid_tex
                     if side_back != -1:
-                        self.map_data.sidedefs[side_back]['middle_texture'] = mid_tex
+                        self.map_data.sidedefs[side_back]["middle_texture"] = mid_tex
 
             elif rtype == "void_wall":
                 flags |= LinedefFlags.BLOCKING
@@ -261,13 +278,14 @@ class MapTranslator:
                 flags=flags,
                 special=special,
                 tag=tag,
-                args=args
+                args=args,
             )
 
     def add_player_start(self, area_id: str, x: float, y: float, angle: int = 0):
         """Add player start thing."""
         self.map_data.add_thing(
-            x=int(x), y=int(y),
+            x=int(x),
+            y=int(y),
             thing_type=1,
             angle=angle,
             flags=7,

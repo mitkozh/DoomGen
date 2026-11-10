@@ -31,7 +31,9 @@ def acc_runs() -> bool:
 
 def make_builder(num_seeds: int = 150, seed: int = 42) -> ProceduralMapBuilder:
     """Small-map builder. Keeps Voronoi relaxation and ZDBSP runs fast."""
-    return ProceduralMapBuilder(bounds=(-512, -512, 512, 512), num_seeds=num_seeds, seed=seed)
+    return ProceduralMapBuilder(
+        bounds=(-512, -512, 512, 512), num_seeds=num_seeds, seed=seed
+    )
 
 
 def two_room_builder() -> ProceduralMapBuilder:

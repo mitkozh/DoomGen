@@ -1,17 +1,21 @@
 """Voronoi mesh construction and topology helpers."""
 
 from __future__ import annotations
-from typing import List, Dict, Tuple, Optional
-import numpy as np
-import heapq
-from scipy.spatial import Voronoi
-from shapely.geometry import Polygon, LineString
 
+import heapq
+from typing import Dict, List, Optional, Tuple
+
+import numpy as np
+from scipy.spatial import Voronoi
+from shapely.geometry import LineString, Polygon
+
+from doomgen.abstraction.layout import ConnectionType, LayoutGraph
 from doomgen.geometry.seeds import Seed
-from doomgen.abstraction.layout import LayoutGraph, ConnectionType
+
 
 class VoronoiMesh:
     """A Voronoi diagram plus cell/ridge adjacency metadata."""
+
     def __init__(self, seeds: List[Seed], graph: Optional[LayoutGraph] = None):
         self.seeds = seeds
         self.graph = graph
@@ -79,14 +83,20 @@ class VoronoiMesh:
 
         open_set: list[tuple[float, int]] = []
         came_from: dict[int, int] = {}
-        g_score = {node: float('inf') for node in range(len(self.seeds))}
-        f_score = {node: float('inf') for node in range(len(self.seeds))}
+        g_score = {node: float("inf") for node in range(len(self.seeds))}
+        f_score = {node: float("inf") for node in range(len(self.seeds))}
 
         for start_node in start_indices:
             g_score[start_node] = 0
-            h = float(min(np.linalg.norm(np.array([self.seeds[start_node].x, self.seeds[start_node].y]) -
-                                             np.array([self.seeds[end_node].x, self.seeds[end_node].y]))
-                              for end_node in end_indices))
+            h = float(
+                min(
+                    np.linalg.norm(
+                        np.array([self.seeds[start_node].x, self.seeds[start_node].y])
+                        - np.array([self.seeds[end_node].x, self.seeds[end_node].y])
+                    )
+                    for end_node in end_indices
+                )
+            )
             f_score[start_node] = h
             heapq.heappush(open_set, (h, start_node))
 
@@ -110,8 +120,10 @@ class VoronoiMesh:
                 if neighbor in visited:
                     continue
 
-                dist = np.linalg.norm(np.array([self.seeds[current].x, self.seeds[current].y]) -
-                                      np.array([self.seeds[neighbor].x, self.seeds[neighbor].y]))
+                dist = np.linalg.norm(
+                    np.array([self.seeds[current].x, self.seeds[current].y])
+                    - np.array([self.seeds[neighbor].x, self.seeds[neighbor].y])
+                )
 
                 penalty = 0
                 if self.seeds[neighbor].area_id != "VOID" and neighbor not in end_set:
@@ -123,9 +135,19 @@ class VoronoiMesh:
                     came_from[neighbor] = current
                     g_score[neighbor] = tentative_g
 
-                    h = float(min(np.linalg.norm(np.array([self.seeds[neighbor].x, self.seeds[neighbor].y]) -
-                                                       np.array([self.seeds[end_node].x, self.seeds[end_node].y]))
-                                        for end_node in end_indices))
+                    h = float(
+                        min(
+                            np.linalg.norm(
+                                np.array(
+                                    [self.seeds[neighbor].x, self.seeds[neighbor].y]
+                                )
+                                - np.array(
+                                    [self.seeds[end_node].x, self.seeds[end_node].y]
+                                )
+                            )
+                            for end_node in end_indices
+                        )
+                    )
 
                     f_score[neighbor] = tentative_g + h
                     heapq.heappush(open_set, (f_score[neighbor], neighbor))
@@ -174,8 +196,8 @@ class VoronoiMesh:
             tx, ty = mx + nx, my + ny
             s_a = self.point_idx_to_seed[p1]
             s_b = self.point_idx_to_seed[p2]
-            dist_a = (tx - s_a.x)**2 + (ty - s_a.y)**2
-            dist_b = (tx - s_b.x)**2 + (ty - s_b.y)**2
+            dist_a = (tx - s_a.x) ** 2 + (ty - s_a.y) ** 2
+            dist_b = (tx - s_b.x) ** 2 + (ty - s_b.y) ** 2
 
             if dist_a < dist_b:
                 front_area = area_id_a
@@ -188,13 +210,15 @@ class VoronoiMesh:
                 line = LineString([line.coords[1], line.coords[0]])
                 front_area, back_area = back_area, front_area
 
-            processed_ridges.append({
-                "line": line,
-                "front_area": front_area,
-                "back_area": back_area,
-                "type": ridge_type,
-                "connection": connection
-            })
+            processed_ridges.append(
+                {
+                    "line": line,
+                    "front_area": front_area,
+                    "back_area": back_area,
+                    "type": ridge_type,
+                    "connection": connection,
+                }
+            )
 
         return processed_ridges
 
@@ -202,7 +226,8 @@ class VoronoiMesh:
         if self.graph is None:
             return None
         for conn in self.graph.connections:
-            if (conn.area_a_id == id_a and conn.area_b_id == id_b) or \
-               (conn.area_a_id == id_b and conn.area_b_id == id_a):
+            if (conn.area_a_id == id_a and conn.area_b_id == id_b) or (
+                conn.area_a_id == id_b and conn.area_b_id == id_a
+            ):
                 return conn
         return None

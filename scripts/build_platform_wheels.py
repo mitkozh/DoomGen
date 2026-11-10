@@ -101,9 +101,7 @@ def _validate_target(platform_tag: str, target: dict[str, tuple[str, ...]]) -> N
     if platform_tag != "macosx_11_0_universal2":
         return
 
-    filename = next(
-        name for name in target["zdbsp"] if name.startswith("zdbsp-macos")
-    )
+    filename = next(name for name in target["zdbsp"] if name.startswith("zdbsp-macos"))
     arches = _macho_arches(BIN / "zdbsp" / filename)
     if arches != {"x86_64", "arm64"}:
         raise SystemExit(

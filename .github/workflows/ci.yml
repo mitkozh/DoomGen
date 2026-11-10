@@ -90,6 +90,9 @@ jobs:
       - name: Lint
         run: uv run ruff check src tests scripts setup.py
 
+      - name: Format check
+        run: uv run ruff format --check src tests scripts setup.py
+
   typecheck:
     name: mypy
     runs-on: ubuntu-latest

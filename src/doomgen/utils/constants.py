@@ -68,15 +68,15 @@ LIGHT_VERY_BRIGHT = 224
 LIGHT_FULLBRIGHT = 255
 
 # Linedef flag bits
-LF_BLOCKING = 1          # Blocks players and monsters
-LF_BLOCKMONSTERS = 2     # Blocks monsters only
-LF_TWOSIDED = 4          # Two-sided line
-LF_UPPERUNPEGGED = 8     # Upper texture unpegged
-LF_LOWERUNPEGGED = 16    # Lower texture unpegged
-LF_SECRET = 32           # Secret (shows as 1-sided on automap)
-LF_BLOCKSOUND = 64       # Blocks sound propagation
-LF_DONTDRAW = 128        # Never appears on automap
-LF_MAPPED = 256          # Already on automap
+LF_BLOCKING = 1  # Blocks players and monsters
+LF_BLOCKMONSTERS = 2  # Blocks monsters only
+LF_TWOSIDED = 4  # Two-sided line
+LF_UPPERUNPEGGED = 8  # Upper texture unpegged
+LF_LOWERUNPEGGED = 16  # Lower texture unpegged
+LF_SECRET = 32  # Secret (shows as 1-sided on automap)
+LF_BLOCKSOUND = 64  # Blocks sound propagation
+LF_DONTDRAW = 128  # Never appears on automap
+LF_MAPPED = 256  # Already on automap
 
 # Common flag combinations
 FLAGS_SOLID_WALL = LF_BLOCKING
@@ -87,11 +87,11 @@ FLAGS_TWO_SIDED_PASSABLE = LF_TWOSIDED  # No LF_BLOCKING
 FLAGS_SECRET_WALL = LF_SECRET | LF_BLOCKING
 
 # Thing skill appearance flags
-TF_SKILL_EASY = 1        # Appears on skills 1-2
-TF_SKILL_MEDIUM = 2      # Appears on skill 3
-TF_SKILL_HARD = 4        # Appears on skills 4-5
-TF_DEAF = 8              # Deaf/ambush flag
-TF_MULTIPLAYER = 16      # Multiplayer only
+TF_SKILL_EASY = 1  # Appears on skills 1-2
+TF_SKILL_MEDIUM = 2  # Appears on skill 3
+TF_SKILL_HARD = 4  # Appears on skills 4-5
+TF_DEAF = 8  # Deaf/ambush flag
+TF_MULTIPLAYER = 16  # Multiplayer only
 
 # Common flag combinations
 THING_ALL_SKILLS = TF_SKILL_EASY | TF_SKILL_MEDIUM | TF_SKILL_HARD
@@ -124,9 +124,9 @@ TEX_F_SKY1 = "F_SKY1"
 TICS_PER_SECOND = 35
 
 # Common timing values
-DOOR_WAIT_TICS = 150      # ~4.3 seconds
+DOOR_WAIT_TICS = 150  # ~4.3 seconds
 DOOR_SPEED = 16
-LIFT_WAIT_TICS = 105      # ~3 seconds
+LIFT_WAIT_TICS = 105  # ~3 seconds
 LIFT_SPEED = 32
 
 # Reserved script number ranges

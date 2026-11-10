@@ -1,5 +1,6 @@
-from typing import Any, Dict, List, Type, Iterator
 import itertools
+from typing import Any, Dict, Iterator, List, Type
+
 from .scenario import Scenario
 
 

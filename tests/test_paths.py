@@ -125,9 +125,7 @@ def test_resolve_compiler_falls_back_to_path(
 
     monkeypatch.setattr("doomgen.utils.paths._bundled_path", lambda tool: None)
     monkeypatch.setattr("doomgen.tools.acc.cached_acc_path", lambda: None)
-    monkeypatch.setenv(
-        "PATH", f"{tmp_path}{os.pathsep}{os.environ.get('PATH', '')}"
-    )
+    monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ.get('PATH', '')}")
     assert os.path.samefile(resolve_compiler("zdbsp"), fallback)
 
 

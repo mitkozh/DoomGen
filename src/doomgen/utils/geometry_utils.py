@@ -4,10 +4,18 @@ Utility functions for geometry operations.
 
 import math
 from typing import List, Tuple
-from shapely.geometry import Point, LineString
+
+from shapely.geometry import LineString, Point
+
 from doomgen.geometry.seeds import Seed
 
-def create_wavy_path(start: Tuple[float, float], end: Tuple[float, float], num_points: int = 15, amplitude: float = 40) -> List[Tuple[float, float]]:
+
+def create_wavy_path(
+    start: Tuple[float, float],
+    end: Tuple[float, float],
+    num_points: int = 15,
+    amplitude: float = 40,
+) -> List[Tuple[float, float]]:
     """
     Creates a wavy path between two points using a sine wave.
 
@@ -25,7 +33,7 @@ def create_wavy_path(start: Tuple[float, float], end: Tuple[float, float], num_p
 
     dx = x2 - x1
     dy = y2 - y1
-    length = math.sqrt(dx*dx + dy*dy)
+    length = math.sqrt(dx * dx + dy * dy)
 
     if length == 0:
         return [start, end]
@@ -50,7 +58,15 @@ def create_wavy_path(start: Tuple[float, float], end: Tuple[float, float], num_p
 
     return points
 
-def add_void_ring(seeds_list: List[Seed], center_x: float, center_y: float, radius: float, exclude_paths: List[Tuple[List[Tuple[float, float]], float]] = [], margin: float = 16) -> None:
+
+def add_void_ring(
+    seeds_list: List[Seed],
+    center_x: float,
+    center_y: float,
+    radius: float,
+    exclude_paths: List[Tuple[List[Tuple[float, float]], float]] = [],
+    margin: float = 16,
+) -> None:
     """
     Adds a ring of VOID seeds around a circle, excluding areas near paths.
 
@@ -63,7 +79,7 @@ def add_void_ring(seeds_list: List[Seed], center_x: float, center_y: float, radi
         margin: Extra margin for exclusion
     """
     circumference = 2 * math.pi * radius
-    count = int(circumference / 32) # 32 unit spacing
+    count = int(circumference / 32)  # 32 unit spacing
 
     for i in range(count):
         angle = 2 * math.pi * i / count

@@ -36,6 +36,15 @@ jobs:
           echo "tag: ${{ github.ref_name }}"
           test "v$VERSION" = "${{ github.ref_name }}"
 
+      - name: Lint
+        run: uv run ruff check src tests scripts setup.py
+
+      - name: Format check
+        run: uv run ruff format --check src tests scripts setup.py
+
+      - name: Typecheck
+        run: uv run mypy src/doomgen
+
       - name: Install ACC
         run: uv run python -m doomgen.tools install acc
 

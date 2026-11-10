@@ -246,6 +246,8 @@ class TestBuild:
         builder.add_area("hall", (0, 0, 256, 256))
 
         with pytest.warns(UserWarning, match="ZDBSP at '/nonexistent/zdbsp' failed"):
-            builder.build(str(tmp_path / "nonodes.wad"), zdbsp_path="/nonexistent/zdbsp")
+            builder.build(
+                str(tmp_path / "nonodes.wad"), zdbsp_path="/nonexistent/zdbsp"
+            )
 
         assert (tmp_path / "nonodes.wad").is_file()

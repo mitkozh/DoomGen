@@ -9,13 +9,17 @@ if TYPE_CHECKING:
     from doomgen.geometry.mesh import VoronoiMesh
 
 
-def visualize_mesh(mesh: VoronoiMesh, output_path: str, show_labels: bool = True) -> None:
+def visualize_mesh(
+    mesh: VoronoiMesh, output_path: str, show_labels: bool = True
+) -> None:
     """Render the Voronoi mesh to an image file."""
     try:
         import matplotlib.pyplot as plt
         from matplotlib.patches import Polygon as MplPolygon
     except ImportError as e:
-        raise ImportError("visualization needs the 'viz' extra: pip install 'doomgen[viz]'") from e
+        raise ImportError(
+            "visualization needs the 'viz' extra: pip install 'doomgen[viz]'"
+        ) from e
 
     fig, ax = plt.subplots(figsize=(12, 12))
 
@@ -35,8 +39,8 @@ def visualize_mesh(mesh: VoronoiMesh, output_path: str, show_labels: bool = True
             linewidth = 0.5
         else:
             # Hash area_id to get a consistent color
-            h = int(hashlib.sha256(area_id.encode('utf-8')).hexdigest(), 16)
-            r = ((h & 0xFF) / 255.0) * 0.5 + 0.5 # Pastel
+            h = int(hashlib.sha256(area_id.encode("utf-8")).hexdigest(), 16)
+            r = ((h & 0xFF) / 255.0) * 0.5 + 0.5  # Pastel
             g = (((h >> 8) & 0xFF) / 255.0) * 0.5 + 0.5
             b = (((h >> 16) & 0xFF) / 255.0) * 0.5 + 0.5
             color = (r, g, b)
@@ -45,22 +49,37 @@ def visualize_mesh(mesh: VoronoiMesh, output_path: str, show_labels: bool = True
             linewidth = 1.0
 
         coords = list(polygon.exterior.coords)
-        mpl_poly = MplPolygon(coords, closed=True, facecolor=color, edgecolor=edgecolor, alpha=alpha, linewidth=linewidth)
+        mpl_poly = MplPolygon(
+            coords,
+            closed=True,
+            facecolor=color,
+            edgecolor=edgecolor,
+            alpha=alpha,
+            linewidth=linewidth,
+        )
         ax.add_patch(mpl_poly)
 
         # Label
         if show_labels and area_id != "VOID":
             centroid = polygon.centroid
             # Use seed index as label or area name
-            ax.text(centroid.x, centroid.y, str(point_idx), fontsize=6, ha='center', va='center', color='black')
+            ax.text(
+                centroid.x,
+                centroid.y,
+                str(point_idx),
+                fontsize=6,
+                ha="center",
+                va="center",
+                color="black",
+            )
 
     # Plot seeds
     xs = [s.x for s in mesh.seeds]
     ys = [s.y for s in mesh.seeds]
-    ax.scatter(xs, ys, s=2, c='red', alpha=0.5)
+    ax.scatter(xs, ys, s=2, c="red", alpha=0.5)
 
     # Calculate bounds from non-VOID cells
-    minx, miny, maxx, maxy = float('inf'), float('inf'), float('-inf'), float('-inf')
+    minx, miny, maxx, maxy = float("inf"), float("inf"), float("-inf"), float("-inf")
     has_valid_cells = False
 
     for point_idx, polygon in mesh.cells.items():
@@ -84,7 +103,7 @@ def visualize_mesh(mesh: VoronoiMesh, output_path: str, show_labels: bool = True
     else:
         ax.autoscale()
 
-    ax.set_aspect('equal')
+    ax.set_aspect("equal")
     plt.title(f"Voronoi Mesh ({len(mesh.cells)} cells)")
     plt.savefig(output_path, dpi=300)
     plt.close(fig)

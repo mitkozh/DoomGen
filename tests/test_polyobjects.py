@@ -21,7 +21,9 @@ class TestPolyobjectRect:
         data, poly = builder()
         poly.add_rect(PolyobjectConfig(number=1, center=(0, 0), width=128, height=64))
 
-        start_lines = [ld for ld in data.linedefs if ld["special"] == PolyobjAction.START_LINE]
+        start_lines = [
+            ld for ld in data.linedefs if ld["special"] == PolyobjAction.START_LINE
+        ]
         assert len(start_lines) == 1
         assert len(data.linedefs) == 4
         assert all(ld["flags"] & LinedefFlags.BLOCKING for ld in data.linedefs)
@@ -35,14 +37,21 @@ class TestPolyobjectRect:
         things = {t["type"]: t for t in data.things}
         assert things[POLYOBJ_ANCHOR_THING]["tid"] == 3
         assert things[POLYOBJ_ANCHOR_THING]["angle"] == 3
-        assert (things[POLYOBJ_ANCHOR_THING]["x"], things[POLYOBJ_ANCHOR_THING]["y"]) == (100, 200)
+        assert (
+            things[POLYOBJ_ANCHOR_THING]["x"],
+            things[POLYOBJ_ANCHOR_THING]["y"],
+        ) == (100, 200)
 
     def test_rect_sector_uses_config(self):
         data, poly = builder()
         sector = poly.add_rect(
             PolyobjectConfig(
-                number=1, center=(0, 0), width=64, height=64,
-                floor_height=16, texture="BROWN1",
+                number=1,
+                center=(0, 0),
+                width=64,
+                height=64,
+                floor_height=16,
+                texture="BROWN1",
             )
         )
 
@@ -53,7 +62,9 @@ class TestPolyobjectRect:
 class TestPolyobjectTriggers:
     def test_move_trigger_carries_action_and_args(self):
         data, poly = builder()
-        poly.add_move_trigger(number=2, speed=32, angle=0, distance=256, x=-4096, y=-4096)
+        poly.add_move_trigger(
+            number=2, speed=32, angle=0, distance=256, x=-4096, y=-4096
+        )
 
         line = data.linedefs[0]
         assert line["special"] == PolyobjAction.OR_MOVE

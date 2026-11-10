@@ -23,7 +23,16 @@ class TestActions:
         assert DoorAction.DR_OPEN_WAIT_CLOSE == 1
 
     def test_keyed_doors_are_distinct(self):
-        assert len({DoorAction.D1_BLUE_DOOR, DoorAction.D1_RED_DOOR, DoorAction.D1_YELLOW_DOOR}) == 3
+        assert (
+            len(
+                {
+                    DoorAction.D1_BLUE_DOOR,
+                    DoorAction.D1_RED_DOOR,
+                    DoorAction.D1_YELLOW_DOOR,
+                }
+            )
+            == 3
+        )
 
     def test_lift_and_sector_specials_defined(self):
         assert LiftAction.SR_LIFT == 62

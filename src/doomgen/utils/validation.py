@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Union
 from pathlib import Path
+from typing import Union
 
-from shapely.geometry import Polygon, Point, MultiPolygon, GeometryCollection
+from shapely.geometry import GeometryCollection, MultiPolygon, Point, Polygon
 from shapely.validation import make_valid as shapely_make_valid
 
 from doomgen.utils.constants import (
-    MIN_SECTOR_AREA,
-    MIN_CORRIDOR_WIDTH,
-    MAP_MIN_COORD,
     MAP_MAX_COORD,
+    MAP_MIN_COORD,
+    MIN_CORRIDOR_WIDTH,
+    MIN_SECTOR_AREA,
 )
 
 
@@ -24,7 +24,9 @@ def snap_to_grid(value: float, grid_size: int = 8) -> int:
 def snap_polygon_to_grid(polygon: Polygon, grid_size: int = 8) -> Polygon:
     """Snap every polygon vertex to the Doom grid."""
     coords = list(polygon.exterior.coords)
-    snapped = [(snap_to_grid(x, grid_size), snap_to_grid(y, grid_size)) for x, y in coords]
+    snapped = [
+        (snap_to_grid(x, grid_size), snap_to_grid(y, grid_size)) for x, y in coords
+    ]
     return Polygon(snapped)
 
 
@@ -35,7 +37,9 @@ def to_integer_coords(polygon: Polygon) -> Polygon:
     return Polygon(int_coords)
 
 
-def make_valid(geom: Union[Polygon, MultiPolygon, GeometryCollection]) -> Union[Polygon, MultiPolygon]:
+def make_valid(
+    geom: Union[Polygon, MultiPolygon, GeometryCollection],
+) -> Union[Polygon, MultiPolygon]:
     """Wrap Shapely's `make_valid` for consistency."""
     return shapely_make_valid(geom)
 
@@ -60,9 +64,7 @@ def ensure_polygon(geom: Union[Polygon, MultiPolygon, GeometryCollection]) -> Po
 
 
 def validate_polygon(
-    polygon: Polygon,
-    min_area: float = MIN_SECTOR_AREA,
-    check_bounds: bool = True
+    polygon: Polygon, min_area: float = MIN_SECTOR_AREA, check_bounds: bool = True
 ) -> tuple[bool, list[str]]:
     """Validate geometry, size, and map bounds for a Doom polygon."""
     issues = []
@@ -97,8 +99,7 @@ def validate_polygon(
 
 
 def validate_corridor_width(
-    polygon: Polygon,
-    min_width: float = MIN_CORRIDOR_WIDTH
+    polygon: Polygon, min_width: float = MIN_CORRIDOR_WIDTH
 ) -> tuple[bool, float]:
     """Estimate whether a corridor is at least `min_width` wide."""
     eroded = polygon.buffer(-min_width / 2)
@@ -119,10 +120,7 @@ def validate_corridor_width(
 
 
 def validate_thing_placement(
-    x: float,
-    y: float,
-    polygon: Polygon,
-    radius: float = 16.0
+    x: float, y: float, polygon: Polygon, radius: float = 16.0
 ) -> tuple[bool, str]:
     """Validate a thing placement against sector bounds and wall clearance."""
     point = Point(x, y)
@@ -145,24 +143,27 @@ def validate_wad(filepath: str | Path) -> tuple[bool, list[str]]:
     if not filepath.exists():
         return False, ["File does not exist"]
 
-    with open(filepath, 'rb') as f:
+    with open(filepath, "rb") as f:
         header = f.read(12)
 
         if len(header) < 12:
             return False, ["File too small for WAD header"]
 
-        signature = header[:4].decode('ascii', errors='ignore')
-        if signature not in ('IWAD', 'PWAD'):
+        signature = header[:4].decode("ascii", errors="ignore")
+        if signature not in ("IWAD", "PWAD"):
             issues.append(f"Invalid WAD signature: {signature}")
 
         import struct
-        num_lumps = struct.unpack('<I', header[4:8])[0]
-        dir_offset = struct.unpack('<I', header[8:12])[0]
+
+        num_lumps = struct.unpack("<I", header[4:8])[0]
+        dir_offset = struct.unpack("<I", header[8:12])[0]
 
         file_size = filepath.stat().st_size
 
         if dir_offset > file_size:
-            issues.append(f"Directory offset beyond file size: {dir_offset} > {file_size}")
+            issues.append(
+                f"Directory offset beyond file size: {dir_offset} > {file_size}"
+            )
 
         expected_dir_size = num_lumps * 16
         if dir_offset + expected_dir_size > file_size:
@@ -176,9 +177,11 @@ def validate_wad(filepath: str | Path) -> tuple[bool, list[str]]:
             if len(entry) < 16:
                 break
 
-            name = entry[8:16].rstrip(b'\x00').decode('ascii', errors='ignore')
+            name = entry[8:16].rstrip(b"\x00").decode("ascii", errors="ignore")
 
-            if name.startswith('MAP') or (len(name) == 4 and name[0] == 'E' and name[2] == 'M'):
+            if name.startswith("MAP") or (
+                len(name) == 4 and name[0] == "E" and name[2] == "M"
+            ):
                 has_map = True
                 break
 
@@ -215,10 +218,10 @@ def estimate_bsp_complexity(polygon: Polygon) -> dict:
     convexity_ratio = polygon.area / convex_hull.area if convex_hull.area > 0 else 1.0
 
     return {
-        'vertex_count': vertices,
-        'hole_count': holes,
-        'convexity_ratio': convexity_ratio,
-        'estimated_segs': vertices * 2,
-        'estimated_ssectors': max(1, vertices // 3),
-        'complexity_score': vertices * (1 + holes) / convexity_ratio,
+        "vertex_count": vertices,
+        "hole_count": holes,
+        "convexity_ratio": convexity_ratio,
+        "estimated_segs": vertices * 2,
+        "estimated_ssectors": max(1, vertices // 3),
+        "complexity_score": vertices * (1 + holes) / convexity_ratio,
     }

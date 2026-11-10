@@ -14,30 +14,33 @@ from doomgen.utils.paths import CompilerUnavailable, resolve_compiler
 
 class ScriptType(Enum):
     """Types of ACS scripts."""
-    OPEN = auto()       # Runs when map opens
-    ENTER = auto()      # Runs when player enters
-    RESPAWN = auto()    # Runs when player respawns
-    DEATH = auto()      # Runs when player dies
+
+    OPEN = auto()  # Runs when map opens
+    ENTER = auto()  # Runs when player enters
+    RESPAWN = auto()  # Runs when player respawns
+    DEATH = auto()  # Runs when player dies
     LIGHTNING = auto()  # Runs periodically for lightning
     UNLOADING = auto()  # Runs when map unloads
-    DISCONNECT = auto() # Runs when player disconnects
-    RETURN = auto()     # Runs when returning to map
-    EVENT = auto()      # Custom event script
-    KILL = auto()       # Runs when thing is killed
-    REOPEN = auto()     # Runs when returning to hub
-    VOID = auto()       # Callable script (void)
+    DISCONNECT = auto()  # Runs when player disconnects
+    RETURN = auto()  # Runs when returning to map
+    EVENT = auto()  # Custom event script
+    KILL = auto()  # Runs when thing is killed
+    REOPEN = auto()  # Runs when returning to hub
+    VOID = auto()  # Callable script (void)
 
 
 class VariableScope(Enum):
     """Scopes for ACS variables."""
-    MAP = auto()        # Visible to all scripts in the map
-    WORLD = auto()      # Visible across hub (reset on hub entry)
-    GLOBAL = auto()     # Visible across all maps (persistent)
+
+    MAP = auto()  # Visible to all scripts in the map
+    WORLD = auto()  # Visible across hub (reset on hub entry)
+    GLOBAL = auto()  # Visible across all maps (persistent)
 
 
 @dataclass
 class ACSVariable:
     """An ACS variable declaration."""
+
     name: str
     var_type: str
     scope: VariableScope
@@ -68,6 +71,7 @@ class ACSVariable:
 @dataclass
 class ACSScript:
     """A single ACS script body with its trigger metadata."""
+
     number: int
     script_type: ScriptType
     body: str
@@ -136,33 +140,28 @@ class ACSBuilder:
         return self
 
     def add_map_var(
-        self,
-        name: str,
-        var_type: str = "int",
-        initial: Any = None
+        self, name: str, var_type: str = "int", initial: Any = None
     ) -> ACSBuilder:
         """Add a map-scope ACS variable."""
-        self.variables.append(ACSVariable(name, var_type, VariableScope.MAP, initial=initial))
+        self.variables.append(
+            ACSVariable(name, var_type, VariableScope.MAP, initial=initial)
+        )
         return self
 
-    def add_world_var(
-        self,
-        name: str,
-        index: int,
-        var_type: str = "int"
-    ) -> ACSBuilder:
+    def add_world_var(self, name: str, index: int, var_type: str = "int") -> ACSBuilder:
         """Add a world-scope ACS variable."""
-        self.variables.append(ACSVariable(name, var_type, VariableScope.WORLD, index=index))
+        self.variables.append(
+            ACSVariable(name, var_type, VariableScope.WORLD, index=index)
+        )
         return self
 
     def add_global_var(
-        self,
-        name: str,
-        index: int,
-        var_type: str = "int"
+        self, name: str, index: int, var_type: str = "int"
     ) -> ACSBuilder:
         """Add a global-scope ACS variable."""
-        self.variables.append(ACSVariable(name, var_type, VariableScope.GLOBAL, index=index))
+        self.variables.append(
+            ACSVariable(name, var_type, VariableScope.GLOBAL, index=index)
+        )
         return self
 
     def add_script(
@@ -170,7 +169,7 @@ class ACSBuilder:
         script_type: ScriptType,
         body: str,
         number: int | None = None,
-        args: list[str] | None = None
+        args: list[str] | None = None,
     ) -> int:
         """Add a script and return its script number."""
         if number is None:
@@ -180,10 +179,7 @@ class ACSBuilder:
             self._next_script_num = max(self._next_script_num, number + 1)
 
         script = ACSScript(
-            number=number,
-            script_type=script_type,
-            body=body,
-            args=args or []
+            number=number, script_type=script_type, body=body, args=args or []
         )
 
         self.scripts.append(script)
@@ -194,7 +190,7 @@ class ACSBuilder:
         tag: int,
         open_time: int = 35,  # Tics (35 = 1 second)
         close_time: int = 105,  # Tics until auto-close
-        speed: int = 16
+        speed: int = 16,
     ) -> int:
         """Create a door open/close script."""
         body = f"""
@@ -204,11 +200,7 @@ Door_Close({tag}, {speed});
 """
         return self.add_script(ScriptType.OPEN, body.strip())
 
-    def define_teleport_logic(
-        self,
-        source_tag: int,
-        dest_tag: int
-    ) -> int:
+    def define_teleport_logic(self, source_tag: int, dest_tag: int) -> int:
         """Create a teleporter script."""
         body = f"""
 Teleport({dest_tag}, 0, 0);
@@ -216,11 +208,7 @@ Teleport({dest_tag}, 0, 0);
         return self.add_script(ScriptType.ENTER, body.strip())
 
     def define_spawn_enemies(
-        self,
-        thing_type: int,
-        spawn_tag: int,
-        count: int = 1,
-        delay: int = 35
+        self, thing_type: int, spawn_tag: int, count: int = 1, delay: int = 35
     ) -> int:
         """Create a repeated enemy spawn script."""
         body = f"""
@@ -233,9 +221,7 @@ for (int i = 0; i < {count}; i++)
         return self.add_script(ScriptType.OPEN, body.strip())
 
     def define_message(
-        self,
-        message: str,
-        script_type: ScriptType = ScriptType.ENTER
+        self, message: str, script_type: ScriptType = ScriptType.ENTER
     ) -> int:
         """Create a message display script."""
         escaped = message.replace('"', '\\"')
@@ -243,11 +229,7 @@ for (int i = 0; i < {count}; i++)
         return self.add_script(script_type, body)
 
     def define_sector_light(
-        self,
-        tag: int,
-        min_light: int = 64,
-        max_light: int = 255,
-        pulse_time: int = 35
+        self, tag: int, min_light: int = 64, max_light: int = 255, pulse_time: int = 35
     ) -> int:
         """Create a pulsing light effect."""
         body = f"""
@@ -294,9 +276,7 @@ while (true)
         return "\n".join(lines)
 
     def compile(
-        self,
-        output_path: str | Path | None = None,
-        acc_path: str | None = None
+        self, output_path: str | Path | None = None, acc_path: str | None = None
     ) -> bytes | None:
         """Compile the scripts with ACC and return the bytecode.
 

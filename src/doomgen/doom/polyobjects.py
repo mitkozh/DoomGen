@@ -8,7 +8,6 @@ from typing import Tuple
 from doomgen.doom.specials import LinedefFlags, PolyobjAction
 from doomgen.doom.wad import DoomMapData
 
-
 POLYOBJ_ANCHOR_THING = 9300
 POLYOBJ_START_SPOT_THING = 9301
 POLYOBJ_START_SPOT_CRUSH_THING = 9302
@@ -100,7 +99,9 @@ class PolyobjectBuilder:
         y: int,
     ) -> int:
         """Add a repeatable polyobject rotate action linedef."""
-        action = PolyobjAction.OR_ROTATE_RIGHT if clockwise else PolyobjAction.OR_ROTATE_LEFT
+        action = (
+            PolyobjAction.OR_ROTATE_RIGHT if clockwise else PolyobjAction.OR_ROTATE_LEFT
+        )
         return self.add_control_linedef(action, [number, speed, angle, 0, 0], x, y)
 
     def add_rect(self, config: PolyobjectConfig) -> int:
@@ -111,7 +112,11 @@ class PolyobjectBuilder:
             Sector index for the polyobject shell.
         """
         cx, cy = config.center
-        sx, sy = config.start_spot_center if config.start_spot_center is not None else (cx, cy)
+        sx, sy = (
+            config.start_spot_center
+            if config.start_spot_center is not None
+            else (cx, cy)
+        )
         half_w = max(8, config.width // 2)
         half_h = max(8, config.height // 2)
 
@@ -135,7 +140,16 @@ class PolyobjectBuilder:
         sd3 = self.map_data.add_sidedef(sector=sector, middle_texture=config.texture)
         sd4 = self.map_data.add_sidedef(sector=sector, middle_texture=config.texture)
 
-        self.map_data.add_linedef(v1, v2, sd1, -1, int(LinedefFlags.BLOCKING), int(PolyobjAction.START_LINE), 0, [config.number, 0, 0, 0, 0])
+        self.map_data.add_linedef(
+            v1,
+            v2,
+            sd1,
+            -1,
+            int(LinedefFlags.BLOCKING),
+            int(PolyobjAction.START_LINE),
+            0,
+            [config.number, 0, 0, 0, 0],
+        )
         self.map_data.add_linedef(v2, v3, sd2, -1, int(LinedefFlags.BLOCKING), 0, 0)
         self.map_data.add_linedef(v3, v4, sd3, -1, int(LinedefFlags.BLOCKING), 0, 0)
         self.map_data.add_linedef(v4, v1, sd4, -1, int(LinedefFlags.BLOCKING), 0, 0)
