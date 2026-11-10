@@ -17,12 +17,12 @@ from doomgen.doom.wad import WADWriter, DoomMapData, run_zdbsp
 from doomgen.doom.translator import MapTranslator
 from doomgen.doom.things import ThingType
 
-from doomgen.builder import ProceduralMapBuilder as MapBuilder
+from doomgen.builder import ProceduralMapBuilder
 
 __all__ = [
     "LayoutGraph", "Area", "AreaConfig", "Transform", "ConnectionType",
     "generate_relaxed_seeds",
     "VoronoiMesh",
     "WADWriter", "DoomMapData", "run_zdbsp", "MapTranslator", "ThingType",
-    "MapBuilder"
+    "ProceduralMapBuilder",
 ]

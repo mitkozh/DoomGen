@@ -1,4 +1,4 @@
-"""Public package surface: exports, alias, and version."""
+"""Public package surface: exports and version."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ import doomgen
 from doomgen.builder import ProceduralMapBuilder
 
 
-def test_map_builder_alias():
-    assert doomgen.MapBuilder is ProceduralMapBuilder
+def test_top_level_procedural_builder_export():
+    assert doomgen.ProceduralMapBuilder is ProceduralMapBuilder
 
 
 def test_version_matches_pyproject():
