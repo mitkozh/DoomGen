@@ -37,7 +37,7 @@ cd DoomGen
 pip install -e ".[dev]"
 ```
 
-Requires Python 3.10+. Runtime deps: `omgifol`, `shapely`, `numpy`, `scipy`. ACC and ZDBSP binaries ship under `src/doomgen/bin/` and are picked up automatically.
+Requires Python 3.11 or 3.12. Runtime deps: `omgifol`, `shapely`, `numpy`, `scipy`. ACC and ZDBSP binaries ship under `src/doomgen/bin/` and are picked up automatically.
 
 ## Quick start
 
