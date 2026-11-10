@@ -9,7 +9,7 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import Any
 
-from doomgen.utils.paths import get_bundled_compiler, validate_executable
+from doomgen.utils.paths import CompilerUnavailable, resolve_compiler
 
 
 class ScriptType(Enum):
@@ -298,9 +298,16 @@ while (true)
         output_path: str | Path | None = None,
         acc_path: str | None = None
     ) -> bytes | None:
-        """Compile the scripts with ACC and return the bytecode."""
-        if acc_path is None:
-            acc_path = get_bundled_compiler("acc")
+        """Compile the scripts with ACC and return the bytecode.
+
+        By default the ACC binary bundled with DoomGen is used. Pass an
+        explicit ``acc_path`` only when you deliberately want a different
+        executable.
+        """
+        try:
+            resolved = resolve_compiler("acc", acc_path)
+        except CompilerUnavailable as exc:
+            raise FileNotFoundError(str(exc)) from exc
 
         source_code = self.to_code()
 
@@ -313,31 +320,23 @@ while (true)
             else:
                 obj_file = Path(tmpdir) / "script.o"
 
-            if not validate_executable(acc_path):
-                raise FileNotFoundError(
-                    f"ACC compiler not found at '{acc_path}'. "
-                    "Ensure ACC is installed or available via the bundled "
-                    "doomgen/bin/acc directory."
-                )
-
             try:
                 subprocess.run(
-                    [acc_path, str(source_file), str(obj_file)],
+                    [resolved, str(source_file), str(obj_file)],
                     capture_output=True,
                     text=True,
-                    check=True
+                    check=True,
                 )
-            except FileNotFoundError:
+            except (FileNotFoundError, OSError) as exc:
                 raise FileNotFoundError(
-                    f"ACC compiler not found at '{acc_path}'. "
-                    "Please install ACC and add it to your PATH."
-                )
-            except subprocess.CalledProcessError as e:
+                    f"ACC compiler could not be executed: '{resolved}'."
+                ) from exc
+            except subprocess.CalledProcessError as exc:
                 raise RuntimeError(
-                    f"ACC compilation failed (exit {e.returncode}).\n"
-                    f"--- ACC stdout ---\n{e.stdout}\n"
-                    f"--- ACC stderr ---\n{e.stderr}"
-                ) from e
+                    f"ACC compilation failed (exit {exc.returncode}).\n"
+                    f"--- ACC stdout ---\n{exc.stdout}\n"
+                    f"--- ACC stderr ---\n{exc.stderr}"
+                ) from exc
 
             if obj_file.exists():
                 return obj_file.read_bytes()

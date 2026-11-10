@@ -5,6 +5,28 @@ from __future__ import annotations
 from pathlib import Path
 
 from doomgen.builder import ProceduralMapBuilder
+from doomgen.utils.paths import (
+    CompilerUnavailable,
+    can_run_compiler,
+    resolve_compiler,
+)
+
+
+def compiler_runs(tool: str) -> bool:
+    """Whether a usable compiler is available on this platform."""
+    try:
+        path = resolve_compiler(tool)
+    except CompilerUnavailable:
+        return False
+    return can_run_compiler(tool, path)
+
+
+def zdbsp_runs() -> bool:
+    return compiler_runs("zdbsp")
+
+
+def acc_runs() -> bool:
+    return compiler_runs("acc")
 
 
 def make_builder(num_seeds: int = 150, seed: int = 42) -> ProceduralMapBuilder:

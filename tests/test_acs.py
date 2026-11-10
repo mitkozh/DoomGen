@@ -11,7 +11,11 @@ from doomgen.logic.acs_builder import (
     ScriptType,
     VariableScope,
 )
-from doomgen.utils.paths import get_bundled_compiler
+from doomgen.utils.paths import resolve_compiler
+
+from .helpers import acc_runs
+
+ACC_RUNS = acc_runs()
 
 
 class TestRendering:
@@ -84,8 +88,9 @@ class TestRendering:
 
 
 class TestCompilation:
-    """End-to-end runs of the real bundled ACC (no subprocess mocks)."""
+    """End-to-end runs of the installed ACC (no subprocess mocks)."""
 
+    @pytest.mark.skipif(not ACC_RUNS, reason="ACC is not available here")
     def test_simple_script_compiles_to_bytecode(self, tmp_path):
         builder = ACSBuilder()
         builder.add_script(ScriptType.OPEN, 'Print(s:"Hello World");')
@@ -95,6 +100,7 @@ class TestCompilation:
         assert bytecode is not None
         assert bytecode[:3] == b"ACS"
 
+    @pytest.mark.skipif(not ACC_RUNS, reason="ACC is not available here")
     def test_door_logic_compiles_with_zcommon(self, tmp_path):
         builder = ACSBuilder()
         builder.add_include("zcommon.acs")
@@ -107,13 +113,14 @@ class TestCompilation:
         assert bytecode is not None
         assert bytecode[:3] == b"ACS"
 
+    @pytest.mark.skipif(not ACC_RUNS, reason="ACC is not available here")
     def test_explicit_compiler_path_is_used(self, tmp_path):
         builder = ACSBuilder()
         builder.add_script(ScriptType.OPEN, 'Print(s:"explicit");')
 
         bytecode = builder.compile(
             output_path=str(tmp_path / "explicit.o"),
-            acc_path=get_bundled_compiler("acc"),
+            acc_path=resolve_compiler("acc"),
         )
 
         assert bytecode is not None
@@ -129,6 +136,7 @@ class TestCompilation:
                 acc_path="/nonexistent/path/to/acc",
             )
 
+    @pytest.mark.skipif(not ACC_RUNS, reason="ACC is not available here")
     def test_door_without_zcommon_reports_acc_error(self, tmp_path):
         builder = ACSBuilder()
         builder.define_door_logic(tag=1)

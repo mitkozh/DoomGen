@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 from typing import Optional
 from pathlib import Path
+
+from doomgen.utils.paths import CompilerUnavailable, resolve_compiler
 
 try:
     from omg import WAD, MapEditor as OMGMapEditor
@@ -183,11 +184,16 @@ class WADWriter:
         self.wad.maps[name] = map_lumps
 
 
-def run_zdbsp(wad_path: str | Path, zdbsp_path: str = "zdbsp") -> bool:
-    """Run ZDBSP in place to build node-related lumps for a WAD."""
+def run_zdbsp(wad_path: str | Path, zdbsp_path: str | None = None) -> bool:
+    """Run ZDBSP in place to build node-related lumps. Never raises.
+
+    By default the ZDBSP binary bundled with DoomGen is used. Pass an explicit
+    ``zdbsp_path`` only when you deliberately want a different executable.
+    """
     wad_path = Path(wad_path)
-    resolved = shutil.which(zdbsp_path)
-    if resolved is None:
+    try:
+        resolved = resolve_compiler("zdbsp", zdbsp_path)
+    except CompilerUnavailable:
         return False
 
     tmp_path = wad_path.with_suffix(".zdbsp_tmp.wad")
@@ -198,11 +204,16 @@ def run_zdbsp(wad_path: str | Path, zdbsp_path: str = "zdbsp") -> bool:
             text=True,
             check=True,
         )
+    except (OSError, subprocess.CalledProcessError):
+        tmp_path.unlink(missing_ok=True)
+        return False
+
+    try:
         tmp_path.replace(wad_path)
-        return True
-    finally:
-        if tmp_path.exists():
-            tmp_path.unlink()
+    except OSError:
+        tmp_path.unlink(missing_ok=True)
+        return False
+    return True
 
 
 class DoomMapData:

@@ -57,7 +57,7 @@ Issues = "https://github.com/mitkozh/DoomGen/issues"
 where = ["src"]
 
 [tool.setuptools.package-data]
-doomgen = ["bin/acc/*", "bin/zdbsp/*", "py.typed"]
+doomgen = ["bin/zdbsp/*", "py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

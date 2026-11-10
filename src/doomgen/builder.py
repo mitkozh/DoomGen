@@ -16,7 +16,7 @@ from doomgen.doom.translator import MapTranslator
 from doomgen.doom.wad import WADWriter, run_zdbsp
 from doomgen.geometry.mesh import VoronoiMesh
 from doomgen.geometry.seeds import generate_relaxed_seeds
-from doomgen.utils.paths import get_bundled_compiler, validate_executable
+
 
 logger = logging.getLogger(__name__)
 
@@ -538,21 +538,18 @@ class ProceduralMapBuilder:
         self.wad_writer.save(output_path)
         logger.info("WAD written to %s", output_path)
 
-        if zdbsp_path is None:
-            zdbsp_path = get_bundled_compiler("zdbsp")
-
-        if zdbsp_path is not None and validate_executable(zdbsp_path):
-            found = run_zdbsp(output_path, zdbsp_path=zdbsp_path)
-            if found:
-                logger.info("ZDBSP: nodes built successfully for %s", output_path)
-            else:
-                warnings.warn(
-                    f"ZDBSP not found at '{zdbsp_path}'.",
-                    stacklevel=2,
-                )
-        elif zdbsp_path is not None:
+        built = run_zdbsp(output_path, zdbsp_path=zdbsp_path)
+        if built:
+            logger.info("ZDBSP: nodes built successfully for %s", output_path)
+        elif not zdbsp_path:
             warnings.warn(
-                f"ZDBSP not found at '{zdbsp_path}'. "
-                "WAD saved with empty node lumps (ZDoom will rebuild at load time).",
+                "ZDBSP not available. "
+                "WAD saved without nodes (ZDoom rebuilds them at load time).",
+                stacklevel=2,
+            )
+        else:
+            warnings.warn(
+                f"ZDBSP at '{zdbsp_path}' failed. "
+                "WAD saved without nodes (ZDoom rebuilds them at load time).",
                 stacklevel=2,
             )

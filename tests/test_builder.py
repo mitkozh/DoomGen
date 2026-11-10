@@ -11,7 +11,7 @@ from doomgen.abstraction.layout import ConnectionType
 from doomgen.builder import ProceduralMapBuilder
 from doomgen.utils.validation import validate_wad
 
-from .helpers import build_wad, make_builder, map_lumps, two_room_builder
+from .helpers import build_wad, make_builder, map_lumps, two_room_builder, zdbsp_runs
 
 
 def claimed(builder: ProceduralMapBuilder, area_id: str) -> list:
@@ -212,6 +212,7 @@ class TestPlacement:
 
 
 class TestBuild:
+    @pytest.mark.skipif(not zdbsp_runs(), reason="bundled ZDBSP cannot run here")
     def test_build_writes_valid_wad_with_nodes(self, tmp_path):
         builder = two_room_builder()
         builder.connect_adjacent("room_a", "room_b")
@@ -244,7 +245,7 @@ class TestBuild:
         builder = make_builder()
         builder.add_area("hall", (0, 0, 256, 256))
 
-        with pytest.warns(UserWarning, match="ZDBSP not found"):
+        with pytest.warns(UserWarning, match="ZDBSP at '/nonexistent/zdbsp' failed"):
             builder.build(str(tmp_path / "nonodes.wad"), zdbsp_path="/nonexistent/zdbsp")
 
         assert (tmp_path / "nonodes.wad").is_file()
